@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Business operations on links.
  *
+ * <p>Ownership is enforced on every lookup; see
+ * {@link com.kovospace.newtablinks.group.services.GroupService} for the reasoning.</p>
+ *
  * @since 0.0.1
  */
 @Service
@@ -56,36 +59,39 @@ public class LinkService {
      * Lists the links sitting directly in a group, excluding those nested in its subgroups.
      *
      * @param parentGroupId identifier of the owning group
-     * @return the group's direct links in display order, empty when there are none
+     * @param ownerId       identifier of the user that must own it
+     * @return the links, empty when there are none or the group is not theirs
      */
     @Transactional(readOnly = true)
-    public List<LinkDto> findDirectLinksOfGroup(final UUID parentGroupId) {
+    public List<LinkDto> findDirectLinksOfGroup(final UUID parentGroupId, final UUID ownerId) {
         return linkMapper.toDtoList(
-                linkRepository.findAllByParentGroupIdAndParentSubgroupIsNullOrderByPositionAsc(parentGroupId));
+                linkRepository.findDirectGroupLinksForOwner(parentGroupId, ownerId));
     }
 
     /**
      * Lists the links nested in a subgroup.
      *
      * @param parentSubgroupId identifier of the owning subgroup
-     * @return the subgroup's links in display order, empty when there are none
+     * @param ownerId          identifier of the user that must own it
+     * @return the links, empty when there are none or the subgroup is not theirs
      */
     @Transactional(readOnly = true)
-    public List<LinkDto> findLinksOfSubgroup(final UUID parentSubgroupId) {
+    public List<LinkDto> findLinksOfSubgroup(final UUID parentSubgroupId, final UUID ownerId) {
         return linkMapper.toDtoList(
-                linkRepository.findAllByParentSubgroupIdOrderByPositionAsc(parentSubgroupId));
+                linkRepository.findSubgroupLinksForOwner(parentSubgroupId, ownerId));
     }
 
     /**
      * Returns a single link.
      *
-     * @param linkId identifier of the link
+     * @param linkId  identifier of the link
+     * @param ownerId identifier of the user that must own it
      * @return the link
-     * @throws ResourceNotFoundException when no link has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public LinkDto findLinkById(final UUID linkId) {
-        return linkMapper.toDto(getRequiredLinkEntity(linkId));
+    public LinkDto findLinkById(final UUID linkId, final UUID ownerId) {
+        return linkMapper.toDto(getRequiredLinkEntity(linkId, ownerId));
     }
 
     /**
@@ -96,14 +102,16 @@ public class LinkService {
      * link address; see {@link FaviconUrlResolver}.</p>
      *
      * @param saveRequest the link to create
+     * @param ownerId     identifier of the user that must own the target group and subgroup
      * @return the created link, including its assigned identifier and position
-     * @throws ResourceNotFoundException when the named group or subgroup does not exist
+     * @throws ResourceNotFoundException when the group or subgroup does not exist or is not theirs
      */
     @Transactional
-    public LinkDto createLink(final LinkSaveRequestDto saveRequest) {
+    public LinkDto createLink(final LinkSaveRequestDto saveRequest, final UUID ownerId) {
         final GroupEntity parentGroup =
-                groupService.getRequiredGroupEntity(saveRequest.parentGroupId());
-        final SubgroupEntity parentSubgroup = resolveOptionalSubgroup(saveRequest.parentSubgroupId());
+                groupService.getRequiredGroupEntity(saveRequest.parentGroupId(), ownerId);
+        final SubgroupEntity parentSubgroup =
+                resolveOptionalSubgroup(saveRequest.parentSubgroupId(), ownerId);
 
         final LinkEntity newLink = new LinkEntity(
                 parentGroup,
@@ -124,18 +132,24 @@ public class LinkService {
      *
      * @param linkId      identifier of the link to update
      * @param saveRequest the values to store
+     * @param ownerId     identifier of the user that must own it
      * @return the updated link
-     * @throws ResourceNotFoundException when the link, or the named subgroup, does not exist
+     * @throws ResourceNotFoundException when the link or subgroup does not exist or is not theirs
      */
     @Transactional
-    public LinkDto updateLink(final UUID linkId, final LinkSaveRequestDto saveRequest) {
-        final LinkEntity existingLink = getRequiredLinkEntity(linkId);
+    public LinkDto updateLink(
+            final UUID linkId,
+            final LinkSaveRequestDto saveRequest,
+            final UUID ownerId) {
+
+        final LinkEntity existingLink = getRequiredLinkEntity(linkId, ownerId);
 
         existingLink.setTitle(saveRequest.title());
         existingLink.setUrl(saveRequest.url());
         existingLink.setFaviconUrl(
                 FaviconUrlResolver.resolveFaviconUrl(saveRequest.faviconUrl(), saveRequest.url()));
-        existingLink.setParentSubgroup(resolveOptionalSubgroup(saveRequest.parentSubgroupId()));
+        existingLink.setParentSubgroup(
+                resolveOptionalSubgroup(saveRequest.parentSubgroupId(), ownerId));
 
         return linkMapper.toDto(existingLink);
     }
@@ -143,24 +157,26 @@ public class LinkService {
     /**
      * Deletes a link.
      *
-     * @param linkId identifier of the link to delete
-     * @throws ResourceNotFoundException when no link has that identifier
+     * @param linkId  identifier of the link to delete
+     * @param ownerId identifier of the user that must own it
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional
-    public void deleteLink(final UUID linkId) {
-        linkRepository.delete(getRequiredLinkEntity(linkId));
+    public void deleteLink(final UUID linkId, final UUID ownerId) {
+        linkRepository.delete(getRequiredLinkEntity(linkId, ownerId));
     }
 
     /**
-     * Loads a link entity for another service in this application.
+     * Loads a link entity for another service in this application, enforcing ownership.
      *
-     * @param linkId identifier of the link
+     * @param linkId  identifier of the link
+     * @param ownerId identifier of the user that must own it
      * @return the managed entity
-     * @throws ResourceNotFoundException when no link has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public LinkEntity getRequiredLinkEntity(final UUID linkId) {
-        return linkRepository.findById(linkId)
+    public LinkEntity getRequiredLinkEntity(final UUID linkId, final UUID ownerId) {
+        return linkRepository.findByIdAndOwnerId(linkId, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, linkId));
     }
 
@@ -168,14 +184,18 @@ public class LinkService {
      * Resolves the optional subgroup named by a request.
      *
      * @param parentSubgroupId identifier of the subgroup, or {@code null} when none was named
+     * @param ownerId          identifier of the user that must own it
      * @return the managed subgroup, or {@code null} when none was named
-     * @throws ResourceNotFoundException when an identifier was named but matches no subgroup
+     * @throws ResourceNotFoundException when named but missing or owned by somebody else
      */
-    private SubgroupEntity resolveOptionalSubgroup(final UUID parentSubgroupId) {
+    private SubgroupEntity resolveOptionalSubgroup(
+            final UUID parentSubgroupId,
+            final UUID ownerId) {
+
         if (parentSubgroupId == null) {
             return null;
         }
-        return subgroupService.getRequiredSubgroupEntity(parentSubgroupId);
+        return subgroupService.getRequiredSubgroupEntity(parentSubgroupId, ownerId);
     }
 
     /**

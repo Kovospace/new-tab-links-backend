@@ -58,27 +58,32 @@ public class EnvironmentService {
     }
 
     /**
-     * Returns a single environment.
+     * Returns a single environment belonging to the given owner.
      *
      * @param environmentId identifier of the environment
+     * @param ownerId       identifier of the user that must own it
      * @return the environment
-     * @throws ResourceNotFoundException when no environment has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public EnvironmentDto findEnvironmentById(final UUID environmentId) {
-        return environmentMapper.toDto(getRequiredEnvironmentEntity(environmentId));
+    public EnvironmentDto findEnvironmentById(final UUID environmentId, final UUID ownerId) {
+        return environmentMapper.toDto(getRequiredEnvironmentEntity(environmentId, ownerId));
     }
 
     /**
      * Creates an environment and appends it after the owner's existing ones.
      *
      * @param saveRequest the environment to create
+     * @param ownerId     identifier of the user it is created for, taken from the access token
      * @return the created environment, including its assigned identifier and position
      * @throws ResourceNotFoundException when the owning user does not exist
      */
     @Transactional
-    public EnvironmentDto createEnvironment(final EnvironmentSaveRequestDto saveRequest) {
-        final UserEntity owner = userService.getRequiredUserEntity(saveRequest.ownerId());
+    public EnvironmentDto createEnvironment(
+            final EnvironmentSaveRequestDto saveRequest,
+            final UUID ownerId) {
+
+        final UserEntity owner = userService.getRequiredUserEntity(ownerId);
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 environmentRepository.findHighestPositionByOwnerId(owner.getId()));
 
@@ -96,15 +101,18 @@ public class EnvironmentService {
      *
      * @param environmentId identifier of the environment to update
      * @param saveRequest   the values to store
+     * @param ownerId       identifier of the user that must own it
      * @return the updated environment
-     * @throws ResourceNotFoundException when no environment has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional
     public EnvironmentDto updateEnvironment(
             final UUID environmentId,
-            final EnvironmentSaveRequestDto saveRequest) {
+            final EnvironmentSaveRequestDto saveRequest,
+            final UUID ownerId) {
 
-        final EnvironmentEntity existingEnvironment = getRequiredEnvironmentEntity(environmentId);
+        final EnvironmentEntity existingEnvironment =
+                getRequiredEnvironmentEntity(environmentId, ownerId);
         existingEnvironment.setName(saveRequest.name());
         return environmentMapper.toDto(existingEnvironment);
     }
@@ -113,23 +121,31 @@ public class EnvironmentService {
      * Deletes an environment.
      *
      * @param environmentId identifier of the environment to delete
-     * @throws ResourceNotFoundException when no environment has that identifier
+     * @param ownerId       identifier of the user that must own it
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional
-    public void deleteEnvironment(final UUID environmentId) {
-        environmentRepository.delete(getRequiredEnvironmentEntity(environmentId));
+    public void deleteEnvironment(final UUID environmentId, final UUID ownerId) {
+        environmentRepository.delete(getRequiredEnvironmentEntity(environmentId, ownerId));
     }
 
     /**
-     * Loads an environment entity for another service in this application.
+     * Loads an environment entity for another service in this application, enforcing ownership.
+     *
+     * <p>A row owned by somebody else is reported as missing rather than as forbidden, so that
+     * the API never confirms that another user's identifier exists.</p>
      *
      * @param environmentId identifier of the environment
+     * @param ownerId       identifier of the user that must own it
      * @return the managed entity
-     * @throws ResourceNotFoundException when no environment has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public EnvironmentEntity getRequiredEnvironmentEntity(final UUID environmentId) {
-        return environmentRepository.findById(environmentId)
+    public EnvironmentEntity getRequiredEnvironmentEntity(
+            final UUID environmentId,
+            final UUID ownerId) {
+
+        return environmentRepository.findByIdAndOwnerId(environmentId, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, environmentId));
     }
 }

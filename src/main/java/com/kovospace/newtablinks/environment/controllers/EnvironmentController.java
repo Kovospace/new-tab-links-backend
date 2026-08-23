@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.environment.controllers;
 
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
+import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentDto;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentSaveRequestDto;
 import com.kovospace.newtablinks.environment.services.EnvironmentService;
@@ -21,7 +22,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -35,27 +35,33 @@ import org.springframework.web.bind.annotation.RestController;
 public class EnvironmentController {
 
     private final EnvironmentService environmentService;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
 
     /**
      * Creates the controller.
      *
-     * @param environmentService service holding the business logic
+     * @param environmentService        service holding the business logic
+     * @param authenticatedUserProvider identifies the user the request is authenticated as
      */
-    public EnvironmentController(final EnvironmentService environmentService) {
+    public EnvironmentController(
+            final EnvironmentService environmentService,
+            final AuthenticatedUserProvider authenticatedUserProvider) {
+
         this.environmentService = environmentService;
+        this.authenticatedUserProvider = authenticatedUserProvider;
     }
 
     /**
-     * Lists a user's environments in display order.
+     * Lists the signed-in user's environments in display order.
      *
-     * @param ownerId identifier of the owning user
-     * @return the owner's environments
+     * @return the caller's environments
      */
     @GetMapping
-    @Operation(summary = "List a user's environments in display order")
+    @Operation(summary = "List the signed-in user's environments in display order")
     @ApiResponse(responseCode = "200", description = "The environments, possibly empty")
-    public List<EnvironmentDto> listEnvironmentsOfOwner(@RequestParam final UUID ownerId) {
-        return environmentService.findEnvironmentsByOwner(ownerId);
+    public List<EnvironmentDto> listMyEnvironments() {
+        return environmentService.findEnvironmentsByOwner(
+                authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -70,7 +76,8 @@ public class EnvironmentController {
     @ApiResponse(responseCode = "404", description = "No environment has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public EnvironmentDto getEnvironment(@PathVariable final UUID environmentId) {
-        return environmentService.findEnvironmentById(environmentId);
+        return environmentService.findEnvironmentById(
+                environmentId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -90,7 +97,8 @@ public class EnvironmentController {
             @Valid @RequestBody final EnvironmentSaveRequestDto saveRequest) {
 
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(environmentService.createEnvironment(saveRequest));
+                .body(environmentService.createEnvironment(
+                        saveRequest, authenticatedUserProvider.getAuthenticatedUserId()));
     }
 
     /**
@@ -111,7 +119,8 @@ public class EnvironmentController {
             @PathVariable final UUID environmentId,
             @Valid @RequestBody final EnvironmentSaveRequestDto saveRequest) {
 
-        return environmentService.updateEnvironment(environmentId, saveRequest);
+        return environmentService.updateEnvironment(
+                environmentId, saveRequest, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -126,7 +135,8 @@ public class EnvironmentController {
     @ApiResponse(responseCode = "404", description = "No environment has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteEnvironment(@PathVariable final UUID environmentId) {
-        environmentService.deleteEnvironment(environmentId);
+        environmentService.deleteEnvironment(
+                environmentId, authenticatedUserProvider.getAuthenticatedUserId());
         return ResponseEntity.noContent().build();
     }
 }

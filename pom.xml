@@ -36,7 +36,7 @@
 
           Bump it in the same commit that starts depending on a new migration.
         -->
-        <flyway.migrations.schema.version>0.0.1</flyway.migrations.schema.version>
+        <flyway.migrations.schema.version>0.0.2</flyway.migrations.schema.version>
     </properties>
 
     <dependencies>
@@ -59,6 +59,32 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>${springdoc.version}</version>
+        </dependency>
+
+        <!-- ===== security / identity ===== -->
+        <!-- Password hashing, the filter chain, and method security. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- Validates the access tokens this service itself issues. Nimbus ships with it,
+             so no third party JWT library is needed. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <!-- Runs the authorization code flow against Google (and any provider added later). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
+
+        <!-- ===== outgoing mail ===== -->
+        <!-- Activation and password reset messages, sent through a plain SMTP relay so the
+             transactional provider can be swapped without touching code. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
         <!-- ===== persistence ===== -->
@@ -113,6 +139,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -60,6 +60,45 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Renders a refused credential as HTTP 401, with the same wording whatever the real cause.
+     *
+     * @param exception the exception that was thrown
+     * @return a 401 response carrying the uniform error body
+     */
+    @ExceptionHandler(AuthenticationFailedException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleAuthenticationFailure(
+            final AuthenticationFailedException exception) {
+
+        return buildErrorResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
+    /**
+     * Renders an unusable token or code as HTTP 400.
+     *
+     * @param exception the exception that was thrown
+     * @return a 400 response carrying the uniform error body
+     */
+    @ExceptionHandler(InvalidTokenException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleInvalidToken(
+            final InvalidTokenException exception) {
+
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
+    /**
+     * Renders a taken username as HTTP 409.
+     *
+     * @param exception the exception that was thrown
+     * @return a 409 response carrying the uniform error body
+     */
+    @ExceptionHandler(RegistrationConflictException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleRegistrationConflict(
+            final RegistrationConflictException exception) {
+
+        return buildErrorResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    /**
      * Renders anything not handled above as HTTP 500, without leaking internals to the caller.
      *
      * @param exception the unexpected exception
@@ -67,6 +106,12 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponseDto> handleUnexpectedFailure(final Exception exception) {
+        // Spring Security's own exceptions must reach its entry point to be turned into a
+        // correct 401/403 with the right headers, so they are deliberately not swallowed here.
+        if (exception instanceof org.springframework.security.access.AccessDeniedException
+                || exception instanceof org.springframework.security.core.AuthenticationException) {
+            throw (RuntimeException) exception;
+        }
         LOGGER.error("Unhandled exception reached the controller boundary", exception);
         return buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,

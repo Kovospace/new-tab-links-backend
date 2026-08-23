@@ -4,6 +4,7 @@ import com.kovospace.newtablinks.user.dtos.UserDto;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import java.util.List;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 /**
  * Converts {@link UserEntity} into the shape returned to clients.
@@ -23,6 +24,7 @@ public interface UserMapper {
      * @param userEntity entity to convert
      * @return the converted user
      */
+    @Mapping(target = "hasPassword", expression = "java(userEntity.hasPassword())")
     UserDto toDto(UserEntity userEntity);
 
     /**

@@ -7,11 +7,13 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 Backend service for **NewTabLinks** — the server side that stores and synchronizes user data
 for the `NewTabGroupedLinks` Chrome extension (new tab page with grouped links).
 
-**Status: running application, no authentication.** The full module structure, JPA persistence,
-CRUD endpoints for the whole domain, OpenAPI docs, the Dockerfile and the CI pipeline all exist
-and are verified working. What is deliberately absent: authentication, any WebSocket messaging
-(transport is wired, nothing is published), and pushing changes *into* the server (sync is
-read-only).
+**Status: running, authenticated application.** Module structure, JPA persistence, CRUD for the
+whole domain, registration and sign-in, OpenAPI docs, the Dockerfile and the CI pipeline all
+exist and are verified working. What is deliberately absent: any WebSocket messaging (transport
+is wired, nothing is published), and pushing changes *into* the server (sync is read-only).
+
+**Every domain endpoint requires a bearer token, and the caller's identity comes only from that
+token.** Nothing accepts an owner id from the caller. See the `authentication` skill.
 
 ## Paired repository — the Chrome extension
 
@@ -54,6 +56,9 @@ Decided (verified 2026-08-23):
 | Build tool | **Maven**, via the `./mvnw` wrapper (no `mvn` on this machine) |
 | Mapping | **MapStruct 1.6.3**, compile-time, `unmappedTargetPolicy=ERROR` |
 | Database | **PostgreSQL** (house standard, runs outside the cluster) |
+| Security | Spring Security 7, JWT (HS256, Nimbus — no third-party JWT lib) |
+| Provider sign-in | `oauth2-client`, Google; optional, enabled only by env vars |
+| Mail | `spring-boot-starter-mail`, plain SMTP; provider is deployment config |
 | Container | `Dockerfile`, multi-stage temurin 25, deployed by GitOps |
 
 Caveats to keep in mind:
@@ -79,8 +84,9 @@ Caveats to keep in mind:
 
 ```
 com.kovospace.newtablinks
-├── common/        config (OpenAPI, WebSocket), exceptions, shared models, utils
-├── user/          owner of everything; no authentication yet
+├── common/        config (OpenAPI, WebSocket, security), exceptions, models, security, utils
+├── auth/          registration, activation, sign-in, tokens, provider sign-in
+├── user/          the account itself, plus its external provider identities
 ├── environment/   workspaces, owned by a user
 ├── group/         titled boxes of links, owned by an environment
 ├── subgroup/      collapsible sections, owned by a group
@@ -123,6 +129,9 @@ Controller (@RestController, DTOs only)
   links when it has no subgroup. Positions are scoped to that sibling set.
 - **`group` is a JPQL reserved word.** The fields are therefore named `parentGroup` /
   `parentSubgroup`, not `group` / `subgroup`. Do not rename them back.
+- **Every domain lookup is ownership-scoped in the query** (`findByIdAndOwnerId`), and a row
+  belonging to somebody else is reported as **404, not 403** — a 403 confirms the id is real.
+  Never add an endpoint that resolves a domain object without the owner in the same query.
 
 ### Configuration
 
@@ -135,6 +144,8 @@ deployment edit this file.
 
 - **`java-code-standards`** — load before writing or reviewing any Java.
 - **`deployment-pipeline`** — load before touching build, CI, Docker or deployment.
+- **`authentication`** — load before touching `auth/`, `user/`, security config, or any endpoint
+  that reads the current user.
 
 ## Code style
 
@@ -170,11 +181,12 @@ Flyway init-container contract — are in the **`deployment-pipeline` skill**
 
 Deliberately not built yet. Do not treat any of these as oversights to quietly fix:
 
-- **Authentication.** There is no principal. `ownerId` is passed explicitly by the caller, which
-  means the API is currently unauthenticated and any caller can read any user's data.
-- **WebSocket messaging.** Transport and broker are configured; nothing is published, because
-  targeting "a certain user" needs the principal above. Note the in-memory broker is
-  single-replica only.
+- **WebSocket messaging.** Transport and broker are configured; nothing is published, and the
+  handshake is still unauthenticated — it does not yet carry user identity. Note the in-memory
+  broker is single-replica only.
+- **Account self-service.** No password reset, no email change, no "set a password" for a
+  provider-only account, no session list. All listed in the `authentication` skill.
+- **Rate limiting** is a per-account failed-login counter and nothing more.
 - **Sync is read-only** — `GET /api/v1/sync/{ownerId}/snapshot` and nothing more. Accepting
   changes needs conflict resolution, deletion semantics (tombstones), and a decision on whether
   the client or the server assigns identifiers.

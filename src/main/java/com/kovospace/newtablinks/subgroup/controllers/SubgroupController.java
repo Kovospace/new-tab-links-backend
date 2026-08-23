@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.subgroup.controllers;
 
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
+import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupDto;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupSaveRequestDto;
 import com.kovospace.newtablinks.subgroup.services.SubgroupService;
@@ -35,14 +36,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class SubgroupController {
 
     private final SubgroupService subgroupService;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
 
     /**
      * Creates the controller.
      *
-     * @param subgroupService service holding the business logic
+     * @param subgroupService           service holding the business logic
+     * @param authenticatedUserProvider identifies the user the request is authenticated as
      */
-    public SubgroupController(final SubgroupService subgroupService) {
+    public SubgroupController(
+            final SubgroupService subgroupService,
+            final AuthenticatedUserProvider authenticatedUserProvider) {
+
         this.subgroupService = subgroupService;
+        this.authenticatedUserProvider = authenticatedUserProvider;
     }
 
     /**
@@ -55,7 +62,8 @@ public class SubgroupController {
     @Operation(summary = "List a group's subgroups in display order")
     @ApiResponse(responseCode = "200", description = "The subgroups, possibly empty")
     public List<SubgroupDto> listSubgroupsOfGroup(@RequestParam final UUID parentGroupId) {
-        return subgroupService.findSubgroupsByParentGroup(parentGroupId);
+        return subgroupService.findSubgroupsByParentGroup(
+                parentGroupId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -70,7 +78,8 @@ public class SubgroupController {
     @ApiResponse(responseCode = "404", description = "No subgroup has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public SubgroupDto getSubgroup(@PathVariable final UUID subgroupId) {
-        return subgroupService.findSubgroupById(subgroupId);
+        return subgroupService.findSubgroupById(
+                subgroupId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -90,7 +99,8 @@ public class SubgroupController {
             @Valid @RequestBody final SubgroupSaveRequestDto saveRequest) {
 
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(subgroupService.createSubgroup(saveRequest));
+                .body(subgroupService.createSubgroup(
+                        saveRequest, authenticatedUserProvider.getAuthenticatedUserId()));
     }
 
     /**
@@ -111,7 +121,8 @@ public class SubgroupController {
             @PathVariable final UUID subgroupId,
             @Valid @RequestBody final SubgroupSaveRequestDto saveRequest) {
 
-        return subgroupService.updateSubgroup(subgroupId, saveRequest);
+        return subgroupService.updateSubgroup(
+                subgroupId, saveRequest, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -126,7 +137,8 @@ public class SubgroupController {
     @ApiResponse(responseCode = "404", description = "No subgroup has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteSubgroup(@PathVariable final UUID subgroupId) {
-        subgroupService.deleteSubgroup(subgroupId);
+        subgroupService.deleteSubgroup(
+                subgroupId, authenticatedUserProvider.getAuthenticatedUserId());
         return ResponseEntity.noContent().build();
     }
 }

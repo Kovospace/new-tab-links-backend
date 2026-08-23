@@ -2,23 +2,28 @@ package com.kovospace.newtablinks.user.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.user.dtos.UserDto;
-import com.kovospace.newtablinks.user.dtos.UserSaveRequestDto;
+import com.kovospace.newtablinks.user.dtos.UserProfileUpdateRequestDto;
 import com.kovospace.newtablinks.user.mappers.UserMapper;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
-import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Business operations on users.
+ * Business operations on the signed-in user's own account.
+ *
+ * <p>Accounts are created by registration and by provider sign-in, not here; this service reads
+ * and edits accounts that already exist.</p>
  *
  * @since 0.0.1
  */
 @Service
 public class UserService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(UserService.class);
     private static final String RESOURCE_NAME = "User";
 
     private final UserRepository userRepository;
@@ -36,16 +41,6 @@ public class UserService {
     }
 
     /**
-     * Lists every user.
-     *
-     * @return all users, empty when there are none
-     */
-    @Transactional(readOnly = true)
-    public List<UserDto> findAllUsers() {
-        return userMapper.toDtoList(userRepository.findAll());
-    }
-
-    /**
      * Returns a single user.
      *
      * @param userId identifier of the user
@@ -58,30 +53,20 @@ public class UserService {
     }
 
     /**
-     * Creates a user.
+     * Changes a user's display name.
      *
-     * @param saveRequest the user to create
-     * @return the created user, including its assigned identifier
-     */
-    @Transactional
-    public UserDto createUser(final UserSaveRequestDto saveRequest) {
-        final UserEntity newUser = new UserEntity(saveRequest.email(), saveRequest.displayName());
-        return userMapper.toDto(userRepository.save(newUser));
-    }
-
-    /**
-     * Replaces the changeable fields of an existing user.
-     *
-     * @param userId      identifier of the user to update
-     * @param saveRequest the values to store
+     * @param userId        identifier of the user to update
+     * @param updateRequest the values to store
      * @return the updated user
      * @throws ResourceNotFoundException when no user has that identifier
      */
     @Transactional
-    public UserDto updateUser(final UUID userId, final UserSaveRequestDto saveRequest) {
+    public UserDto updateProfile(
+            final UUID userId,
+            final UserProfileUpdateRequestDto updateRequest) {
+
         final UserEntity existingUser = getRequiredUserEntity(userId);
-        existingUser.setEmail(saveRequest.email());
-        existingUser.setDisplayName(saveRequest.displayName());
+        existingUser.setDisplayName(updateRequest.displayName());
         return userMapper.toDto(existingUser);
     }
 
@@ -94,6 +79,7 @@ public class UserService {
     @Transactional
     public void deleteUser(final UUID userId) {
         userRepository.delete(getRequiredUserEntity(userId));
+        LOGGER.info("Account {} deleted", userId);
     }
 
     /**

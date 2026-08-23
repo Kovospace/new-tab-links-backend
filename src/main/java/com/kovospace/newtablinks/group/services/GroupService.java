@@ -17,6 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Business operations on groups.
  *
+ * <p>Every method takes the identifier of the user the request is authenticated as, and every
+ * lookup is scoped to it. A row belonging to somebody else is reported as missing rather than as
+ * forbidden, so the API cannot be used to confirm that another user's identifier exists.</p>
+ *
  * @since 0.0.1
  */
 @Service
@@ -49,37 +53,41 @@ public class GroupService {
      * Lists an environment's groups in display order.
      *
      * @param environmentId identifier of the owning environment
-     * @return the environment's groups, empty when there are none
+     * @param ownerId       identifier of the user that must own it
+     * @return the groups, empty when there are none or the environment is not theirs
      */
     @Transactional(readOnly = true)
-    public List<GroupDto> findGroupsByEnvironment(final UUID environmentId) {
+    public List<GroupDto> findGroupsByEnvironment(final UUID environmentId, final UUID ownerId) {
         return groupMapper.toDtoList(
-                groupRepository.findAllByEnvironmentIdOrderByPositionAsc(environmentId));
+                groupRepository.findAllByEnvironmentIdAndOwnerIdOrderByPositionAsc(
+                        environmentId, ownerId));
     }
 
     /**
      * Returns a single group.
      *
      * @param groupId identifier of the group
+     * @param ownerId identifier of the user that must own it
      * @return the group
-     * @throws ResourceNotFoundException when no group has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public GroupDto findGroupById(final UUID groupId) {
-        return groupMapper.toDto(getRequiredGroupEntity(groupId));
+    public GroupDto findGroupById(final UUID groupId, final UUID ownerId) {
+        return groupMapper.toDto(getRequiredGroupEntity(groupId, ownerId));
     }
 
     /**
      * Creates a group and appends it after the environment's existing ones.
      *
      * @param saveRequest the group to create
+     * @param ownerId     identifier of the user that must own the target environment
      * @return the created group, including its assigned identifier and position
-     * @throws ResourceNotFoundException when the owning environment does not exist
+     * @throws ResourceNotFoundException when the environment does not exist or is not theirs
      */
     @Transactional
-    public GroupDto createGroup(final GroupSaveRequestDto saveRequest) {
-        final EnvironmentEntity environment =
-                environmentService.getRequiredEnvironmentEntity(saveRequest.environmentId());
+    public GroupDto createGroup(final GroupSaveRequestDto saveRequest, final UUID ownerId) {
+        final EnvironmentEntity environment = environmentService.getRequiredEnvironmentEntity(
+                saveRequest.environmentId(), ownerId);
 
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 groupRepository.findHighestPositionByEnvironmentId(environment.getId()));
@@ -93,12 +101,17 @@ public class GroupService {
      *
      * @param groupId     identifier of the group to update
      * @param saveRequest the values to store
+     * @param ownerId     identifier of the user that must own it
      * @return the updated group
-     * @throws ResourceNotFoundException when no group has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional
-    public GroupDto updateGroup(final UUID groupId, final GroupSaveRequestDto saveRequest) {
-        final GroupEntity existingGroup = getRequiredGroupEntity(groupId);
+    public GroupDto updateGroup(
+            final UUID groupId,
+            final GroupSaveRequestDto saveRequest,
+            final UUID ownerId) {
+
+        final GroupEntity existingGroup = getRequiredGroupEntity(groupId, ownerId);
         existingGroup.setName(saveRequest.name());
         return groupMapper.toDto(existingGroup);
     }
@@ -107,23 +120,25 @@ public class GroupService {
      * Deletes a group.
      *
      * @param groupId identifier of the group to delete
-     * @throws ResourceNotFoundException when no group has that identifier
+     * @param ownerId identifier of the user that must own it
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional
-    public void deleteGroup(final UUID groupId) {
-        groupRepository.delete(getRequiredGroupEntity(groupId));
+    public void deleteGroup(final UUID groupId, final UUID ownerId) {
+        groupRepository.delete(getRequiredGroupEntity(groupId, ownerId));
     }
 
     /**
-     * Loads a group entity for another service in this application.
+     * Loads a group entity for another service in this application, enforcing ownership.
      *
      * @param groupId identifier of the group
+     * @param ownerId identifier of the user that must own it
      * @return the managed entity
-     * @throws ResourceNotFoundException when no group has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public GroupEntity getRequiredGroupEntity(final UUID groupId) {
-        return groupRepository.findById(groupId)
+    public GroupEntity getRequiredGroupEntity(final UUID groupId, final UUID ownerId) {
+        return groupRepository.findByIdAndOwnerId(groupId, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, groupId));
     }
 }

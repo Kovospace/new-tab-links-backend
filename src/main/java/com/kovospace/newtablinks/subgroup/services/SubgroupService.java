@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Business operations on subgroups.
  *
+ * <p>Ownership is enforced on every lookup; see {@link GroupService} for the reasoning.</p>
+ *
  * @since 0.0.1
  */
 @Service
@@ -49,37 +51,47 @@ public class SubgroupService {
      * Lists a group's subgroups in display order.
      *
      * @param parentGroupId identifier of the owning group
-     * @return the group's subgroups, empty when there are none
+     * @param ownerId       identifier of the user that must own it
+     * @return the subgroups, empty when there are none or the group is not theirs
      */
     @Transactional(readOnly = true)
-    public List<SubgroupDto> findSubgroupsByParentGroup(final UUID parentGroupId) {
+    public List<SubgroupDto> findSubgroupsByParentGroup(
+            final UUID parentGroupId,
+            final UUID ownerId) {
+
         return subgroupMapper.toDtoList(
-                subgroupRepository.findAllByParentGroupIdOrderByPositionAsc(parentGroupId));
+                subgroupRepository.findAllByParentGroupIdAndOwnerIdOrderByPositionAsc(
+                        parentGroupId, ownerId));
     }
 
     /**
      * Returns a single subgroup.
      *
      * @param subgroupId identifier of the subgroup
+     * @param ownerId    identifier of the user that must own it
      * @return the subgroup
-     * @throws ResourceNotFoundException when no subgroup has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public SubgroupDto findSubgroupById(final UUID subgroupId) {
-        return subgroupMapper.toDto(getRequiredSubgroupEntity(subgroupId));
+    public SubgroupDto findSubgroupById(final UUID subgroupId, final UUID ownerId) {
+        return subgroupMapper.toDto(getRequiredSubgroupEntity(subgroupId, ownerId));
     }
 
     /**
      * Creates a subgroup and appends it after the group's existing ones.
      *
      * @param saveRequest the subgroup to create
+     * @param ownerId     identifier of the user that must own the target group
      * @return the created subgroup, including its assigned identifier and position
-     * @throws ResourceNotFoundException when the owning group does not exist
+     * @throws ResourceNotFoundException when the group does not exist or is not theirs
      */
     @Transactional
-    public SubgroupDto createSubgroup(final SubgroupSaveRequestDto saveRequest) {
+    public SubgroupDto createSubgroup(
+            final SubgroupSaveRequestDto saveRequest,
+            final UUID ownerId) {
+
         final GroupEntity parentGroup =
-                groupService.getRequiredGroupEntity(saveRequest.parentGroupId());
+                groupService.getRequiredGroupEntity(saveRequest.parentGroupId(), ownerId);
 
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 subgroupRepository.findHighestPositionByGroupId(parentGroup.getId()));
@@ -95,15 +107,17 @@ public class SubgroupService {
      *
      * @param subgroupId  identifier of the subgroup to update
      * @param saveRequest the values to store
+     * @param ownerId     identifier of the user that must own it
      * @return the updated subgroup
-     * @throws ResourceNotFoundException when no subgroup has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional
     public SubgroupDto updateSubgroup(
             final UUID subgroupId,
-            final SubgroupSaveRequestDto saveRequest) {
+            final SubgroupSaveRequestDto saveRequest,
+            final UUID ownerId) {
 
-        final SubgroupEntity existingSubgroup = getRequiredSubgroupEntity(subgroupId);
+        final SubgroupEntity existingSubgroup = getRequiredSubgroupEntity(subgroupId, ownerId);
         existingSubgroup.setName(saveRequest.name());
         existingSubgroup.setCollapsed(saveRequest.collapsed());
         return subgroupMapper.toDto(existingSubgroup);
@@ -113,23 +127,25 @@ public class SubgroupService {
      * Deletes a subgroup.
      *
      * @param subgroupId identifier of the subgroup to delete
-     * @throws ResourceNotFoundException when no subgroup has that identifier
+     * @param ownerId    identifier of the user that must own it
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional
-    public void deleteSubgroup(final UUID subgroupId) {
-        subgroupRepository.delete(getRequiredSubgroupEntity(subgroupId));
+    public void deleteSubgroup(final UUID subgroupId, final UUID ownerId) {
+        subgroupRepository.delete(getRequiredSubgroupEntity(subgroupId, ownerId));
     }
 
     /**
-     * Loads a subgroup entity for another service in this application.
+     * Loads a subgroup entity for another service in this application, enforcing ownership.
      *
      * @param subgroupId identifier of the subgroup
+     * @param ownerId    identifier of the user that must own it
      * @return the managed entity
-     * @throws ResourceNotFoundException when no subgroup has that identifier
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
      */
     @Transactional(readOnly = true)
-    public SubgroupEntity getRequiredSubgroupEntity(final UUID subgroupId) {
-        return subgroupRepository.findById(subgroupId)
+    public SubgroupEntity getRequiredSubgroupEntity(final UUID subgroupId, final UUID ownerId) {
+        return subgroupRepository.findByIdAndOwnerId(subgroupId, ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, subgroupId));
     }
 }

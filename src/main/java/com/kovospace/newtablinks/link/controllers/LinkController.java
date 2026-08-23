@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.link.controllers;
 
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
+import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
 import com.kovospace.newtablinks.link.dtos.LinkDto;
 import com.kovospace.newtablinks.link.dtos.LinkSaveRequestDto;
 import com.kovospace.newtablinks.link.services.LinkService;
@@ -35,14 +36,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class LinkController {
 
     private final LinkService linkService;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
 
     /**
      * Creates the controller.
      *
-     * @param linkService service holding the business logic
+     * @param linkService               service holding the business logic
+     * @param authenticatedUserProvider identifies the user the request is authenticated as
      */
-    public LinkController(final LinkService linkService) {
+    public LinkController(
+            final LinkService linkService,
+            final AuthenticatedUserProvider authenticatedUserProvider) {
+
         this.linkService = linkService;
+        this.authenticatedUserProvider = authenticatedUserProvider;
     }
 
     /**
@@ -55,7 +62,8 @@ public class LinkController {
     @Operation(summary = "List the links sitting directly in a group, excluding its subgroups")
     @ApiResponse(responseCode = "200", description = "The links, possibly empty")
     public List<LinkDto> listDirectLinksOfGroup(@RequestParam final UUID parentGroupId) {
-        return linkService.findDirectLinksOfGroup(parentGroupId);
+        return linkService.findDirectLinksOfGroup(
+                parentGroupId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -68,7 +76,8 @@ public class LinkController {
     @Operation(summary = "List the links nested in a subgroup")
     @ApiResponse(responseCode = "200", description = "The links, possibly empty")
     public List<LinkDto> listLinksOfSubgroup(@RequestParam final UUID parentSubgroupId) {
-        return linkService.findLinksOfSubgroup(parentSubgroupId);
+        return linkService.findLinksOfSubgroup(
+                parentSubgroupId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -83,7 +92,8 @@ public class LinkController {
     @ApiResponse(responseCode = "404", description = "No link has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public LinkDto getLink(@PathVariable final UUID linkId) {
-        return linkService.findLinkById(linkId);
+        return linkService.findLinkById(
+                linkId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -100,7 +110,8 @@ public class LinkController {
     @ApiResponse(responseCode = "404", description = "The named group or subgroup does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<LinkDto> createLink(@Valid @RequestBody final LinkSaveRequestDto saveRequest) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(linkService.createLink(saveRequest));
+        return ResponseEntity.status(HttpStatus.CREATED).body(linkService.createLink(
+                saveRequest, authenticatedUserProvider.getAuthenticatedUserId()));
     }
 
     /**
@@ -121,7 +132,8 @@ public class LinkController {
             @PathVariable final UUID linkId,
             @Valid @RequestBody final LinkSaveRequestDto saveRequest) {
 
-        return linkService.updateLink(linkId, saveRequest);
+        return linkService.updateLink(
+                linkId, saveRequest, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -136,7 +148,7 @@ public class LinkController {
     @ApiResponse(responseCode = "404", description = "No link has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteLink(@PathVariable final UUID linkId) {
-        linkService.deleteLink(linkId);
+        linkService.deleteLink(linkId, authenticatedUserProvider.getAuthenticatedUserId());
         return ResponseEntity.noContent().build();
     }
 }

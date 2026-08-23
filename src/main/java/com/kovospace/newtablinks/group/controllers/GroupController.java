@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.group.controllers;
 
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
+import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
 import com.kovospace.newtablinks.group.dtos.GroupDto;
 import com.kovospace.newtablinks.group.dtos.GroupSaveRequestDto;
 import com.kovospace.newtablinks.group.services.GroupService;
@@ -35,14 +36,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class GroupController {
 
     private final GroupService groupService;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
 
     /**
      * Creates the controller.
      *
-     * @param groupService service holding the business logic
+     * @param groupService              service holding the business logic
+     * @param authenticatedUserProvider identifies the user the request is authenticated as
      */
-    public GroupController(final GroupService groupService) {
+    public GroupController(
+            final GroupService groupService,
+            final AuthenticatedUserProvider authenticatedUserProvider) {
+
         this.groupService = groupService;
+        this.authenticatedUserProvider = authenticatedUserProvider;
     }
 
     /**
@@ -55,7 +62,8 @@ public class GroupController {
     @Operation(summary = "List an environment's groups in display order")
     @ApiResponse(responseCode = "200", description = "The groups, possibly empty")
     public List<GroupDto> listGroupsOfEnvironment(@RequestParam final UUID environmentId) {
-        return groupService.findGroupsByEnvironment(environmentId);
+        return groupService.findGroupsByEnvironment(
+                environmentId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -70,7 +78,8 @@ public class GroupController {
     @ApiResponse(responseCode = "404", description = "No group has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public GroupDto getGroup(@PathVariable final UUID groupId) {
-        return groupService.findGroupById(groupId);
+        return groupService.findGroupById(
+                groupId, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -87,7 +96,8 @@ public class GroupController {
     @ApiResponse(responseCode = "404", description = "The owning environment does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<GroupDto> createGroup(@Valid @RequestBody final GroupSaveRequestDto saveRequest) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(groupService.createGroup(saveRequest));
+        return ResponseEntity.status(HttpStatus.CREATED).body(groupService.createGroup(
+                saveRequest, authenticatedUserProvider.getAuthenticatedUserId()));
     }
 
     /**
@@ -108,7 +118,8 @@ public class GroupController {
             @PathVariable final UUID groupId,
             @Valid @RequestBody final GroupSaveRequestDto saveRequest) {
 
-        return groupService.updateGroup(groupId, saveRequest);
+        return groupService.updateGroup(
+                groupId, saveRequest, authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**
@@ -123,7 +134,7 @@ public class GroupController {
     @ApiResponse(responseCode = "404", description = "No group has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteGroup(@PathVariable final UUID groupId) {
-        groupService.deleteGroup(groupId);
+        groupService.deleteGroup(groupId, authenticatedUserProvider.getAuthenticatedUserId());
         return ResponseEntity.noContent().build();
     }
 }

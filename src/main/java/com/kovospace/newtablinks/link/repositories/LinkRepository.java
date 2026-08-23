@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.link.repositories;
 
 import com.kovospace.newtablinks.link.models.LinkEntity;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -42,6 +43,46 @@ public interface LinkRepository extends JpaRepository<LinkEntity, UUID> {
             + "where link.parentGroup.environment.owner.id = :ownerId "
             + "order by link.parentGroup.position asc, link.position asc")
     List<LinkEntity> findAllByOwnerIdOrderedForDisplay(@Param("ownerId") UUID ownerId);
+
+    /**
+     * Finds one link, but only if it belongs to the given owner.
+     *
+     * @param linkId  identifier of the link
+     * @param ownerId identifier of the user that must own it
+     * @return the link, or an empty optional when it does not exist or is not theirs
+     */
+    @Query("select link from LinkEntity link "
+            + "where link.id = :linkId and link.parentGroup.environment.owner.id = :ownerId")
+    Optional<LinkEntity> findByIdAndOwnerId(
+            @Param("linkId") UUID linkId, @Param("ownerId") UUID ownerId);
+
+    /**
+     * Lists a group's direct links in display order, but only if the group is the owner's.
+     *
+     * @param parentGroupId identifier of the owning group
+     * @param ownerId       identifier of the user that must own it
+     * @return the links, empty when there are none or the group is not theirs
+     */
+    @Query("select link from LinkEntity link "
+            + "where link.parentGroup.id = :parentGroupId and link.parentSubgroup is null "
+            + "and link.parentGroup.environment.owner.id = :ownerId "
+            + "order by link.position asc")
+    List<LinkEntity> findDirectGroupLinksForOwner(
+            @Param("parentGroupId") UUID parentGroupId, @Param("ownerId") UUID ownerId);
+
+    /**
+     * Lists a subgroup's links in display order, but only if the subgroup is the owner's.
+     *
+     * @param parentSubgroupId identifier of the owning subgroup
+     * @param ownerId          identifier of the user that must own it
+     * @return the links, empty when there are none or the subgroup is not theirs
+     */
+    @Query("select link from LinkEntity link "
+            + "where link.parentSubgroup.id = :parentSubgroupId "
+            + "and link.parentGroup.environment.owner.id = :ownerId "
+            + "order by link.position asc")
+    List<LinkEntity> findSubgroupLinksForOwner(
+            @Param("parentSubgroupId") UUID parentSubgroupId, @Param("ownerId") UUID ownerId);
 
     /**
      * Returns the highest position currently used among the links sitting directly in a group.
