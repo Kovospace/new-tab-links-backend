@@ -28,3 +28,8 @@ replay_pid*
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
+
+# Maven / build output
+target/
+.mvn/wrapper/maven-wrapper.jar
+HELP.md

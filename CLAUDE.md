@@ -7,9 +7,11 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 Backend service for **NewTabLinks** — the server side that stores and synchronizes user data
 for the `NewTabGroupedLinks` Chrome extension (new tab page with grouped links).
 
-**Status: skeleton only.** There is no build file, no source tree and no application yet —
-only this Claude setup. Creating the Spring Boot project structure is a follow-up assignment.
-Do not assume any class, package or endpoint exists; check first.
+**Status: running application, no authentication.** The full module structure, JPA persistence,
+CRUD endpoints for the whole domain, OpenAPI docs, the Dockerfile and the CI pipeline all exist
+and are verified working. What is deliberately absent: authentication, any WebSocket messaging
+(transport is wired, nothing is published), and pushing changes *into* the server (sync is
+read-only).
 
 ## Paired repository — the Chrome extension
 
@@ -46,24 +48,47 @@ Decided (verified 2026-08-23):
 
 | Concern | Choice |
 |---|---|
-| Language | **Java 25** (latest LTS) — `/usr/lib/jvm/java-25-openjdk-amd64` |
+| Language | **Java 25** (latest LTS) — bytecode target; see the JDK caveat below |
 | Framework | **Spring Boot 4.1.x** (latest stable; 4.1.1 released 2026-08-20) |
 | API docs | **springdoc-openapi 3.1.0** — OpenAPI 3 + Swagger UI at `/swagger-ui.html` |
-| Container | `Dockerfile`, multi-stage, built by a GitHub Actions pipeline |
+| Build tool | **Maven**, via the `./mvnw` wrapper (no `mvn` on this machine) |
+| Mapping | **MapStruct 1.6.3**, compile-time, `unmappedTargetPolicy=ERROR` |
+| Database | **PostgreSQL** (house standard, runs outside the cluster) |
+| Container | `Dockerfile`, multi-stage temurin 25, deployed by GitOps |
 
 Caveats to keep in mind:
 
-- The JDK on `PATH` is **26** (non-LTS). Pin **25** through the build file's toolchain /
-  `JAVA_HOME`; never let the build silently target 26.
+- The build targets **release 25** via `java.version` in `pom.xml`; never let it drift to 26.
 - Spring Boot has **no LTS labels** — it ships a release train with ~1 year of OSS support.
   "Latest stable" (4.1.x) is the standing interpretation of the assignment's "latest stable
   (and LTS)". The 3.5.x line is the fallback if a dependency turns out not to support 4.x.
 - springdoc **3.x** is the line that targets Spring Boot 4; 2.8.x is for Boot 3.
-- **Build tool (Maven vs Gradle) is not yet decided** — it belongs to the project-structure
-  assignment. Neither `mvn` nor `gradle` is installed, so whichever is picked must be used
-  through its wrapper (`./mvnw` / `./gradlew`).
+- **Spring Boot 4 renamed the starters.** It is `spring-boot-starter-webmvc` (not `-web`), and
+  the old `spring-boot-starter-test` is split into one `-test` starter per slice
+  (`spring-boot-starter-webmvc-test`, `-data-jpa-test`, …). Boot 3 names will not resolve.
+- **Local builds need an explicit `JAVA_HOME`.** Every JDK under `/usr/lib/jvm` on this machine
+  is **JRE-only** — there is no `javac` in any of them. The only real JDK is
+  `~/.jdks/openjdk-26.0.2`, so local Maven runs need
+  `JAVA_HOME=$HOME/.jdks/openjdk-26.0.2 ./mvnw …`, which compiles with `--release 25`. The
+  Docker build uses `eclipse-temurin:25-jdk` and is unaffected.
 
 ## Architecture
+
+**Module-per-feature, each module holding all of its own layers** — the same layout as the
+`paster-backend` project:
+
+```
+com.kovospace.newtablinks
+├── common/        config (OpenAPI, WebSocket), exceptions, shared models, utils
+├── user/          owner of everything; no authentication yet
+├── environment/   workspaces, owned by a user
+├── group/         titled boxes of links, owned by an environment
+├── subgroup/      collapsible sections, owned by a group
+├── link/          the bookmarks themselves
+└── sync/          composes the others into a whole-account snapshot; owns no data
+
+each feature module: controllers/ services/ repositories/ models/ dtos/ mappers/ utils/
+```
 
 **MVC, layered, one direction only:**
 
@@ -75,9 +100,41 @@ Controller (@RestController, DTOs only)
 ```
 
 - Controllers never touch entities or repositories; services never see HTTP types.
-- DTOs cross the controller boundary in both directions — entities never leave the service layer.
-- Cross-cutting helpers go in `util` classes; if a service grows past one clear responsibility,
+- Request DTOs go in, response DTOs come out — **entities never leave the service layer**.
+- **Mappers are one-directional** (entity → DTO only). Building an entity from a request needs
+  decisions a mapper should not make — resolving parents, assigning positions — so services do it.
+- **Cross-module access goes service → service, never service → another module's repository.**
+  Each service exposes a `getRequired<X>Entity(UUID)` method for its siblings; that is the only
+  way an entity crosses a module boundary.
+- A `utils/` package exists only where a module actually has a utility. Empty layer folders are
+  not created for symmetry.
+- Cross-cutting helpers go in `common/utils`; if a service grows past one clear responsibility,
   split it into a second service rather than letting it sprawl.
+
+### Domain notes
+
+- Every entity extends `common/models/AbstractAuditableEntity` — UUID id, `createdAt`,
+  `updatedAt`, maintained by JPA lifecycle callbacks.
+- `updatedAt` exists **specifically for sync**: it is what a client compares against to find what
+  changed. The extension has no such field, which is the gap noted above.
+- Ordering is a plain `position` int, appended via `common/utils/DisplayPositionCalculator`.
+  Positions are *not* guaranteed dense — deletions leave gaps, and only relative order matters.
+- A link's siblings are the other links of the same subgroup, or the group's other *direct*
+  links when it has no subgroup. Positions are scoped to that sibling set.
+- **`group` is a JPQL reserved word.** The fields are therefore named `parentGroup` /
+  `parentSubgroup`, not `group` / `subgroup`. Do not rename them back.
+
+### Configuration
+
+Every parameter in `application.properties` is declared as `${ENVIRONMENT_VARIABLE:default}`, so
+the application starts with no configuration at all and a deployment overrides only what it needs
+by setting environment variables. Never add a parameter without a default, and never let a
+deployment edit this file.
+
+## Skills
+
+- **`java-code-standards`** — load before writing or reviewing any Java.
+- **`deployment-pipeline`** — load before touching build, CI, Docker or deployment.
 
 ## Code style
 
@@ -100,6 +157,33 @@ long descriptive names over short cryptic ones, short methods, small classes, no
 - Commit only when asked. Confirm the branch with `git rev-parse --abbrev-ref HEAD` first.
 - `gh` is **not installed** — for a PR, either ask the user to install it or hand them the
   GitHub compare URL.
+
+## Deployment
+
+CI builds the image and commits its tag to a GitOps repository; Argo CD rolls it out. Nothing in
+CI talks to the cluster. Details — the shared pipeline, the Helm chart, the registry, and the
+Flyway init-container contract — are in the **`deployment-pipeline` skill**
+(`.claude/skills/deployment-pipeline/`). Load it before touching `Dockerfile`,
+`.github/workflows/`, or anything about how a change reaches the cluster.
+
+## Known gaps and deferred decisions
+
+Deliberately not built yet. Do not treat any of these as oversights to quietly fix:
+
+- **Authentication.** There is no principal. `ownerId` is passed explicitly by the caller, which
+  means the API is currently unauthenticated and any caller can read any user's data.
+- **WebSocket messaging.** Transport and broker are configured; nothing is published, because
+  targeting "a certain user" needs the principal above. Note the in-memory broker is
+  single-replica only.
+- **Sync is read-only** — `GET /api/v1/sync/{ownerId}/snapshot` and nothing more. Accepting
+  changes needs conflict resolution, deletion semantics (tombstones), and a decision on whether
+  the client or the server assigns identifiers.
+- **Identifiers are server-generated** (`GenerationType.UUID`). The extension generates its own
+  UUIDs, so whichever side wins has to be decided before two-way sync exists.
+- **Reordering** has no endpoint. `position` is assigned on create and left alone on update; a
+  dedicated move operation should own it.
+- **`ddl-auto=update`** is a local-development convenience. Once the migrations repository
+  exists, deployed environments must set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
 
 ## Agents
 
