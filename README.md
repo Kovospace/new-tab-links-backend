@@ -80,6 +80,7 @@ outside local development.
 | `NEWTABLINKS_AUTH_ACCESS_TOKEN_LIFETIME` | `PT15M` | | ISO-8601 duration |
 | `NEWTABLINKS_AUTH_REFRESH_TOKEN_LIFETIME` | `P30D` | | Rotated on every use |
 | `NEWTABLINKS_AUTH_ACTIVATION_TOKEN_LIFETIME` | `PT24H` | | Emailed activation link |
+| `NEWTABLINKS_AUTH_PASSWORD_RESET_TOKEN_LIFETIME` | `PT1H` | | Emailed reset link. Shorter than activation on purpose: a reset link takes over a *live* account, an activation link only finishes creating an empty one |
 | `NEWTABLINKS_AUTH_WEB_HANDOFF_LIFETIME` | `PT2M` | | Code the website trades after a Google sign-in |
 | `NEWTABLINKS_AUTH_EXTENSION_CONNECT_LIFETIME` | `PT10M` | | Code the user retypes into the extension |
 | `NEWTABLINKS_AUTH_MAX_FAILED_LOGINS` | `10` | | Per-account lockout; there is no other rate limiting |
@@ -115,6 +116,7 @@ has to know where the site lives.
 | `NEWTABLINKS_WEB_BASE_URL` | `http://localhost:5173` | ✅ | No trailing slash |
 | `NEWTABLINKS_WEB_ACTIVATION_PATH` | `/activate` | | Receives `?token=…` |
 | `NEWTABLINKS_WEB_OAUTH_CALLBACK_PATH` | `/auth/callback` | | Receives `?code=…` |
+| `NEWTABLINKS_WEB_PASSWORD_RESET_PATH` | `/reset-password` | | Receives `?token=…` |
 
 ### CORS
 
@@ -310,8 +312,18 @@ fails.
   `build.flywayMigrationsSchemaVersion`.
 - **Helm chart init-container support** — `chart-app-1.3.0` cannot render an init container at
   all, so the migrations image cannot be wired up until the chart gains that.
-- **The website** — a separate project, not yet created. It hosts the registration form, the
-  Google button, and the page that shows the extension connect code.
+- **The website** — a separate project, not yet created. The backend already builds links into
+  it, so it has to serve four things at the paths configured above:
+
+  | Path | What it does |
+  |---|---|
+  | *(anywhere)* | Registration form → `POST /api/v1/auth/register`; Google button → link to `<api>/oauth2/authorization/google` |
+  | `/activate?token=…` | Calls `GET /api/v1/auth/activate` |
+  | `/auth/callback?code=…` | Calls `POST /api/v1/auth/session-handoff` and stores the returned tokens |
+  | `/reset-password?token=…` | Calls `POST /api/v1/auth/password/reset-confirm` |
+
+  Plus, for a signed-in user: `POST /api/v1/auth/extension-connect-codes` to show the connect
+  code, and `GET /api/v1/users/me/devices` to list where the account has been used.
 
 ---
 

@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.auth.services;
 
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
+import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.dtos.ExtensionConnectCodeDto;
 import com.kovospace.newtablinks.auth.dtos.TokenPairDto;
 import com.kovospace.newtablinks.auth.models.SingleUseCodeEntity;
@@ -110,7 +111,7 @@ public class SingleUseCodeService {
      *
      * @param submittedCode     the code as received or typed
      * @param purpose           exchange being attempted; a code minted for the other one is refused
-     * @param clientDescription description of the redeeming client, may be {@code null}
+     * @param clientDescription where the redeeming client is coming from
      * @return a fresh token pair
      * @throws InvalidTokenException when the code is unknown, spent, expired, or its account can
      *                               no longer sign in
@@ -119,7 +120,7 @@ public class SingleUseCodeService {
     public TokenPairDto redeemCode(
             final String submittedCode,
             final SingleUseCodePurpose purpose,
-            final String clientDescription) {
+            final ClientDescriptionDto clientDescription) {
 
         final String lookupValue = purpose == SingleUseCodePurpose.EXTENSION_CONNECT
                 ? SecureTokenGenerator.normaliseHumanReadableCode(submittedCode)

@@ -57,7 +57,9 @@ public class SecurityConfiguration {
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
             "/api/v1/auth/session-handoff",
-            "/api/v1/auth/extension-connect"
+            "/api/v1/auth/extension-connect",
+            "/api/v1/auth/password/reset-request",
+            "/api/v1/auth/password/reset-confirm"
     };
 
     /**
@@ -122,8 +124,10 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_SUPPORT_ENDPOINTS).permitAll()
                         .requestMatchers(PUBLIC_AUTHENTICATION_ENDPOINTS).permitAll()
-                        // The websocket handshake authenticates from its own token; until user
-                        // identity is carried over it, it stays open like the endpoints above.
+                        // The websocket handshake is open on purpose: a browser cannot set an
+                        // Authorization header on a WebSocket, so the token travels in the STOMP
+                        // CONNECT frame instead and is checked by StompAuthenticationInterceptor.
+                        // A socket that never connects successfully can do nothing.
                         .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated())
                 // Bearer flow: every API call from the website and the extension.

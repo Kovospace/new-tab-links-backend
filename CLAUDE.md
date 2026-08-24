@@ -85,13 +85,13 @@ Caveats to keep in mind:
 ```
 com.kovospace.newtablinks
 ├── common/        config (OpenAPI, WebSocket, security), exceptions, models, security, utils
-├── auth/          registration, activation, sign-in, tokens, provider sign-in
-├── user/          the account itself, plus its external provider identities
+├── auth/          registration, activation, sign-in, passwords, tokens, provider sign-in
+├── user/          the account itself, its provider identities, and its devices
 ├── environment/   workspaces, owned by a user
 ├── group/         titled boxes of links, owned by an environment
 ├── subgroup/      collapsible sections, owned by a group
 ├── link/          the bookmarks themselves
-└── sync/          composes the others into a whole-account snapshot; owns no data
+└── sync/          whole-account snapshot, plus the change event that drives websocket pushes
 
 each feature module: controllers/ services/ repositories/ models/ dtos/ mappers/ utils/
 ```
@@ -132,6 +132,9 @@ Controller (@RestController, DTOs only)
 - **Every domain lookup is ownership-scoped in the query** (`findByIdAndOwnerId`), and a row
   belonging to somebody else is reported as **404, not 403** — a 403 confirms the id is real.
   Never add an endpoint that resolves a domain object without the owner in the same query.
+- **Every mutation calls `userDataChangePublisher.publishChangeFor(ownerId)`.** That is what
+  pushes a refresh to the user's other browsers; a new mutating method without it leaves other
+  devices silently stale.
 
 ### Configuration
 
@@ -144,8 +147,8 @@ deployment edit this file.
 
 - **`java-code-standards`** — load before writing or reviewing any Java.
 - **`deployment-pipeline`** — load before touching build, CI, Docker or deployment.
-- **`authentication`** — load before touching `auth/`, `user/`, security config, or any endpoint
-  that reads the current user.
+- **`authentication`** — load before touching `auth/`, `user/`, `sync/`, security or websocket
+  config, or any endpoint that reads the current user.
 
 ## Code style
 
@@ -181,15 +184,16 @@ Flyway init-container contract — are in the **`deployment-pipeline` skill**
 
 Deliberately not built yet. Do not treat any of these as oversights to quietly fix:
 
-- **WebSocket messaging.** Transport and broker are configured; nothing is published, and the
-  handshake is still unauthenticated — it does not yet carry user identity. Note the in-memory
-  broker is single-replica only.
-- **Account self-service.** No password reset, no email change, no "set a password" for a
-  provider-only account, no session list. All listed in the `authentication` skill.
-- **Rate limiting** is a per-account failed-login counter and nothing more.
-- **Sync is read-only** — `GET /api/v1/sync/{ownerId}/snapshot` and nothing more. Accepting
-  changes needs conflict resolution, deletion semantics (tombstones), and a decision on whether
-  the client or the server assigns identifiers.
+- **Email change is refused by design**, not missing: users may not change their address.
+- **No device limit, and no rate limiting beyond the per-account failed-login counter.** That
+  counter is brute-force protection, unrelated to device counts — do not remove it.
+- **Spent tokens are never pruned.** `emailed_token`, `single_use_code` and revoked
+  `refresh_token` rows accumulate forever; a cleanup job is still owed.
+- **The websocket broker is in-memory, so single-replica only.** Scaling out silently stops
+  delivering to clients on the other pod.
+- **Sync is read-only** — `GET /api/v1/sync/snapshot` and nothing more. Accepting changes needs
+  conflict resolution, deletion semantics (tombstones), and a decision on whether the client or
+  the server assigns identifiers.
 - **Identifiers are server-generated** (`GenerationType.UUID`). The extension generates its own
   UUIDs, so whichever side wins has to be decided before two-way sync exists.
 - **Reordering** has no endpoint. `position` is assigned on create and left alone on update; a

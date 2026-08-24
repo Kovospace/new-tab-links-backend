@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.auth.controllers;
 
+import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.dtos.ExtensionConnectCodeDto;
 import com.kovospace.newtablinks.auth.dtos.LoginRequestDto;
 import com.kovospace.newtablinks.auth.dtos.RefreshRequestDto;
@@ -46,6 +47,14 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @Tag(name = "Authentication", description = "Registration, sign-in and session lifecycle")
 public class AuthenticationController {
+
+    /**
+     * Header a client uses to name the machine it is running on.
+     *
+     * <p>Optional, and never trusted for anything: a browser cannot read its host's name, so this
+     * is whatever the client chose to send. It only labels a row in the user's device list.</p>
+     */
+    private static final String DEVICE_NAME_HEADER = "X-Device-Name";
 
     /**
      * Wording returned to every registration attempt, successful or not.
@@ -145,7 +154,8 @@ public class AuthenticationController {
      * Signs in with a username or address and a password.
      *
      * @param loginRequest the submitted credentials
-     * @param userAgent    the calling client, recorded against the session
+     * @param deviceName   optional name of the machine, for the user's device list
+     * @param userAgent    used to name the browser in the user's device list
      * @return the issued token pair
      */
     @PostMapping("/login")
@@ -155,16 +165,17 @@ public class AuthenticationController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto login(
             @Valid @RequestBody final LoginRequestDto loginRequest,
+            @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
             @RequestHeader(value = "User-Agent", required = false) final String userAgent) {
 
-        return authenticationService.login(loginRequest, userAgent);
+        return authenticationService.login(
+                loginRequest, ClientDescriptionDto.from(deviceName, userAgent));
     }
 
     /**
      * Trades a refresh token for a new pair.
      *
      * @param refreshRequest the presented refresh token
-     * @param userAgent      the calling client, recorded against the new session
      * @return the issued token pair
      */
     @PostMapping("/refresh")
@@ -174,11 +185,8 @@ public class AuthenticationController {
     @ApiResponse(responseCode = "200", description = "The issued token pair")
     @ApiResponse(responseCode = "401", description = "The refresh token was refused",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    public TokenPairDto refresh(
-            @Valid @RequestBody final RefreshRequestDto refreshRequest,
-            @RequestHeader(value = "User-Agent", required = false) final String userAgent) {
-
-        return authenticationService.refresh(refreshRequest.refreshToken(), userAgent);
+    public TokenPairDto refresh(@Valid @RequestBody final RefreshRequestDto refreshRequest) {
+        return authenticationService.refresh(refreshRequest.refreshToken());
     }
 
     /**
@@ -199,7 +207,8 @@ public class AuthenticationController {
      * Exchanges the handoff code produced by a provider sign-in for a token pair.
      *
      * @param redemptionRequest the code received on the website's callback page
-     * @param userAgent         the calling client
+     * @param deviceName        optional name of the machine, for the user's device list
+     * @param userAgent         used to name the browser in the user's device list
      * @return the issued token pair
      */
     @PostMapping("/session-handoff")
@@ -211,10 +220,13 @@ public class AuthenticationController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto exchangeSessionHandoffCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,
+            @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
             @RequestHeader(value = "User-Agent", required = false) final String userAgent) {
 
         return singleUseCodeService.redeemCode(
-                redemptionRequest.code(), SingleUseCodePurpose.WEB_SESSION_HANDOFF, userAgent);
+                redemptionRequest.code(),
+                SingleUseCodePurpose.WEB_SESSION_HANDOFF,
+                ClientDescriptionDto.from(deviceName, userAgent));
     }
 
     /**
@@ -242,7 +254,8 @@ public class AuthenticationController {
      * Exchanges a connect code typed into the extension for a token pair.
      *
      * @param redemptionRequest the code the user typed
-     * @param userAgent         the calling client
+     * @param deviceName        optional name of the machine, for the user's device list
+     * @param userAgent         used to name the browser in the user's device list
      * @return the issued token pair
      */
     @PostMapping("/extension-connect")
@@ -254,9 +267,12 @@ public class AuthenticationController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto exchangeExtensionConnectCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,
+            @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
             @RequestHeader(value = "User-Agent", required = false) final String userAgent) {
 
         return singleUseCodeService.redeemCode(
-                redemptionRequest.code(), SingleUseCodePurpose.EXTENSION_CONNECT, userAgent);
+                redemptionRequest.code(),
+                SingleUseCodePurpose.EXTENSION_CONNECT,
+                ClientDescriptionDto.from(deviceName, userAgent));
     }
 }

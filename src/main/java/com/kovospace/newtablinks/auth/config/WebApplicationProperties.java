@@ -12,13 +12,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param baseUrl              root address of the website, without a trailing slash
  * @param activationPath       path on the website that receives an activation token
  * @param oauthCallbackPath    path on the website that receives the sign-in handoff code
+ * @param passwordResetPath    path on the website that receives a password reset token
  * @since 0.0.2
  */
 @ConfigurationProperties(prefix = "newtablinks.web")
 public record WebApplicationProperties(
         String baseUrl,
         String activationPath,
-        String oauthCallbackPath) {
+        String oauthCallbackPath,
+        String passwordResetPath) {
 
     /**
      * Builds the absolute activation link mailed to a newly registered user.
@@ -31,6 +33,19 @@ public record WebApplicationProperties(
                 baseUrl,
                 activationPath,
                 java.net.URLEncoder.encode(activationToken, java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Builds the absolute password reset link mailed to a user.
+     *
+     * @param passwordResetToken the raw token to embed
+     * @return the absolute link
+     */
+    public String buildPasswordResetLink(final String passwordResetToken) {
+        return "%s%s?token=%s".formatted(
+                baseUrl,
+                passwordResetPath,
+                java.net.URLEncoder.encode(passwordResetToken, java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /**

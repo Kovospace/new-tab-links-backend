@@ -36,7 +36,7 @@
 
           Bump it in the same commit that starts depending on a new migration.
         -->
-        <flyway.migrations.schema.version>0.0.2</flyway.migrations.schema.version>
+        <flyway.migrations.schema.version>0.0.3</flyway.migrations.schema.version>
     </properties>
 
     <dependencies>

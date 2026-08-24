@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param accessTokenLifetime         how long an issued access token stays valid
  * @param refreshTokenLifetime        how long a refresh token stays valid
  * @param activationTokenLifetime     how long an emailed activation link stays valid
+ * @param passwordResetTokenLifetime  how long an emailed password reset link stays valid
  * @param webSessionHandoffLifetime   how long the code handed to the website after a provider
  *                                    sign-in stays valid
  * @param extensionConnectLifetime    how long a connect code shown to the user stays valid
@@ -26,6 +27,7 @@ public record AuthenticationProperties(
         Duration accessTokenLifetime,
         Duration refreshTokenLifetime,
         Duration activationTokenLifetime,
+        Duration passwordResetTokenLifetime,
         Duration webSessionHandoffLifetime,
         Duration extensionConnectLifetime,
         int maximumFailedLoginAttempts,

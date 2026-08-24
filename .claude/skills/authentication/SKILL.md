@@ -1,6 +1,6 @@
 ---
 name: authentication
-description: How identity works in the NewTabLinks backend - the account model, classic registration with email activation, Google sign-in, the extension connect code, JWT access and refresh tokens, and the ownership rules that protect every domain endpoint. Load before touching anything under auth/, user/, security configuration, or any endpoint that reads the current user.
+description: How identity works in the NewTabLinks backend - the account model, classic registration with email activation, Google sign-in, the extension connect code, JWT access and refresh tokens, password reset and change, the device list, authenticated websocket connections, and the ownership rules that protect every domain endpoint. Load before touching anything under auth/, user/, sync/, security or websocket configuration, or any endpoint that reads the current user.
 ---
 
 # Authentication - NewTabLinks backend
@@ -33,12 +33,101 @@ GET /auth/activate       find/create account (ACTIVE)         |
 
 `POST /auth/login` (username **or** email + password) is the extension's normal path.
 
+Clients may send **`X-Device-Name`** on any endpoint that issues tokens. It is optional and never
+trusted - a browser cannot read its host's name - it only labels a row in the user's device list.
+
 ## Why the connect code exists
 
 A user who registered through Google **has no password**, so the extension's username/password
 form can never sign them in. The connect code is the bridge: the website mints a short code for
 an already-signed-in user, they retype it into the extension, and the extension trades it for a
 normal token pair. The extension gains one paste box and no OAuth code at all.
+
+## Passwords
+
+One service, `PasswordService`, covers all three cases, and **all three sign every device out**.
+That is the point: a password is usually changed precisely when the old one cannot be trusted, so
+leaving the sessions it created alive would achieve nothing.
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `POST /auth/password/reset-request` | public | Always 202. Says nothing about whether the address exists |
+| `POST /auth/password/reset-confirm` | public | Token single use, 1 hour |
+| `POST /auth/password/change` | **bearer** | Sets *or* changes |
+
+**"Set a password" is not a separate feature.** `POST /auth/password/change` requires
+`currentPassword` only when the account already has one. An account created through Google has
+none, so its owner supplies just `newPassword` - there is nothing to prove, because they are
+already authenticated. That branch is three lines in `PasswordService.setOrChangePassword`.
+
+A provider account whose address is the `…@no-address.invalid` placeholder **cannot** be reset by
+mail - no link can reach it. Such an account can only gain a password while signed in. The reset
+endpoint still answers 202, and logs why nothing was sent.
+
+## Devices - where the account has been used
+
+`GET /api/v1/users/me/devices`, `DELETE /api/v1/users/me/devices/{id}`.
+
+A device is the pair **`(deviceName, browserName)`** within one account. One machine running three
+browsers is three devices, because that is what the user experiences: each browser holds its own
+tokens and is signed out separately. Signing in again from the same pair **updates** that row
+rather than adding one.
+
+**This is a history, not a live session list.** A device stays listed after its tokens are revoked
+or expire, because the useful question is "where has my account been used". `signedIn` says which
+still hold a usable session; `lastUsedAt` says when each was last seen.
+
+There is also a mechanical reason the entity exists: refresh tokens **rotate on every use**, so a
+client refreshing every fifteen minutes would otherwise leave thousands of unrelated token rows
+per month. Tokens hang off a device; the device is what a user sees.
+
+Two behaviours worth not breaking, both covered by the live checks:
+
+- **Refreshing must not spawn a device.** `AuthenticationService.refresh` takes the device from the
+  presented *token*, never from request headers - a client that changed its reported device name
+  mid-session would otherwise silently create a second device on every refresh.
+- **Signing a device out keeps the row** and only revokes its tokens.
+
+There is **no device limit**, deliberately, and none should be added.
+
+## Websockets
+
+The extension is told its data changed so it can pull a fresh snapshot. Without this, a second
+browser shows stale links until something makes it re-read.
+
+**Authentication happens on the STOMP `CONNECT` frame, not at the HTTP handshake.** A browser's
+`WebSocket` constructor takes a URL and nothing else, so no `Authorization` header can be set on
+it, and putting the token in the query string would write it into every access log and proxy trace
+on the way. STOMP's `CONNECT` is an application-level frame with its own headers, so the token
+travels there and `StompAuthenticationInterceptor` checks it. The HTTP handshake at `/ws` is
+therefore `permitAll` **on purpose** - it opens a socket that can do nothing until a valid
+`CONNECT` arrives. Do not "fix" that by securing the handshake path.
+
+The principal's name is set to the **user id**, which is what makes `convertAndSendToUser` reach
+the right client.
+
+```
+client                                        server
+  WebSocket ws://…/ws  (subprotocol v12.stomp)
+  CONNECT  Authorization: Bearer <access token>   -> validated here, else ERROR
+  SUBSCRIBE /user/queue/refresh
+                    <- MESSAGE {"changedAt":…,"origin":null}
+```
+
+Sending is driven by an event, not by the websocket layer: services call
+`UserDataChangePublisher.publishChangeFor(ownerId)` after a mutation, and `UserRefreshNotifier`
+listens at **`TransactionPhase.AFTER_COMMIT`**. That phase is load-bearing - notifying inside the
+transaction races the commit, and a browser told to re-read could fetch a snapshot taken before
+the change was visible and then sit on stale data with no further signal coming. It also means a
+rolled-back transaction sends nothing, which is correct.
+
+The notification deliberately **carries no data**. Sending the change itself would mean a patch
+format, ordering guarantees, and handling a client that missed one - all of which the snapshot
+endpoint already solves.
+
+**Single replica only.** The simple broker keeps subscriptions in the pod's heap. Scaling out
+needs sticky sessions or an external broker, and nothing warns you: messages simply never arrive
+at clients connected to the other pod.
 
 ## Rules that must not be quietly undone
 
@@ -90,7 +179,8 @@ All of it under `newtablinks.auth.*`, bound to `AuthenticationProperties`.
 | activation link | 24 h | single use |
 | web handoff code | 2 min | exchanged immediately |
 | extension connect code | 10 min | long enough to retype |
-| max failed logins | 10 | per-account lockout; there is no rate-limiting infra |
+| password reset link | 1 h | single use; shorter than activation on purpose |
+| max failed logins | 10 | per-account lockout; **not** a device limit |
 
 **`newtablinks.auth.jwt-signing-secret` has a development default and MUST be overridden in every
 deployment** - anyone holding it can mint tokens for any account. Startup fails if it is under
@@ -132,8 +222,15 @@ because a relay blinked would lose the account and leak that the address exists.
 4. Set `SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID` and `..._CLIENT_SECRET`
    from Infisical.
 
-## Still missing
+## Deliberate omissions
 
-Password reset, changing your email address, setting a password on a provider-only account,
-listing and revoking individual sessions, and rate limiting beyond the per-account counter.
-The websocket handshake is still unauthenticated - it carries no user identity yet.
+Not oversights. Do not add them without being asked:
+
+- **Changing your email address** - the owner decided users may not do this at all.
+- **Rate limiting beyond the per-account failed-login counter.** That counter is brute-force
+  protection and has nothing to do with device counts; there is no device limit and none is
+  wanted. Removing the counter would let anyone grind passwords against an account forever.
+
+Genuinely still missing: pruning spent tokens (`emailed_token`, `single_use_code` and revoked
+`refresh_token` rows accumulate forever), and `origin` on the refresh notification is always
+`null`, so a browser cannot yet recognise and skip the echo of its own change.
