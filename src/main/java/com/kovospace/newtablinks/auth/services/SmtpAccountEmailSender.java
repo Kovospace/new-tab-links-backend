@@ -13,7 +13,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 /**
- * Sends registration mail through the configured SMTP relay.
+ * Sends account mail through the configured SMTP relay.
  *
  * <p>When {@code newtablinks.mail.enabled} is {@code false} nothing is transmitted and the
  * message is written to the log instead, activation link included. That is what lets the whole
@@ -27,9 +27,9 @@ import org.springframework.stereotype.Service;
  * @since 0.0.2
  */
 @Service
-public class SmtpActivationEmailSender implements ActivationEmailSender {
+public class SmtpAccountEmailSender implements AccountEmailSender {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SmtpActivationEmailSender.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SmtpAccountEmailSender.class);
 
     private final JavaMailSender javaMailSender;
     private final MailProperties mailProperties;
@@ -42,7 +42,7 @@ public class SmtpActivationEmailSender implements ActivationEmailSender {
      * @param mailProperties           sender identity and the enable flag
      * @param webApplicationProperties used to point the recipient at the website
      */
-    public SmtpActivationEmailSender(
+    public SmtpAccountEmailSender(
             final JavaMailSender javaMailSender,
             final MailProperties mailProperties,
             final WebApplicationProperties webApplicationProperties) {
@@ -70,6 +70,29 @@ public class SmtpActivationEmailSender implements ActivationEmailSender {
 
                 If you did not create this account, ignore this message and nothing will happen.
                 """.formatted(displayName, activationLink));
+    }
+
+    @Override
+    public void sendPasswordResetLink(
+            final String recipientAddress,
+            final String displayName,
+            final String passwordResetLink) {
+
+        sendOrLog(
+                recipientAddress,
+                "Reset your NewTabLinks password",
+                """
+                Hello %s,
+
+                Use the link below to choose a new NewTabLinks password:
+
+                %s
+
+                Setting a new password signs you out everywhere, on every device.
+
+                If you did not ask for this, ignore this message - your password has not
+                changed, and nobody can change it without this link.
+                """.formatted(displayName, passwordResetLink));
     }
 
     @Override

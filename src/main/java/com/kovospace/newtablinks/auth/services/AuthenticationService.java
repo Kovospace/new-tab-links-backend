@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.auth.services;
 
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
+import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.dtos.LoginRequestDto;
 import com.kovospace.newtablinks.auth.dtos.TokenPairDto;
 import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
@@ -8,6 +9,7 @@ import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
 import com.kovospace.newtablinks.auth.utils.TokenHasher;
 import com.kovospace.newtablinks.common.exceptions.AuthenticationFailedException;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
+import com.kovospace.newtablinks.user.models.UserDeviceEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
 import java.time.Instant;
@@ -73,12 +75,14 @@ public class AuthenticationService {
      * Signs a client in with a username or address and a password.
      *
      * @param loginRequest      the submitted credentials
-     * @param clientDescription description of the client, may be {@code null}
+     * @param clientDescription where the request is coming from
      * @return a fresh token pair
      * @throws AuthenticationFailedException whenever sign-in does not succeed, for any reason
      */
     @Transactional
-    public TokenPairDto login(final LoginRequestDto loginRequest, final String clientDescription) {
+    public TokenPairDto login(
+            final LoginRequestDto loginRequest,
+            final ClientDescriptionDto clientDescription) {
         final Optional<UserEntity> possibleAccount =
                 userRepository.findByUsernameOrEmail(loginRequest.usernameOrEmail().trim());
 
@@ -126,14 +130,13 @@ public class AuthenticationService {
      * indefinitely: the legitimate client's next refresh invalidates the thief's copy, or the
      * thief's use invalidates the client's, and either way somebody notices.</p>
      *
-     * @param rawRefreshToken   the token presented by the client
-     * @param clientDescription description of the client, may be {@code null}
+     * @param rawRefreshToken the token presented by the client
      * @return a fresh token pair
      * @throws AuthenticationFailedException when the token is unknown, spent, or its account can
      *                                       no longer sign in
      */
     @Transactional
-    public TokenPairDto refresh(final String rawRefreshToken, final String clientDescription) {
+    public TokenPairDto refresh(final String rawRefreshToken) {
         final RefreshTokenEntity storedToken = refreshTokenRepository
                 .findByTokenHash(TokenHasher.hash(rawRefreshToken))
                 .orElseThrow(AuthenticationFailedException::new);
@@ -151,7 +154,13 @@ public class AuthenticationService {
         }
 
         storedToken.revoke(now);
-        return tokenPairFactory.issueTokenPairFor(account, clientDescription);
+
+        // The device comes from the token, not from this request's headers: a client that
+        // changed its reported device name mid-session would otherwise spawn a second device.
+        final UserDeviceEntity device = storedToken.getDevice();
+        device.markUsedAt(now);
+
+        return tokenPairFactory.issueTokenPairForDevice(account, device);
     }
 
     /**

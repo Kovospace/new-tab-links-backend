@@ -1,28 +1,29 @@
 package com.kovospace.newtablinks.common.config;
 
+import com.kovospace.newtablinks.common.security.StompAuthenticationInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 /**
- * Enables the STOMP-over-WebSocket message broker used to push refresh signals to a browser.
+ * The STOMP-over-WebSocket broker used to tell one user's other browsers that their data changed.
  *
- * <p><strong>Scope of this class today.</strong> It wires the transport and nothing else. No
- * message is published yet and no destination is subscribed to by application code, because
- * targeting a <em>specific</em> user requires an authenticated principal and this service has no
- * authentication yet. The messaging itself is deliberately left to the assignment that
- * introduces user identity.</p>
+ * <p>Authentication happens on the STOMP {@code CONNECT} frame rather than at the HTTP handshake -
+ * see {@link StompAuthenticationInterceptor} for why the handshake cannot carry a token. A socket
+ * that has not connected successfully can do nothing.</p>
  *
- * <p>The intended shape once identity exists: the server sends to a per-user destination via
- * {@code SimpMessagingTemplate.convertAndSendToUser(userId, "/queue/refresh", payload)}, and the
- * extension subscribes to {@code /user/queue/refresh} after connecting to {@code /ws}.</p>
+ * <p>Messages go to per-user destinations: the server sends to {@code /user/queue/refresh} for a
+ * given user id, and each of that user's browsers receives it on {@code /user/queue/refresh}.
+ * Spring resolves the per-session destination from the principal established at connect time.</p>
  *
- * <p>Note for deployment: the simple in-memory broker configured here keeps subscriptions in the
- * pod's heap, so it only works correctly while the deployment runs a single replica. Scaling out
- * needs either sticky sessions or an external broker.</p>
+ * <p><strong>Deployment constraint:</strong> the simple broker configured here keeps subscriptions
+ * in the pod's heap, so it only works while the deployment runs a single replica. Scaling out
+ * needs sticky sessions or an external broker - and nothing warns you, the messages simply do not
+ * arrive at clients connected to the other pod.</p>
  *
  * @since 0.0.1
  */
@@ -33,22 +34,26 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
     private final String endpointPath;
     private final String userDestinationPrefix;
     private final String[] allowedOriginPatterns;
+    private final StompAuthenticationInterceptor stompAuthenticationInterceptor;
 
     /**
-     * Creates the configuration from values declared in {@code application.properties}.
+     * Creates the configuration.
      *
-     * @param endpointPath          path the STOMP handshake is served on
-     * @param userDestinationPrefix prefix under which per-user destinations are resolved
-     * @param allowedOriginPatterns origin patterns permitted to open the handshake
+     * @param endpointPath                   path the STOMP handshake is served on
+     * @param userDestinationPrefix          prefix under which per-user destinations are resolved
+     * @param allowedOriginPatterns          origin patterns permitted to open the handshake
+     * @param stompAuthenticationInterceptor authenticates the CONNECT frame
      */
     public WebSocketConfiguration(
             @Value("${newtablinks.websocket.endpoint-path}") final String endpointPath,
             @Value("${newtablinks.websocket.user-destination-prefix}") final String userDestinationPrefix,
-            @Value("${newtablinks.websocket.allowed-origin-patterns}") final String[] allowedOriginPatterns) {
+            @Value("${newtablinks.websocket.allowed-origin-patterns}") final String[] allowedOriginPatterns,
+            final StompAuthenticationInterceptor stompAuthenticationInterceptor) {
 
         this.endpointPath = endpointPath;
         this.userDestinationPrefix = userDestinationPrefix;
         this.allowedOriginPatterns = allowedOriginPatterns.clone();
+        this.stompAuthenticationInterceptor = stompAuthenticationInterceptor;
     }
 
     /**
@@ -70,5 +75,15 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
     public void configureMessageBroker(final MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/queue", "/topic");
         registry.setUserDestinationPrefix(userDestinationPrefix);
+    }
+
+    /**
+     * Puts token checking in front of every inbound frame.
+     *
+     * @param registration inbound channel configuration
+     */
+    @Override
+    public void configureClientInboundChannel(final ChannelRegistration registration) {
+        registration.interceptors(stompAuthenticationInterceptor);
     }
 }

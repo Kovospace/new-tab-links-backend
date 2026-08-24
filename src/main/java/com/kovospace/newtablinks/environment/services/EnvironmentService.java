@@ -9,6 +9,7 @@ import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.environment.repositories.EnvironmentRepository;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.services.UserService;
+import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class EnvironmentService {
     private final EnvironmentRepository environmentRepository;
     private final EnvironmentMapper environmentMapper;
     private final UserService userService;
+    private final UserDataChangePublisher userDataChangePublisher;
 
     /**
      * Creates the service.
@@ -34,15 +36,18 @@ public class EnvironmentService {
      * @param environmentRepository persistence access for environments
      * @param environmentMapper     converter to the client facing shape
      * @param userService           resolves the owning user
+     * @param userDataChangePublisher announces changes to the user's other browsers
      */
     public EnvironmentService(
             final EnvironmentRepository environmentRepository,
             final EnvironmentMapper environmentMapper,
-            final UserService userService) {
+            final UserService userService,
+            final UserDataChangePublisher userDataChangePublisher) {
 
         this.environmentRepository = environmentRepository;
         this.environmentMapper = environmentMapper;
         this.userService = userService;
+        this.userDataChangePublisher = userDataChangePublisher;
     }
 
     /**
@@ -90,6 +95,7 @@ public class EnvironmentService {
         final EnvironmentEntity newEnvironment =
                 new EnvironmentEntity(owner, saveRequest.name(), position);
 
+        userDataChangePublisher.publishChangeFor(ownerId);
         return environmentMapper.toDto(environmentRepository.save(newEnvironment));
     }
 
@@ -114,6 +120,7 @@ public class EnvironmentService {
         final EnvironmentEntity existingEnvironment =
                 getRequiredEnvironmentEntity(environmentId, ownerId);
         existingEnvironment.setName(saveRequest.name());
+        userDataChangePublisher.publishChangeFor(ownerId);
         return environmentMapper.toDto(existingEnvironment);
     }
 
@@ -127,6 +134,7 @@ public class EnvironmentService {
     @Transactional
     public void deleteEnvironment(final UUID environmentId, final UUID ownerId) {
         environmentRepository.delete(getRequiredEnvironmentEntity(environmentId, ownerId));
+        userDataChangePublisher.publishChangeFor(ownerId);
     }
 
     /**

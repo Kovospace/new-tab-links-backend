@@ -3,8 +3,9 @@ package com.kovospace.newtablinks.auth.services;
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import com.kovospace.newtablinks.auth.dtos.RegistrationRequestDto;
-import com.kovospace.newtablinks.auth.models.ActivationTokenEntity;
-import com.kovospace.newtablinks.auth.repositories.ActivationTokenRepository;
+import com.kovospace.newtablinks.auth.models.EmailedTokenEntity;
+import com.kovospace.newtablinks.auth.models.EmailedTokenPurpose;
+import com.kovospace.newtablinks.auth.repositories.EmailedTokenRepository;
 import com.kovospace.newtablinks.auth.utils.SecureTokenGenerator;
 import com.kovospace.newtablinks.auth.utils.TokenHasher;
 import com.kovospace.newtablinks.common.exceptions.InvalidTokenException;
@@ -32,9 +33,9 @@ public class RegistrationService {
     private static final Logger LOGGER = LoggerFactory.getLogger(RegistrationService.class);
 
     private final UserRepository userRepository;
-    private final ActivationTokenRepository activationTokenRepository;
+    private final EmailedTokenRepository emailedTokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final ActivationEmailSender activationEmailSender;
+    private final AccountEmailSender accountEmailSender;
     private final AuthenticationProperties authenticationProperties;
     private final WebApplicationProperties webApplicationProperties;
 
@@ -42,24 +43,24 @@ public class RegistrationService {
      * Creates the service.
      *
      * @param userRepository            stores accounts
-     * @param activationTokenRepository stores activation tokens
+     * @param emailedTokenRepository stores activation tokens
      * @param passwordEncoder           hashes chosen passwords
-     * @param activationEmailSender     delivers the activation link
+     * @param accountEmailSender     delivers the activation link
      * @param authenticationProperties  token lifetimes
      * @param webApplicationProperties  builds the link into the website
      */
     public RegistrationService(
             final UserRepository userRepository,
-            final ActivationTokenRepository activationTokenRepository,
+            final EmailedTokenRepository emailedTokenRepository,
             final PasswordEncoder passwordEncoder,
-            final ActivationEmailSender activationEmailSender,
+            final AccountEmailSender accountEmailSender,
             final AuthenticationProperties authenticationProperties,
             final WebApplicationProperties webApplicationProperties) {
 
         this.userRepository = userRepository;
-        this.activationTokenRepository = activationTokenRepository;
+        this.emailedTokenRepository = emailedTokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.activationEmailSender = activationEmailSender;
+        this.accountEmailSender = accountEmailSender;
         this.authenticationProperties = authenticationProperties;
         this.webApplicationProperties = webApplicationProperties;
     }
@@ -84,7 +85,7 @@ public class RegistrationService {
 
         if (userRepository.existsByEmail(normalisedEmail)) {
             LOGGER.info("Registration attempted for an address that is already registered");
-            activationEmailSender.sendAddressAlreadyRegisteredNotice(normalisedEmail);
+            accountEmailSender.sendAddressAlreadyRegisteredNotice(normalisedEmail);
             return;
         }
 
@@ -125,8 +126,9 @@ public class RegistrationService {
      */
     @Transactional
     public void activate(final String rawActivationToken) {
-        final ActivationTokenEntity activationToken = activationTokenRepository
-                .findByTokenHash(TokenHasher.hash(rawActivationToken))
+        final EmailedTokenEntity activationToken = emailedTokenRepository
+                .findByTokenHashAndPurpose(
+                        TokenHasher.hash(rawActivationToken), EmailedTokenPurpose.ACCOUNT_ACTIVATION)
                 .orElseThrow(() -> new InvalidTokenException(
                         "That activation link is not valid. Request a new one."));
 
@@ -153,12 +155,13 @@ public class RegistrationService {
     private void mintAndSendActivationToken(final UserEntity account) {
         final String rawToken = SecureTokenGenerator.generateMachineToken();
 
-        activationTokenRepository.save(new ActivationTokenEntity(
+        emailedTokenRepository.save(new EmailedTokenEntity(
                 account,
                 TokenHasher.hash(rawToken),
+                EmailedTokenPurpose.ACCOUNT_ACTIVATION,
                 Instant.now().plus(authenticationProperties.activationTokenLifetime())));
 
-        activationEmailSender.sendActivationLink(
+        accountEmailSender.sendActivationLink(
                 account.getEmail(),
                 account.getDisplayName(),
                 webApplicationProperties.buildActivationLink(rawToken));

@@ -1,14 +1,14 @@
 package com.kovospace.newtablinks.auth.services;
 
 /**
- * Sends the messages the registration flow depends on.
+ * Sends the messages the account flows depend on.
  *
  * <p>An interface rather than a concrete sender so that the transactional provider, and the
  * decision to send at all, stay out of the services that hold the business logic.</p>
  *
  * @since 0.0.2
  */
-public interface ActivationEmailSender {
+public interface AccountEmailSender {
 
     /**
      * Sends the activation link to a newly registered address.
@@ -29,4 +29,13 @@ public interface ActivationEmailSender {
      * @param recipientAddress address that is already registered
      */
     void sendAddressAlreadyRegisteredNotice(String recipientAddress);
+
+    /**
+     * Sends a password reset link.
+     *
+     * @param recipientAddress address to send to
+     * @param displayName      name to greet the recipient by
+     * @param passwordResetLink absolute link that lets a new password be set
+     */
+    void sendPasswordResetLink(String recipientAddress, String displayName, String passwordResetLink);
 }

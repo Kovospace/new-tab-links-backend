@@ -36,6 +36,19 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
     List<RefreshTokenEntity> findAllByUserIdAndRevokedAtIsNull(UUID userId);
 
     /**
+     * Revokes every live token issued to one device, signing that browser out.
+     *
+     * @param deviceId  identifier of the device
+     * @param revokedAt moment to record as the revocation time
+     * @return how many tokens were revoked
+     */
+    @Modifying
+    @Query("update RefreshTokenEntity refreshToken set refreshToken.revokedAt = :revokedAt "
+            + "where refreshToken.device.id = :deviceId and refreshToken.revokedAt is null")
+    int revokeAllLiveTokensOfDevice(
+            @Param("deviceId") UUID deviceId, @Param("revokedAt") Instant revokedAt);
+
+    /**
      * Revokes every live token of one account in a single statement.
      *
      * <p>Used when a password changes or the user signs out everywhere.</p>

@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.auth.models;
 
 import com.kovospace.newtablinks.common.models.AbstractAuditableEntity;
+import com.kovospace.newtablinks.user.models.UserDeviceEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,14 +13,15 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * A long lived credential that lets a client mint fresh access tokens without a password.
+ * A long lived credential that lets one device mint fresh access tokens without a password.
  *
- * <p>One row per signed-in client, so a single browser extension install can be revoked without
- * disturbing the user's other devices. Only the hash is stored.</p>
+ * <p>Only the hash is stored. Access tokens are deliberately not stored at all: they are
+ * self-contained, short lived and verified by signature. This table is the only thing that makes
+ * a session revocable, which is why refreshing rotates the row rather than reusing it.</p>
  *
- * <p>Access tokens are deliberately not stored anywhere: they are self-contained, short lived and
- * verified by signature. This table is the only thing that makes a session revocable, which is
- * why refreshing rotates the row rather than reusing it.</p>
+ * <p>Rotation means these rows are short lived and numerous, so they are not what a user is shown
+ * - {@link UserDeviceEntity} is. Every token belongs to a device, and revoking a device revokes
+ * its tokens.</p>
  *
  * @since 0.0.2
  */
@@ -35,6 +37,13 @@ public class RefreshTokenEntity extends AbstractAuditableEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private UserEntity user;
+
+    /**
+     * Device this token was issued to.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "device_id", nullable = false)
+    private UserDeviceEntity device;
 
     /**
      * Hash of the token handed to the client.
@@ -55,12 +64,6 @@ public class RefreshTokenEntity extends AbstractAuditableEntity {
     private Instant revokedAt;
 
     /**
-     * Free text describing the client that obtained the token, for the user's own session list.
-     */
-    @Column(name = "client_description", length = 255)
-    private String clientDescription;
-
-    /**
      * Required by JPA.
      */
     protected RefreshTokenEntity() {
@@ -69,21 +72,21 @@ public class RefreshTokenEntity extends AbstractAuditableEntity {
     /**
      * Issues a refresh token.
      *
-     * @param user              account the token belongs to
-     * @param tokenHash         hash of the generated token
-     * @param expiresAt         moment after which the token is refused
-     * @param clientDescription description of the client, may be {@code null}
+     * @param user      account the token belongs to
+     * @param device    device the token is issued to
+     * @param tokenHash hash of the generated token
+     * @param expiresAt moment after which the token is refused
      */
     public RefreshTokenEntity(
             final UserEntity user,
+            final UserDeviceEntity device,
             final String tokenHash,
-            final Instant expiresAt,
-            final String clientDescription) {
+            final Instant expiresAt) {
 
         this.user = user;
+        this.device = device;
         this.tokenHash = tokenHash;
         this.expiresAt = expiresAt;
-        this.clientDescription = clientDescription;
     }
 
     /**
@@ -93,6 +96,15 @@ public class RefreshTokenEntity extends AbstractAuditableEntity {
      */
     public UserEntity getUser() {
         return user;
+    }
+
+    /**
+     * Returns the device this token was issued to.
+     *
+     * @return the device
+     */
+    public UserDeviceEntity getDevice() {
+        return device;
     }
 
     /**
@@ -106,20 +118,11 @@ public class RefreshTokenEntity extends AbstractAuditableEntity {
     }
 
     /**
-     * Revokes the token, ending that client's session.
+     * Revokes the token, ending that device's session.
      *
      * @param revokedAt moment of revocation
      */
     public void revoke(final Instant revokedAt) {
         this.revokedAt = revokedAt;
-    }
-
-    /**
-     * Returns the description of the client that obtained the token.
-     *
-     * @return the description, or {@code null} when none was recorded
-     */
-    public String getClientDescription() {
-        return clientDescription;
     }
 }

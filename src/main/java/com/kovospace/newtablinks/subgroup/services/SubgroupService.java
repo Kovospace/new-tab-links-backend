@@ -9,6 +9,7 @@ import com.kovospace.newtablinks.subgroup.dtos.SubgroupSaveRequestDto;
 import com.kovospace.newtablinks.subgroup.mappers.SubgroupMapper;
 import com.kovospace.newtablinks.subgroup.models.SubgroupEntity;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
+import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class SubgroupService {
     private final SubgroupRepository subgroupRepository;
     private final SubgroupMapper subgroupMapper;
     private final GroupService groupService;
+    private final UserDataChangePublisher userDataChangePublisher;
 
     /**
      * Creates the service.
@@ -36,15 +38,18 @@ public class SubgroupService {
      * @param subgroupRepository persistence access for subgroups
      * @param subgroupMapper     converter to the client facing shape
      * @param groupService       resolves the owning group
+     * @param userDataChangePublisher announces changes to the user's other browsers
      */
     public SubgroupService(
             final SubgroupRepository subgroupRepository,
             final SubgroupMapper subgroupMapper,
-            final GroupService groupService) {
+            final GroupService groupService,
+            final UserDataChangePublisher userDataChangePublisher) {
 
         this.subgroupRepository = subgroupRepository;
         this.subgroupMapper = subgroupMapper;
         this.groupService = groupService;
+        this.userDataChangePublisher = userDataChangePublisher;
     }
 
     /**
@@ -99,6 +104,7 @@ public class SubgroupService {
         final SubgroupEntity newSubgroup = new SubgroupEntity(
                 parentGroup, saveRequest.name(), position, saveRequest.collapsed());
 
+        userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(subgroupRepository.save(newSubgroup));
     }
 
@@ -120,6 +126,7 @@ public class SubgroupService {
         final SubgroupEntity existingSubgroup = getRequiredSubgroupEntity(subgroupId, ownerId);
         existingSubgroup.setName(saveRequest.name());
         existingSubgroup.setCollapsed(saveRequest.collapsed());
+        userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(existingSubgroup);
     }
 
@@ -133,6 +140,7 @@ public class SubgroupService {
     @Transactional
     public void deleteSubgroup(final UUID subgroupId, final UUID ownerId) {
         subgroupRepository.delete(getRequiredSubgroupEntity(subgroupId, ownerId));
+        userDataChangePublisher.publishChangeFor(ownerId);
     }
 
     /**

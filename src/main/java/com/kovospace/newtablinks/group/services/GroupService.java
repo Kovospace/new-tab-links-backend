@@ -9,6 +9,7 @@ import com.kovospace.newtablinks.group.dtos.GroupSaveRequestDto;
 import com.kovospace.newtablinks.group.mappers.GroupMapper;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import com.kovospace.newtablinks.group.repositories.GroupRepository;
+import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class GroupService {
     private final GroupRepository groupRepository;
     private final GroupMapper groupMapper;
     private final EnvironmentService environmentService;
+    private final UserDataChangePublisher userDataChangePublisher;
 
     /**
      * Creates the service.
@@ -38,15 +40,18 @@ public class GroupService {
      * @param groupRepository    persistence access for groups
      * @param groupMapper        converter to the client facing shape
      * @param environmentService resolves the owning environment
+     * @param userDataChangePublisher announces changes to the user's other browsers
      */
     public GroupService(
             final GroupRepository groupRepository,
             final GroupMapper groupMapper,
-            final EnvironmentService environmentService) {
+            final EnvironmentService environmentService,
+            final UserDataChangePublisher userDataChangePublisher) {
 
         this.groupRepository = groupRepository;
         this.groupMapper = groupMapper;
         this.environmentService = environmentService;
+        this.userDataChangePublisher = userDataChangePublisher;
     }
 
     /**
@@ -93,6 +98,7 @@ public class GroupService {
                 groupRepository.findHighestPositionByEnvironmentId(environment.getId()));
 
         final GroupEntity newGroup = new GroupEntity(environment, saveRequest.name(), position);
+        userDataChangePublisher.publishChangeFor(ownerId);
         return groupMapper.toDto(groupRepository.save(newGroup));
     }
 
@@ -113,6 +119,7 @@ public class GroupService {
 
         final GroupEntity existingGroup = getRequiredGroupEntity(groupId, ownerId);
         existingGroup.setName(saveRequest.name());
+        userDataChangePublisher.publishChangeFor(ownerId);
         return groupMapper.toDto(existingGroup);
     }
 
@@ -126,6 +133,7 @@ public class GroupService {
     @Transactional
     public void deleteGroup(final UUID groupId, final UUID ownerId) {
         groupRepository.delete(getRequiredGroupEntity(groupId, ownerId));
+        userDataChangePublisher.publishChangeFor(ownerId);
     }
 
     /**

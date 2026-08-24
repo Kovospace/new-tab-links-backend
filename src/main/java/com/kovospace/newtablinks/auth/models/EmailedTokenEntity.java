@@ -4,6 +4,8 @@ import com.kovospace.newtablinks.common.models.AbstractAuditableEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
@@ -12,31 +14,41 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * The secret behind the activation link mailed after a classic registration.
+ * A secret sent to a user's address, proving they can read that mailbox.
  *
- * <p>Single use and short lived. Only the hash is stored; the token itself exists only inside the
- * link that was mailed.</p>
+ * <p>Account activation and password reset are the same mechanism wearing different labels -
+ * mint, mail, redeem exactly once, expire - so both live here and are told apart by
+ * {@link EmailedTokenPurpose}.</p>
  *
- * @since 0.0.2
+ * <p>Only the hash is stored; the token itself exists only inside the link that was mailed.</p>
+ *
+ * @since 0.0.3
  */
 @Entity
 @Table(
-        name = "user_activation_token",
-        indexes = @Index(name = "ix_activation_token_hash", columnList = "token_hash"))
-public class ActivationTokenEntity extends AbstractAuditableEntity {
+        name = "emailed_token",
+        indexes = @Index(name = "ix_emailed_token_hash", columnList = "token_hash"))
+public class EmailedTokenEntity extends AbstractAuditableEntity {
 
     /**
-     * Account this token activates.
+     * Account the token acts on.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private UserEntity user;
 
     /**
-     * Hash of the token carried by the activation link.
+     * Hash of the token carried by the mailed link.
      */
     @Column(name = "token_hash", nullable = false, length = 100)
     private String tokenHash;
+
+    /**
+     * What the token may be redeemed for.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "purpose", nullable = false, length = 40)
+    private EmailedTokenPurpose purpose;
 
     /**
      * Moment after which the link stops working.
@@ -53,33 +65,45 @@ public class ActivationTokenEntity extends AbstractAuditableEntity {
     /**
      * Required by JPA.
      */
-    protected ActivationTokenEntity() {
+    protected EmailedTokenEntity() {
     }
 
     /**
-     * Mints an activation token.
+     * Mints a token.
      *
-     * @param user      account the token activates
+     * @param user      account the token acts on
      * @param tokenHash hash of the generated token
+     * @param purpose   what the token may be redeemed for
      * @param expiresAt moment after which the link stops working
      */
-    public ActivationTokenEntity(
+    public EmailedTokenEntity(
             final UserEntity user,
             final String tokenHash,
+            final EmailedTokenPurpose purpose,
             final Instant expiresAt) {
 
         this.user = user;
         this.tokenHash = tokenHash;
+        this.purpose = purpose;
         this.expiresAt = expiresAt;
     }
 
     /**
-     * Returns the account this token activates.
+     * Returns the account the token acts on.
      *
      * @return the account
      */
     public UserEntity getUser() {
         return user;
+    }
+
+    /**
+     * Returns what the token may be redeemed for.
+     *
+     * @return the purpose
+     */
+    public EmailedTokenPurpose getPurpose() {
+        return purpose;
     }
 
     /**

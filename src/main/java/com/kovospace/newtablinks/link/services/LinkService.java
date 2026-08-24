@@ -12,6 +12,7 @@ import com.kovospace.newtablinks.link.repositories.LinkRepository;
 import com.kovospace.newtablinks.link.utils.FaviconUrlResolver;
 import com.kovospace.newtablinks.subgroup.models.SubgroupEntity;
 import com.kovospace.newtablinks.subgroup.services.SubgroupService;
+import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class LinkService {
     private final LinkMapper linkMapper;
     private final GroupService groupService;
     private final SubgroupService subgroupService;
+    private final UserDataChangePublisher userDataChangePublisher;
 
     /**
      * Creates the service.
@@ -42,17 +44,20 @@ public class LinkService {
      * @param linkMapper      converter to the client facing shape
      * @param groupService    resolves the owning group
      * @param subgroupService resolves the optional owning subgroup
+     * @param userDataChangePublisher announces changes to the user's other browsers
      */
     public LinkService(
             final LinkRepository linkRepository,
             final LinkMapper linkMapper,
             final GroupService groupService,
-            final SubgroupService subgroupService) {
+            final SubgroupService subgroupService,
+            final UserDataChangePublisher userDataChangePublisher) {
 
         this.linkRepository = linkRepository;
         this.linkMapper = linkMapper;
         this.groupService = groupService;
         this.subgroupService = subgroupService;
+        this.userDataChangePublisher = userDataChangePublisher;
     }
 
     /**
@@ -121,6 +126,7 @@ public class LinkService {
                 FaviconUrlResolver.resolveFaviconUrl(saveRequest.faviconUrl(), saveRequest.url()),
                 calculatePositionAmongSiblings(parentGroup.getId(), parentSubgroup));
 
+        userDataChangePublisher.publishChangeFor(ownerId);
         return linkMapper.toDto(linkRepository.save(newLink));
     }
 
@@ -151,6 +157,7 @@ public class LinkService {
         existingLink.setParentSubgroup(
                 resolveOptionalSubgroup(saveRequest.parentSubgroupId(), ownerId));
 
+        userDataChangePublisher.publishChangeFor(ownerId);
         return linkMapper.toDto(existingLink);
     }
 
@@ -164,6 +171,7 @@ public class LinkService {
     @Transactional
     public void deleteLink(final UUID linkId, final UUID ownerId) {
         linkRepository.delete(getRequiredLinkEntity(linkId, ownerId));
+        userDataChangePublisher.publishChangeFor(ownerId);
     }
 
     /**
