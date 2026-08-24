@@ -25,10 +25,11 @@
         <!--
           Version of the database schema this application expects.
 
-          Flyway migrations live in their own repository and are shipped as a Docker
-          image that runs as a Kubernetes init container before this app starts. This
-          property is the contract between the two: it names the migration image tag
-          that produces the schema this build was written against.
+          Flyway migrations live in Kovospace/new-tab-links-migrations and ship as a
+          Docker image that runs as a Kubernetes init container before this app
+          starts. This property is the contract between the two: its value IS the tag
+          of the migration image that produces the schema this build was written
+          against.
 
           It is baked into the build info (see spring-boot-maven-plugin below), so the
           running application can report the schema it needs via /actuator/info, and
@@ -36,7 +37,7 @@
 
           Bump it in the same commit that starts depending on a new migration.
         -->
-        <flyway.migrations.schema.version>0.0.3</flyway.migrations.schema.version>
+        <flyway.migrations.schema.version>0.0.1</flyway.migrations.schema.version>
     </properties>
 
     <dependencies>
