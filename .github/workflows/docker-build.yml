@@ -10,6 +10,8 @@ name: Build, push & deploy docker image
 #      as sha-<short sha> and latest
 #   2. commits `imageTag: sha-<short sha>` into
 #      versions/new-tab-links-backend.yaml in Kovospace/kovostack-infra-gitops
+#   3. commits `initImageTags.migrations: <schema version>` into
+#      versions/new-tab-links-backend-init.yaml in the same repository — see below
 #
 # Deployment is GitOps: the cluster's controller rolls the new tag out from the
 # infra repository. CI never talks to the cluster.
@@ -33,12 +35,58 @@ on:
         default: true
 
 jobs:
+  # The database schema this build expects. Migrations live in
+  # Kovospace/new-tab-links-migrations and ship as an image tagged with the schema
+  # version; that image runs as an init container in front of this application.
+  # Its pipeline deliberately does not deploy — the version to pin is the one THIS
+  # build was written against, and only this repository knows it. It is the Maven
+  # property `flyway.migrations.schema.version`, read straight out of the pom so
+  # the deployed init container and the running application can never disagree.
+  schema-version:
+    name: Read expected schema version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: read
+        run: |
+          set -euo pipefail
+
+          # A literal in the pom, so plain text extraction is enough — and far
+          # cheaper than starting Maven just to evaluate one property.
+          version=$(sed -n \
+            's:.*<flyway\.migrations\.schema\.version>\(.*\)</flyway\.migrations\.schema\.version>.*:\1:p' \
+            pom.xml | head -n1 | tr -d '[:space:]')
+
+          if [ -z "$version" ]; then
+            echo "::error::flyway.migrations.schema.version is not set in pom.xml"
+            exit 1
+          fi
+
+          # The migrations repository only ever publishes x.y.z tags. A typo here
+          # would deploy an init container that cannot be pulled, and the whole pod
+          # would sit in Init:ImagePullBackOff.
+          if ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'${version}' is not an x.y.z schema version"
+            exit 1
+          fi
+
+          echo "Expected schema version: ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
   pipeline:
+    needs: schema-version
     # Pinned to an immutable tag so this project's pipeline cannot change underneath it.
-    uses: Kovospace/kovostack-github-workflows/.github/workflows/build-deploy.yml@2.0.2
+    uses: Kovospace/kovostack-github-workflows/.github/workflows/build-deploy.yml@2.1.0
     with:
       image_name: new-tab-links-backend
       app_namespace: new-tab-links-backend
+      # `migrations` is the init container's name in
+      # applications/new-tab-links-backend/values.yaml — the chart keys
+      # initImageTags by that name.
+      init_image_tags: migrations=${{ needs.schema-version.outputs.version }}
       build: ${{ inputs.build }}
       deploy: ${{ inputs.deploy }}
     secrets: inherit

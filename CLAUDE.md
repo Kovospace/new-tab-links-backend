@@ -198,8 +198,9 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   UUIDs, so whichever side wins has to be decided before two-way sync exists.
 - **Reordering** has no endpoint. `position` is assigned on create and left alone on update; a
   dedicated move operation should own it.
-- **`ddl-auto=update`** is a local-development convenience. Once the migrations repository
-  exists, deployed environments must set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+- **`ddl-auto=update`** is a local-development convenience only. The migrations repository now
+  exists and its image runs as an init container, so deployed environments must set
+  `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
 
 ## Agents
 

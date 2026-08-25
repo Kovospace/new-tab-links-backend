@@ -15,7 +15,7 @@ this repo
  └── .github/workflows/docker-build.yml   (thin caller, workflow_dispatch)
         │ uses:
         ▼
- Kovospace/kovostack-github-workflows@2.0.2
+ Kovospace/kovostack-github-workflows@2.0.3
  └── .github/workflows/build-deploy.yml   (on: workflow_call - the real pipeline)
         │ 1. docker build . -> push
         ▼
@@ -23,7 +23,8 @@ this repo
         │ 2. writes imageTag into
         ▼
  Kovospace/kovostack-infra-gitops
- └── versions/new-tab-links-backend.yaml  -> `imageTag: sha-abc1234`
+ ├── versions/new-tab-links-backend.yaml       -> `imageTag: sha-abc1234`
+ └── versions/new-tab-links-backend-init.yaml  -> `initImageTags.migrations: "0.0.1"`
         │ Argo CD reconciles
         ▼
  Kubernetes namespace new-tab-links-backend
@@ -35,9 +36,9 @@ this repo
 
 - **The template repo is private.** HTTPS/GitHub API returns 404. It is reachable over SSH with
   `~/.ssh/id_ed25519`. To read it:
-  `git clone --branch 2.0.2 --depth 1 git@github.com:Kovospace/kovostack-github-workflows.git`
+  `git clone --branch 2.0.3 --depth 1 git@github.com:Kovospace/kovostack-github-workflows.git`
 - **Its tags have no `v` prefix** - the real tags are `2.0.2`, `2.0.1`, `2.0.0`, …, even though
-  its README describes a `@v2` convention. Pin `@2.0.2`.
+  its README describes a `@v2` convention. Pin `@2.0.3`.
 - **`image_name` and `app_namespace` both equal the repository name** (`new-tab-links-backend`),
   matching how `paster-backend` and the other projects are set up.
 - **Only the default branch builds.** The pipeline guards on
@@ -54,7 +55,7 @@ this repo
 
 ## The Helm chart the deployment uses
 
-`Kovospace/kovostack-helm-charts`, chart `charts/app` at `chart-app-1.3.0`, wired up by
+`Kovospace/kovostack-helm-charts`, chart `charts/app` at `chart-app-1.4.1`, wired up by
 `applications/<name>.yaml` in the GitOps repo, with values from
 `applications/<name>/values.yaml` plus `versions/<name>.yaml`.
 
@@ -69,34 +70,65 @@ Relevant chart behaviour:
 - Postgres runs **outside** the cluster and is reached through the `externalServices` block,
   which needs an **IP address, not a hostname** (`172.17.0.1`, the docker0 gateway, for the
   other projects).
-- **The chart has no `initContainers` support at all** (verified by grep across the chart at
-  `chart-app-1.3.0`).
+- **`initContainers` is a list in the app's values file** and `initImageTags` a *map* keyed by
+  the container's resolved name, in `versions/<app>-init.yaml`. The split exists because Helm
+  merges maps across values files but replaces lists wholesale. Setting an entry's own
+  `imageTag` *and* `initImageTags.<name>` is refused by the chart, not resolved.
 
-## The Flyway schema contract - and what still blocks it
+## The Flyway schema contract
 
-The intended design: migrations live in their own repository, ship as a Docker image, and run as
-a **Kubernetes init container** before this application starts. The application must never
-migrate its own schema, which is why `spring.flyway.enabled` defaults to `false` here.
+Migrations live in **Kovospace/new-tab-links-migrations** (local checkout
+`/home/kovo/IdeaProjects/new-tab-links-migrations`), ship as a Docker image whose tag *is* the
+schema version, and run as a **Kubernetes init container** before this application starts. The
+application must never migrate its own schema, which is why `spring.flyway.enabled` defaults to
+`false` here.
 
-What exists on this side already:
+The whole chain, end to end:
 
-- Maven property **`flyway.migrations.schema.version`** in `pom.xml` names the migration image
-  tag whose schema this build expects.
-- It is baked into `META-INF/build-info.properties` by the `build-info` goal and published at
-  **`/actuator/info` as `build.flywayMigrationsSchemaVersion`**, so a running pod can be compared
-  against the migration image that actually ran.
+1. Maven property **`flyway.migrations.schema.version`** in `pom.xml` names the migration image
+   tag whose schema this build expects. Bump it in the same commit that starts depending on a
+   new migration.
+2. It is baked into `META-INF/build-info.properties` by the `build-info` goal and published at
+   **`/actuator/info` as `build.flywayMigrationsSchemaVersion`**, so a running pod can be
+   compared against the migration image that actually ran.
+3. `.github/workflows/docker-build.yml` reads that property out of the pom in its
+   `schema-version` job (sed, not Maven) and passes it to the shared pipeline as
+   `init_image_tags: migrations=<version>`.
+4. The shared pipeline's deploy job writes `versions/new-tab-links-backend-init.yaml`:
+   `initImageTags: { migrations: "<version>" }`, alongside the app's own `imageTag` file.
+5. `applications/new-tab-links-backend/values.yaml` declares the init container itself
+   (`initContainers: [{name: migrations, image: new-tab-links-migrations}]`); the chart joins
+   the two by the name `migrations`.
 
-What is still missing, and is **not** this repository's to fix:
+Consequences worth remembering:
 
-1. The migrations repository does not exist yet.
-2. **The Helm chart cannot render an init container**, so the chart needs a change before the
-   init container can be deployed at all.
-3. Nothing yet copies the Maven property into the deployment's init-container tag - that link
-   has to be made in the GitOps values or by the chart.
+- **The migrations pipeline does not deploy** (`deploy: false`, no `app_namespace`). The image is
+  not a workload of its own, and the version to pin is the one the *backend* was written
+  against - so the backend's pipeline is what writes the init tag. Publishing a new migration
+  version changes nothing in the cluster until this repository's pom is bumped and deployed.
+- The schema-version job **fails the run** on a missing or non-`x.y.z` value, deliberately: a bad
+  tag would leave the pod in `Init:ImagePullBackOff`.
+- A **deploy-only run** (build unchecked) re-pins both files together, so a rollback of the app
+  also rolls back the schema version it expects.
 
-Until then, `spring.jpa.hibernate.ddl-auto` defaults to `update` so local development works. Once
-migrations exist, deployed environments **must** override it with
-`SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+`spring.jpa.hibernate.ddl-auto` defaults to `update` for local development; deployed environments
+**must** override it with `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+
+## Who owns which repository - use the agent, don't hand-edit
+
+Three repositories around this one deploy it, and each has an agent that knows it. Delegate to
+the agent rather than editing another repo's YAML from here: they hold the conventions,
+versioning and PR rules of their repository, which this skill does not repeat.
+
+| Repository | Local checkout | Agent | Use it for |
+|---|---|---|---|
+| `kovostack-infra-gitops` | `/home/kovo/IdeaProjects/kovostack-infra-gitops` | **`devops-engineer`** | Argo CD `Application`s, `applications/<app>/values.yaml`, `versions/*.yaml`, namespaces, "what breaks if we change X", and guidance on pipelines that deploy into this cluster. Asks before every push to `main`. |
+| `kovostack-helm-charts` | `/home/kovo/IdeaProjects/kovostack-helm-charts` | **`helm-chart-devops`** | The `charts/app` chart itself - a new value, a new template, a fix. Bumps the chart version and delivers on an `upgrade/**` branch with a PR, never on `main`. |
+| `kovostack-github-workflows` | `/home/kovo/IdeaProjects/kovostack-github-workflows` | *(none - edit directly)* | The shared `build-deploy.yml`. Change it on a `feature/**` branch, then cut the next `x.y.z` tag and bump the pin in every caller. |
+
+A change here that needs a new chart value or a new deployment value is **two agents and this
+repo**, in that order: chart first (it must be released before anything can use it), GitOps
+second, caller last.
 
 ## Local verification recipe
 
