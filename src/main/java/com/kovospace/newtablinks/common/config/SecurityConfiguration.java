@@ -63,6 +63,39 @@ public class SecurityConfiguration {
     };
 
     /**
+     * Request headers a browser client is allowed to set on a call to this API.
+     *
+     * <p>Listed explicitly rather than as {@code "*"}: the origin list is explicit too, and with
+     * {@code allowCredentials(true)} a wildcard does not mean "no headers matter" - Spring echoes
+     * back whatever the caller asked for, so any header a compromised or careless script invents
+     * would be accepted forever without anyone deciding to accept it. Three entries is a contract
+     * small enough to state.</p>
+     *
+     * <p>Why exactly these three, and nothing else:</p>
+     * <ul>
+     *   <li>{@code Authorization} - the bearer token on every authenticated call.</li>
+     *   <li>{@code Content-Type} - request bodies are {@code application/json}, which is not one
+     *       of the CORS-safelisted content types and therefore triggers a preflight.</li>
+     *   <li>{@link ClientRequestHeaders#DEVICE_NAME} - read by the three endpoints that issue
+     *       tokens, to label a row in the user's device list.</li>
+     * </ul>
+     *
+     * <p>Two headers the endpoints also read are deliberately absent. {@code User-Agent} is a
+     * forbidden header name: the browser sets it and a script cannot, so it never appears in a
+     * preflight request. {@code Accept} is CORS-safelisted for the values Angular sends. Adding
+     * either would be noise.</p>
+     *
+     * <p>This is a compile-time constant and not a configuration property on purpose. It states
+     * what the API's own clients send, which is the same in every deployment, unlike the origins
+     * they send it from. Making it configurable would only create a way for a deployment to break
+     * sign-in by forgetting an entry.</p>
+     */
+    private static final List<String> ALLOWED_CORS_REQUEST_HEADERS = List.of(
+            "Authorization",
+            "Content-Type",
+            ClientRequestHeaders.DEVICE_NAME);
+
+    /**
      * Endpoints that document the service or report its health.
      */
     private static final String[] PUBLIC_SUPPORT_ENDPOINTS = {
@@ -194,11 +227,26 @@ public class SecurityConfiguration {
     }
 
     /**
-     * Declares which browser origins may call this API.
+     * Declares which browser origins may call this API, and with what.
      *
      * <p>The website and the extension live on different origins from the API, so neither can
      * call it without being listed here. The extension's origin is
-     * {@code chrome-extension://<extension id>}.</p>
+     * {@code chrome-extension://<extension id>}. Origins are deployment-dependent and therefore
+     * configured, through {@code newtablinks.security.allowed-cors-origins}.</p>
+     *
+     * <p>Everything else is stated in code, because it describes the API rather than the
+     * environment: the methods it serves, and {@link #ALLOWED_CORS_REQUEST_HEADERS} - read its
+     * Javadoc before changing the list, it explains why each entry is there.</p>
+     *
+     * <p>No response header is exposed. Clients read only the response body; nothing here answers
+     * with a header a script has to see, so the CORS-safelisted response headers suffice and
+     * {@code setExposedHeaders} would grant reach that no caller uses.</p>
+     *
+     * <p>The trap this configuration sets: {@code curl} does not enforce CORS, so a preflight that
+     * silently drops a header still returns 200 and the request that follows still succeeds on the
+     * command line. Only a real browser refuses. Verify a change against a browser, or against the
+     * {@code Access-Control-Allow-Headers} response header, never against whether the call worked.
+     * </p>
      *
      * @return the CORS configuration source
      */
@@ -207,7 +255,7 @@ public class SecurityConfiguration {
         final CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList(allowedCorsOrigins));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowedHeaders(ALLOWED_CORS_REQUEST_HEADERS);
         configuration.setAllowCredentials(true);
 
         final UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

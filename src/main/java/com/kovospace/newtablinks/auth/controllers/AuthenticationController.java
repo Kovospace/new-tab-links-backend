@@ -12,6 +12,7 @@ import com.kovospace.newtablinks.auth.models.SingleUseCodePurpose;
 import com.kovospace.newtablinks.auth.services.AuthenticationService;
 import com.kovospace.newtablinks.auth.services.RegistrationService;
 import com.kovospace.newtablinks.auth.services.SingleUseCodeService;
+import com.kovospace.newtablinks.common.config.ClientRequestHeaders;
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
 import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
 import com.kovospace.newtablinks.user.services.UserService;
@@ -51,10 +52,11 @@ public class AuthenticationController {
     /**
      * Header a client uses to name the machine it is running on.
      *
-     * <p>Optional, and never trusted for anything: a browser cannot read its host's name, so this
-     * is whatever the client chose to send. It only labels a row in the user's device list.</p>
+     * <p>Aliased from {@link ClientRequestHeaders#DEVICE_NAME} so that the literal exists once:
+     * a custom header only reaches this method when the CORS configuration has also allowed it,
+     * and the two lists must not drift.</p>
      */
-    private static final String DEVICE_NAME_HEADER = "X-Device-Name";
+    private static final String DEVICE_NAME_HEADER = ClientRequestHeaders.DEVICE_NAME;
 
     /**
      * Wording returned to every registration attempt, successful or not.
