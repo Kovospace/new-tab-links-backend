@@ -9,10 +9,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * email, and the redirect that ends a provider sign-in - so the site's address cannot be
  * hardcoded. The website is a separate project and its address differs per environment.</p>
  *
+ * <p>It also holds the shared key the website presents on the handful of endpoints reserved for
+ * it, because that key identifies the same client this record already describes. Whether the key
+ * is usable at all is decided by
+ * {@link com.kovospace.newtablinks.common.security.FrontendApiKeyAuthenticationFilter}, which is
+ * the only thing that reads it: blank or absent means every guarded call is refused.</p>
+ *
  * @param baseUrl              root address of the website, without a trailing slash
  * @param activationPath       path on the website that receives an activation token
  * @param oauthCallbackPath    path on the website that receives the sign-in handoff code
  * @param passwordResetPath    path on the website that receives a password reset token
+ * @param frontendApiKey       value the website sends in
+ *                             {@link com.kovospace.newtablinks.common.config.ClientRequestHeaders#FRONTEND_API_KEY};
+ *                             blank or absent disables every endpoint that requires it
  * @since 0.0.2
  */
 @ConfigurationProperties(prefix = "newtablinks.web")
@@ -20,7 +29,8 @@ public record WebApplicationProperties(
         String baseUrl,
         String activationPath,
         String oauthCallbackPath,
-        String passwordResetPath) {
+        String passwordResetPath,
+        String frontendApiKey) {
 
     /**
      * Builds the absolute activation link mailed to a newly registered user.

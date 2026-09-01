@@ -1,5 +1,7 @@
 package com.kovospace.newtablinks.common.exceptions;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -7,10 +9,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.MessageSourceResolvable;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.method.MethodValidationException;
+import org.springframework.validation.method.MethodValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 /**
  * Translates exceptions thrown anywhere below the controller layer into {@link ApiErrorResponseDto}.
@@ -57,6 +64,79 @@ public class GlobalExceptionHandler {
                 .toList();
 
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Request validation failed", validationErrors);
+    }
+
+    /**
+     * Renders a failed validation of a query or path parameter as HTTP 400.
+     *
+     * <p>Constraints written directly on a controller argument - as on the username existence
+     * lookup - are enforced by the proxy that {@code @Validated} puts around the controller, and
+     * surface as this exception rather than as a {@link MethodArgumentNotValidException}. Without
+     * this handler they would fall through to the catch-all below and be answered with 500,
+     * which is a lie: the caller sent a bad request and can fix it.</p>
+     *
+     * @param exception the exception raised by the constraint validator
+     * @return a 400 response carrying the uniform error body and the per-parameter messages
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleParameterValidationFailure(
+            final ConstraintViolationException exception) {
+
+        final List<String> validationErrors = exception.getConstraintViolations()
+                .stream()
+                .map(GlobalExceptionHandler::describeConstraintViolation)
+                .sorted(Comparator.naturalOrder())
+                .toList();
+
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Request validation failed", validationErrors);
+    }
+
+    /**
+     * Renders Spring's own method validation failure as HTTP 400.
+     *
+     * <p>The same failure as {@link #handleParameterValidationFailure(ConstraintViolationException)}
+     * reported through the framework's built-in method validation, which is what runs when a
+     * controller is not behind a {@code @Validated} proxy. Both shapes are handled because which
+     * one appears depends on configuration rather than on anything the caller did - and this one
+     * would otherwise reach the catch-all and be answered with 500.</p>
+     *
+     * @param exception the exception raised by the framework's method validation
+     * @return a 400 response carrying the uniform error body and the per-parameter messages
+     */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleHandlerMethodValidationFailure(
+            final HandlerMethodValidationException exception) {
+
+        return buildValidationErrorResponse(exception);
+    }
+
+    /**
+     * Renders a method validation failure raised outside the web layer as HTTP 400.
+     *
+     * @param exception the exception raised by method validation on a service
+     * @return a 400 response carrying the uniform error body and the per-parameter messages
+     */
+    @ExceptionHandler(MethodValidationException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleMethodValidationFailure(
+            final MethodValidationException exception) {
+
+        return buildValidationErrorResponse(exception);
+    }
+
+    /**
+     * Renders a missing required request parameter as HTTP 400.
+     *
+     * @param exception the exception raised when the parameter is absent altogether
+     * @return a 400 response naming the missing parameter
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleMissingRequestParameter(
+            final MissingServletRequestParameterException exception) {
+
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                "Request validation failed",
+                List.of("%s: is required".formatted(exception.getParameterName())));
     }
 
     /**
@@ -127,6 +207,45 @@ public class GlobalExceptionHandler {
      */
     private static String describeFieldError(final FieldError fieldError) {
         return "%s: %s".formatted(fieldError.getField(), fieldError.getDefaultMessage());
+    }
+
+    /**
+     * Turns a method validation result into the uniform 400 response.
+     *
+     * @param validationResult the failure reported by either flavour of method validation
+     * @return a 400 response carrying the uniform error body and the per-parameter messages
+     */
+    private static ResponseEntity<ApiErrorResponseDto> buildValidationErrorResponse(
+            final MethodValidationResult validationResult) {
+
+        final List<String> validationErrors = validationResult.getAllErrors()
+                .stream()
+                .map(MessageSourceResolvable::getDefaultMessage)
+                .filter(message -> message != null)
+                .sorted(Comparator.naturalOrder())
+                .toList();
+
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Request validation failed", validationErrors);
+    }
+
+    /**
+     * Formats a single violated constraint as {@code parameter: message}.
+     *
+     * <p>The property path of a method-level violation is qualified with the method name
+     * ({@code checkUsernameExistence.username}); only the last node is shown, so the wording
+     * matches what a body validation failure produces and no internal method name leaks.</p>
+     *
+     * @param violation the violated constraint
+     * @return the formatted message
+     */
+    private static String describeConstraintViolation(final ConstraintViolation<?> violation) {
+        final String propertyPath = violation.getPropertyPath().toString();
+        final int lastSeparator = propertyPath.lastIndexOf('.');
+        final String parameterName = lastSeparator < 0
+                ? propertyPath
+                : propertyPath.substring(lastSeparator + 1);
+
+        return "%s: %s".formatted(parameterName, violation.getMessage());
     }
 
     /**
