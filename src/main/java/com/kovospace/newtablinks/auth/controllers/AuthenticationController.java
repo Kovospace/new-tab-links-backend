@@ -8,15 +8,20 @@ import com.kovospace.newtablinks.auth.dtos.RegistrationAcceptedDto;
 import com.kovospace.newtablinks.auth.dtos.RegistrationRequestDto;
 import com.kovospace.newtablinks.auth.dtos.SingleUseCodeRedemptionRequestDto;
 import com.kovospace.newtablinks.auth.dtos.TokenPairDto;
+import com.kovospace.newtablinks.auth.dtos.UsernameExistenceDto;
 import com.kovospace.newtablinks.auth.models.SingleUseCodePurpose;
 import com.kovospace.newtablinks.auth.services.AuthenticationService;
 import com.kovospace.newtablinks.auth.services.RegistrationService;
 import com.kovospace.newtablinks.auth.services.SingleUseCodeService;
+import com.kovospace.newtablinks.auth.utils.UsernameConstraints;
+import com.kovospace.newtablinks.common.config.ApiEndpointPaths;
 import com.kovospace.newtablinks.common.config.ClientRequestHeaders;
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
 import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
 import com.kovospace.newtablinks.user.services.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,6 +29,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -44,7 +51,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @since 0.0.2
  */
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping(ApiEndpointPaths.AUTHENTICATION_BASE_PATH)
 @Validated
 @Tag(name = "Authentication", description = "Registration, sign-in and session lifecycle")
 public class AuthenticationController {
@@ -116,6 +123,46 @@ public class AuthenticationController {
         registrationService.register(registrationRequest);
         return ResponseEntity.accepted()
                 .body(new RegistrationAcceptedDto(UNIFORM_REGISTRATION_MESSAGE));
+    }
+
+    /**
+     * Answers whether a username is already registered.
+     *
+     * @param username the name the visitor is typing into the registration form
+     * @return whether an account already uses that name
+     */
+    @GetMapping(ApiEndpointPaths.USERNAME_EXISTENCE_SUBPATH)
+    @Operation(summary = "Check whether a username is already registered",
+            description = "Serves the website's registration form, which reports a taken name "
+                    + "while the visitor types instead of only after they submit. "
+                    + "It answers the same question registration answers with a 409, and "
+                    + "discloses nothing further: a username is public by nature, unlike an "
+                    + "email address, which is why registration hides one and reports the other "
+                    + "openly. "
+                    + "Reserved for the website: every call must carry the "
+                    + "X-Frontend-Api-Key header, and a deployment with no key configured "
+                    + "refuses the endpoint outright.")
+    @Parameter(name = ClientRequestHeaders.FRONTEND_API_KEY, in = ParameterIn.HEADER,
+            required = true, schema = @Schema(type = "string"),
+            description = "The shared key issued to the website. Not a secret - it ships in a "
+                    + "public JavaScript bundle - it only keeps this endpoint from becoming an "
+                    + "open lookup service.")
+    @ApiResponse(responseCode = "200", description = "Whether the username is taken")
+    @ApiResponse(responseCode = "400",
+            description = "The username parameter is missing, or is not a well-formed username",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "403",
+            description = "The frontend API key was missing, wrong, or never configured",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    public UsernameExistenceDto checkUsernameExistence(
+            @RequestParam
+            @NotBlank
+            @Size(min = UsernameConstraints.MINIMUM_LENGTH, max = UsernameConstraints.MAXIMUM_LENGTH)
+            @Pattern(regexp = UsernameConstraints.ALLOWED_CHARACTERS_PATTERN,
+                    message = UsernameConstraints.ALLOWED_CHARACTERS_MESSAGE)
+            final String username) {
+
+        return new UsernameExistenceDto(registrationService.isUsernameTaken(username));
     }
 
     /**

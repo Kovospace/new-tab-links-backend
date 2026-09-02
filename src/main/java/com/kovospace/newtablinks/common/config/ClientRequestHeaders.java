@@ -26,6 +26,21 @@ public final class ClientRequestHeaders {
     public static final String DEVICE_NAME = "X-Device-Name";
 
     /**
+     * Header the website presents on the endpoints reserved for it.
+     *
+     * <p>Currently only
+     * {@link ApiEndpointPaths#USERNAME_EXISTENCE_PATH} requires it. It is checked by
+     * {@link com.kovospace.newtablinks.common.security.FrontendApiKeyAuthenticationFilter}.</p>
+     *
+     * <p><strong>This is not a secret and must never be treated as one.</strong> It is compiled
+     * into a public JavaScript bundle, so anybody who opens the site can read it. Its only job is
+     * to stop the endpoint from being a convenient, unattributed lookup service for anyone who
+     * finds the API - it raises the cost of casual abuse, and nothing more. Never protect
+     * anything with it that a leak would actually damage.</p>
+     */
+    public static final String FRONTEND_API_KEY = "X-Frontend-Api-Key";
+
+    /**
      * Prevents instantiation of this constant holder.
      */
     private ClientRequestHeaders() {

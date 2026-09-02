@@ -1,7 +1,9 @@
 package com.kovospace.newtablinks.common.config;
 
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
+import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import com.kovospace.newtablinks.auth.services.ProviderSignInSuccessHandler;
+import com.kovospace.newtablinks.common.security.FrontendApiKeyAuthenticationFilter;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -30,6 +32,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * The service's security posture: what is public, what needs a token, and how tokens are signed.
@@ -59,7 +63,10 @@ public class SecurityConfiguration {
             "/api/v1/auth/session-handoff",
             "/api/v1/auth/extension-connect",
             "/api/v1/auth/password/reset-request",
-            "/api/v1/auth/password/reset-confirm"
+            "/api/v1/auth/password/reset-confirm",
+            // Public to the resource server, but not unguarded: the frontend API key filter is
+            // what stands in front of it. See FrontendApiKeyAuthenticationFilter.
+            ApiEndpointPaths.USERNAME_EXISTENCE_PATH
     };
 
     /**
@@ -68,16 +75,20 @@ public class SecurityConfiguration {
      * <p>Listed explicitly rather than as {@code "*"}: the origin list is explicit too, and with
      * {@code allowCredentials(true)} a wildcard does not mean "no headers matter" - Spring echoes
      * back whatever the caller asked for, so any header a compromised or careless script invents
-     * would be accepted forever without anyone deciding to accept it. Three entries is a contract
-     * small enough to state.</p>
+     * would be accepted forever without anyone deciding to accept it. A handful of entries is a
+     * contract small enough to state.</p>
      *
-     * <p>Why exactly these three, and nothing else:</p>
+     * <p>Why exactly these, and nothing else:</p>
      * <ul>
      *   <li>{@code Authorization} - the bearer token on every authenticated call.</li>
      *   <li>{@code Content-Type} - request bodies are {@code application/json}, which is not one
      *       of the CORS-safelisted content types and therefore triggers a preflight.</li>
      *   <li>{@link ClientRequestHeaders#DEVICE_NAME} - read by the three endpoints that issue
      *       tokens, to label a row in the user's device list.</li>
+     *   <li>{@link ClientRequestHeaders#FRONTEND_API_KEY} - the website's shared key, demanded by
+     *       {@link FrontendApiKeyAuthenticationFilter} on the endpoints reserved for the site.
+     *       Omitting it here would not merely weaken the guard, it would make the guarded
+     *       endpoints unreachable: the browser would refuse to send the header at all.</li>
      * </ul>
      *
      * <p>Two headers the endpoints also read are deliberately absent. {@code User-Agent} is a
@@ -93,7 +104,8 @@ public class SecurityConfiguration {
     private static final List<String> ALLOWED_CORS_REQUEST_HEADERS = List.of(
             "Authorization",
             "Content-Type",
-            ClientRequestHeaders.DEVICE_NAME);
+            ClientRequestHeaders.DEVICE_NAME,
+            ClientRequestHeaders.FRONTEND_API_KEY);
 
     /**
      * Endpoints that document the service or report its health.
@@ -108,19 +120,27 @@ public class SecurityConfiguration {
     };
 
     private final AuthenticationProperties authenticationProperties;
+    private final WebApplicationProperties webApplicationProperties;
+    private final ObjectMapper objectMapper;
     private final String[] allowedCorsOrigins;
 
     /**
      * Creates the configuration.
      *
      * @param authenticationProperties signing secret and token lifetimes
+     * @param webApplicationProperties supplies the website's shared API key
+     * @param objectMapper             renders the error body a rejecting filter writes itself
      * @param allowedCorsOrigins       origins permitted to call the API from a browser
      */
     public SecurityConfiguration(
             final AuthenticationProperties authenticationProperties,
+            final WebApplicationProperties webApplicationProperties,
+            final ObjectMapper objectMapper,
             @Value("${newtablinks.security.allowed-cors-origins}") final String[] allowedCorsOrigins) {
 
         this.authenticationProperties = authenticationProperties;
+        this.webApplicationProperties = webApplicationProperties;
+        this.objectMapper = objectMapper;
         this.allowedCorsOrigins = allowedCorsOrigins.clone();
     }
 
@@ -164,7 +184,12 @@ public class SecurityConfiguration {
                         .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated())
                 // Bearer flow: every API call from the website and the extension.
-                .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()));
+                .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
+                // Guards the handful of endpoints reserved for the website. Placed after the
+                // CORS filter so its 403 still carries the CORS headers a browser needs before
+                // it will let the site read the status - otherwise every rejection would reach
+                // the website as an unexplained CORS failure instead.
+                .addFilterAfter(buildFrontendApiKeyAuthenticationFilter(), CorsFilter.class);
 
         // Browser flow: the website sends the user here to sign in with a provider.
         if (clientRegistrations.getIfAvailable() != null) {
@@ -177,6 +202,26 @@ public class SecurityConfiguration {
         }
 
         return httpSecurity.build();
+    }
+
+    /**
+     * Builds the filter guarding the endpoints reserved for the website.
+     *
+     * <p>Constructed rather than declared as a bean on purpose: a {@code Filter} bean is picked
+     * up by Spring Boot's servlet filter auto-registration as well, which would run it a second
+     * time outside the security chain and outside the CORS filter it has to follow.</p>
+     *
+     * @return the filter, already carrying the configured key
+     */
+    private FrontendApiKeyAuthenticationFilter buildFrontendApiKeyAuthenticationFilter() {
+        final FrontendApiKeyAuthenticationFilter filter = new FrontendApiKeyAuthenticationFilter(
+                webApplicationProperties.frontendApiKey(), objectMapper);
+
+        if (!filter.isFrontendApiKeyConfigured()) {
+            LOGGER.warn("No frontend API key is configured, so the endpoints reserved for the "
+                    + "website will refuse every call. Set FRONTEND_API_KEY to enable them.");
+        }
+        return filter;
     }
 
     /**

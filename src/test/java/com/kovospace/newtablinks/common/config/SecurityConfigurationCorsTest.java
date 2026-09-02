@@ -3,6 +3,7 @@ package com.kovospace.newtablinks.common.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
+import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
@@ -17,6 +18,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.DefaultCorsProcessor;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Verifies the CORS preflight answer the browser clients actually depend on.
@@ -44,13 +46,20 @@ class SecurityConfigurationCorsTest {
     /** A path that issues tokens, and therefore reads the device-name header. */
     private static final String LOGIN_PATH = "/api/v1/auth/login";
 
+    /** The path reserved for the website, which reads the frontend API key header. */
+    private static final String USERNAME_EXISTENCE_PATH = ApiEndpointPaths.USERNAME_EXISTENCE_PATH;
+
     /**
      * Header names exactly as a browser sends them in a preflight: lower-cased, comma-separated.
      */
     private static final String DEVICE_NAME_PREFLIGHT_HEADERS = "content-type,x-device-name";
 
     private final CorsConfigurationSource corsConfigurationSource =
-            new SecurityConfiguration(anAuthenticationConfiguration(), allowedOrigins())
+            new SecurityConfiguration(
+                    anAuthenticationConfiguration(),
+                    aWebsiteConfiguration(),
+                    JsonMapper.builder().build(),
+                    allowedOrigins())
                     .corsConfigurationSource();
 
     @Test
@@ -87,6 +96,33 @@ class SecurityConfigurationCorsTest {
     }
 
     @Test
+    @DisplayName("the website's username lookup preflight allows the frontend API key header")
+    void shouldAllowTheFrontendApiKeyHeaderForTheWebsiteOrigin() throws IOException {
+        final MockHttpServletResponse response = sendPreflight(
+                WEBSITE_ORIGIN,
+                ClientRequestHeaders.FRONTEND_API_KEY.toLowerCase(Locale.ROOT),
+                USERNAME_EXISTENCE_PATH,
+                "GET");
+
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
+        assertThat(allowedRequestHeadersIn(response))
+                .contains(ClientRequestHeaders.FRONTEND_API_KEY.toLowerCase(Locale.ROOT));
+    }
+
+    @Test
+    @DisplayName("GET is an allowed method, so the username lookup preflight is not refused")
+    void shouldAllowGetForTheUsernameExistenceLookup() throws IOException {
+        final MockHttpServletResponse response = sendPreflight(
+                WEBSITE_ORIGIN,
+                ClientRequestHeaders.FRONTEND_API_KEY.toLowerCase(Locale.ROOT),
+                USERNAME_EXISTENCE_PATH,
+                "GET");
+
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS))
+                .contains("GET");
+    }
+
+    @Test
     @DisplayName("a header nobody declared is still refused, so the list means something")
     void shouldRejectAPreflightAskingForAnUndeclaredHeader() throws IOException {
         final MockHttpServletResponse response = sendPreflight(WEBSITE_ORIGIN, "x-made-up-header");
@@ -113,9 +149,28 @@ class SecurityConfigurationCorsTest {
      */
     private MockHttpServletResponse sendPreflight(final String origin, final String requestedHeaders)
             throws IOException {
-        final MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", LOGIN_PATH);
+        return sendPreflight(origin, requestedHeaders, LOGIN_PATH, "POST");
+    }
+
+    /**
+     * Runs one preflight for a given path and method through the real CORS processor.
+     *
+     * @param origin           value of the {@code Origin} header
+     * @param requestedHeaders value of {@code Access-Control-Request-Headers}
+     * @param path             path the browser intends to call
+     * @param intendedMethod   value of {@code Access-Control-Request-Method}
+     * @return the response the browser would receive
+     * @throws IOException when the processor cannot write the rejection body
+     */
+    private MockHttpServletResponse sendPreflight(
+            final String origin,
+            final String requestedHeaders,
+            final String path,
+            final String intendedMethod) throws IOException {
+
+        final MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", path);
         request.addHeader(HttpHeaders.ORIGIN, origin);
-        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST");
+        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, intendedMethod);
         request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, requestedHeaders);
 
         final MockHttpServletResponse response = new MockHttpServletResponse();
@@ -168,5 +223,22 @@ class SecurityConfigurationCorsTest {
                 5,
                 "a-signing-secret-long-enough-for-hmac-sha256",
                 "newtablinks-test");
+    }
+
+    /**
+     * Website settings valid enough to construct the configuration under test.
+     *
+     * <p>None of them influence CORS; the record is only there because the configuration reads
+     * the frontend API key out of it when it builds its filter.</p>
+     *
+     * @return usable website properties
+     */
+    private static WebApplicationProperties aWebsiteConfiguration() {
+        return new WebApplicationProperties(
+                WEBSITE_ORIGIN,
+                "/activate",
+                "/auth/callback",
+                "/reset-password",
+                "a-frontend-api-key");
     }
 }

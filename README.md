@@ -117,6 +117,26 @@ has to know where the site lives.
 | `NEWTABLINKS_WEB_ACTIVATION_PATH` | `/activate` | | Receives `?token=…` |
 | `NEWTABLINKS_WEB_OAUTH_CALLBACK_PATH` | `/auth/callback` | | Receives `?code=…` |
 | `NEWTABLINKS_WEB_PASSWORD_RESET_PATH` | `/reset-password` | | Receives `?token=…` |
+| `FRONTEND_API_KEY` | *(none — blank)* | ✅ | Shared key the website sends as `X-Frontend-Api-Key`. **Blank means deny:** every endpoint reserved for the website refuses every call until it is set. See below |
+
+#### `FRONTEND_API_KEY` — what it is and what it is not
+
+A small number of endpoints exist only to serve the website's own forms. Right now that is
+`GET /api/v1/auth/username-existence`, which the registration form calls while somebody types so
+it can say "that name is taken" before they submit. It is the one endpoint that deliberately
+discloses whether an account exists, so it is not offered to the open internet.
+
+- **It is not a secret.** It is compiled into a public JavaScript bundle; anyone who opens the
+  site can read it. It buys friction and attribution, never confidentiality. Never guard anything
+  with it that a leak would actually damage — and, for the same reason, it belongs in the GitOps
+  `values.yaml`, not in Infisical.
+- **It fails closed.** Unset or blank refuses every guarded call with `403`. A deployment that
+  forgets it loses one form's live feedback rather than quietly publishing an account
+  enumeration service.
+- **The website must send the identical byte string** in the `X-Frontend-Api-Key` header, and
+  that header is in `ALLOWED_CORS_REQUEST_HEADERS` — without that entry the browser preflight
+  fails and the call never leaves the browser. `curl` cannot show you this; read
+  `Access-Control-Allow-Headers` in the preflight response.
 
 ### CORS
 
@@ -175,6 +195,7 @@ SPRING_DATASOURCE_PASSWORD=…            # secret
 NEWTABLINKS_AUTH_JWT_SIGNING_SECRET=…   # secret, 32+ bytes
 NEWTABLINKS_AUTH_JWT_ISSUER=https://api.newtablinks.example
 NEWTABLINKS_WEB_BASE_URL=https://newtablinks.example
+FRONTEND_API_KEY=…                      # not secret, but must match the website byte for byte
 NEWTABLINKS_SECURITY_ALLOWED_CORS_ORIGINS=https://newtablinks.example,chrome-extension://<extension-id>
 NEWTABLINKS_MAIL_ENABLED=true
 NEWTABLINKS_MAIL_FROM_ADDRESS=no-reply@newtablinks.example
@@ -286,6 +307,9 @@ env:
   SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/newtablinks
   NEWTABLINKS_AUTH_JWT_ISSUER: https://api.newtablinks.example
   NEWTABLINKS_WEB_BASE_URL: https://newtablinks.example
+  # Not a secret (it ships in the website's public bundle), so it lives here rather than
+  # in Infisical. The website's own values.yaml must set the identical string.
+  FRONTEND_API_KEY: "…"
   NEWTABLINKS_MAIL_ENABLED: "true"
   # …the rest of the non-secret values
 ```

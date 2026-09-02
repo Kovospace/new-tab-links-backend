@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.auth.dtos;
 
+import com.kovospace.newtablinks.auth.utils.UsernameConstraints;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -20,9 +21,9 @@ public record RegistrationRequestDto(
 
         @Schema(description = "Name the user will sign in with", example = "kovo")
         @NotBlank
-        @Size(min = 3, max = 60)
-        @Pattern(regexp = "^[A-Za-z0-9._-]+$",
-                message = "may contain only letters, digits, dot, underscore and hyphen")
+        @Size(min = UsernameConstraints.MINIMUM_LENGTH, max = UsernameConstraints.MAXIMUM_LENGTH)
+        @Pattern(regexp = UsernameConstraints.ALLOWED_CHARACTERS_PATTERN,
+                message = UsernameConstraints.ALLOWED_CHARACTERS_MESSAGE)
         String username,
 
         @Schema(description = "Address the activation link is sent to", example = "someone@example.com")

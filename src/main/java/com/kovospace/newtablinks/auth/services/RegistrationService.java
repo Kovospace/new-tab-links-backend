@@ -100,6 +100,27 @@ public class RegistrationService {
     }
 
     /**
+     * Tells whether a username is already registered.
+     *
+     * <p>Exists so the website's registration form can say "taken" while the user is still
+     * typing, instead of only after they submit. It answers the same question
+     * {@link #register(com.kovospace.newtablinks.auth.dtos.RegistrationRequestDto)} answers with
+     * a 409, and discloses nothing that a registration attempt would not disclose anyway - a
+     * username is public by nature, which is why a taken one is refused openly.</p>
+     *
+     * <p>The comparison is exact, matching the uniqueness rule the database enforces. A name that
+     * differs only in letter case is therefore reported as free, and registering it would
+     * succeed.</p>
+     *
+     * @param username the name to look up, already validated against the registration constraints
+     * @return {@code true} when an account already uses that name
+     */
+    @Transactional(readOnly = true)
+    public boolean isUsernameTaken(final String username) {
+        return userRepository.existsByUsername(username);
+    }
+
+    /**
      * Sends a fresh activation link, if the address belongs to an account still awaiting one.
      *
      * <p>Answers nothing to the caller in any case; the result is only ever visible in the inbox.
