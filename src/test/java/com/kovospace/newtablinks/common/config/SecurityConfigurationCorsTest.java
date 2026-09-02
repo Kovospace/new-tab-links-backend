@@ -3,7 +3,9 @@ package com.kovospace.newtablinks.common.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
+import com.kovospace.newtablinks.auth.config.VisitorTokenProperties;
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
+import com.kovospace.newtablinks.auth.services.VisitorTokenService;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
@@ -59,6 +61,7 @@ class SecurityConfigurationCorsTest {
                     anAuthenticationConfiguration(),
                     aWebsiteConfiguration(),
                     JsonMapper.builder().build(),
+                    aVisitorTokenService(),
                     allowedOrigins())
                     .corsConfigurationSource();
 
@@ -107,6 +110,20 @@ class SecurityConfigurationCorsTest {
         assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
         assertThat(allowedRequestHeadersIn(response))
                 .contains(ClientRequestHeaders.FRONTEND_API_KEY.toLowerCase(Locale.ROOT));
+    }
+
+    @Test
+    @DisplayName("the website's registration preflight allows the visitor token header")
+    void shouldAllowTheVisitorTokenHeaderForTheWebsiteOrigin() throws IOException {
+        final MockHttpServletResponse response = sendPreflight(
+                WEBSITE_ORIGIN,
+                "content-type," + ClientRequestHeaders.VISITOR_TOKEN.toLowerCase(Locale.ROOT),
+                ApiEndpointPaths.REGISTRATION_PATH,
+                "POST");
+
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
+        assertThat(allowedRequestHeadersIn(response))
+                .contains(ClientRequestHeaders.VISITOR_TOKEN.toLowerCase(Locale.ROOT));
     }
 
     @Test
@@ -240,5 +257,23 @@ class SecurityConfigurationCorsTest {
                 "/auth/callback",
                 "/reset-password",
                 "a-frontend-api-key");
+    }
+
+    /**
+     * A visitor token service valid enough to construct the configuration under test.
+     *
+     * <p>The repository is deliberately {@code null}: nothing in this test reaches persistence,
+     * and the configuration only asks the service whether the throttle is switched on.</p>
+     *
+     * @return a service backed by nothing but its configuration
+     */
+    private static VisitorTokenService aVisitorTokenService() {
+        return new VisitorTokenService(null, new VisitorTokenProperties(
+                true,
+                Duration.ofHours(1),
+                Duration.ofMillis(500),
+                Duration.ofMillis(200),
+                250,
+                Duration.ofHours(1)));
     }
 }

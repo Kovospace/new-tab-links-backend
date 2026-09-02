@@ -106,16 +106,32 @@ public class AuthenticationController {
      * @param registrationRequest the submitted registration
      * @return the uniform acknowledgement
      */
-    @PostMapping("/register")
+    @PostMapping(ApiEndpointPaths.REGISTRATION_SUBPATH)
     @Operation(summary = "Register an account with a password and mail an activation link",
             description = "Answers identically whether the account was created or the address "
                     + "was already registered, so that this endpoint cannot be used to discover "
                     + "who has an account. A taken username is refused openly, since a username "
-                    + "is public by nature.")
+                    + "is public by nature. "
+                    + "That 409 is why this endpoint is metered by the visitor token: it answers "
+                    + "the same question the username lookup answers, and throttling only the "
+                    + "lookup would move enumeration here instead of stopping it.")
+    @Parameter(name = ClientRequestHeaders.VISITOR_TOKEN, in = ParameterIn.HEADER,
+            required = true, schema = @Schema(type = "string"),
+            description = "A metered pass from POST /api/v1/auth/visitor-token. Free to obtain; "
+                    + "it limits how fast and how often this endpoint may be called, not who "
+                    + "may call it.")
     @ApiResponse(responseCode = "202", description = "The attempt was accepted")
     @ApiResponse(responseCode = "400", description = "The request body failed validation",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "401",
+            description = "The visitor token was missing, unknown, expired or spent; obtain a "
+                    + "new one and retry",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "409", description = "That username is already taken",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "429",
+            description = "The call came sooner than the visitor token allows; Retry-After says "
+                    + "how long to wait",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<RegistrationAcceptedDto> register(
             @Valid @RequestBody final RegistrationRequestDto registrationRequest) {
@@ -141,7 +157,9 @@ public class AuthenticationController {
                     + "openly. "
                     + "Reserved for the website: every call must carry the "
                     + "X-Frontend-Api-Key header, and a deployment with no key configured "
-                    + "refuses the endpoint outright.")
+                    + "refuses the endpoint outright. It is metered on top of that by the "
+                    + "visitor token, which is what actually bounds enumeration - the key is "
+                    + "public and bounds nothing.")
     @Parameter(name = ClientRequestHeaders.FRONTEND_API_KEY, in = ParameterIn.HEADER,
             required = true, schema = @Schema(type = "string"),
             description = "The shared key issued to the website. Not a secret - it ships in a "
@@ -151,8 +169,21 @@ public class AuthenticationController {
     @ApiResponse(responseCode = "400",
             description = "The username parameter is missing, or is not a well-formed username",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @Parameter(name = ClientRequestHeaders.VISITOR_TOKEN, in = ParameterIn.HEADER,
+            required = true, schema = @Schema(type = "string"),
+            description = "A metered pass from POST /api/v1/auth/visitor-token. Free to obtain; "
+                    + "it limits how fast and how often this endpoint may be called, not who "
+                    + "may call it.")
+    @ApiResponse(responseCode = "401",
+            description = "The visitor token was missing, unknown, expired or spent; obtain a "
+                    + "new one and retry",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "403",
             description = "The frontend API key was missing, wrong, or never configured",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "429",
+            description = "The call came sooner than the visitor token allows; Retry-After says "
+                    + "how long to wait",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public UsernameExistenceDto checkUsernameExistence(
             @RequestParam

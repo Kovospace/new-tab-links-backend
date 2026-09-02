@@ -185,10 +185,15 @@ Flyway init-container contract — are in the **`deployment-pipeline` skill**
 Deliberately not built yet. Do not treat any of these as oversights to quietly fix:
 
 - **Email change is refused by design**, not missing: users may not change their address.
-- **No device limit, and no rate limiting beyond the per-account failed-login counter.** That
-  counter is brute-force protection, unrelated to device counts — do not remove it.
+- **No device limit, and no general rate limiting.** Two things exist and neither is that: the
+  per-account failed-login counter (brute-force protection, unrelated to device counts — do not
+  remove it), and the visitor token, which meters only registration and the username lookup.
+  Deliberately **not** per IP address: carrier-grade NAT puts whole neighbourhoods behind one
+  address, so counting by address would punish real users far more than anyone it aimed at. Any
+  proposal to add IP-based limiting has to answer that first.
 - **Spent tokens are never pruned.** `emailed_token`, `single_use_code` and revoked
-  `refresh_token` rows accumulate forever; a cleanup job is still owed.
+  `refresh_token` rows accumulate forever; a cleanup job is still owed. `visitor_token` is the
+  exception and the template — `VisitorTokenCleanupScheduler` sweeps it on a timer.
 - **The websocket broker is in-memory, so single-replica only.** Scaling out silently stops
   delivering to clients on the other pod.
 - **Sync is read-only** — `GET /api/v1/sync/snapshot` and nothing more. Accepting changes needs
