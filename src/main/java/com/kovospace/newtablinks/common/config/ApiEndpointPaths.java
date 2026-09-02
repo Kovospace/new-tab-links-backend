@@ -34,6 +34,39 @@ public final class ApiEndpointPaths {
             AUTHENTICATION_BASE_PATH + USERNAME_EXISTENCE_SUBPATH;
 
     /**
+     * Path, relative to {@link #AUTHENTICATION_BASE_PATH}, of registration.
+     */
+    public static final String REGISTRATION_SUBPATH = "/register";
+
+    /**
+     * Absolute path of registration.
+     *
+     * <p>A constant for the same reason as the lookup above: registration refuses a taken
+     * username with 409, which answers the very question the lookup answers, so the two are
+     * guarded together by
+     * {@link com.kovospace.newtablinks.common.security.VisitorTokenAuthenticationFilter}.
+     * Throttling one and leaving the other open would only move the enumeration by one
+     * endpoint.</p>
+     */
+    public static final String REGISTRATION_PATH =
+            AUTHENTICATION_BASE_PATH + REGISTRATION_SUBPATH;
+
+    /**
+     * Path, relative to {@link #AUTHENTICATION_BASE_PATH}, that issues a visitor token.
+     */
+    public static final String VISITOR_TOKEN_SUBPATH = "/visitor-token";
+
+    /**
+     * Absolute path that issues a visitor token.
+     *
+     * <p>Must never be guarded by the filter it feeds: a caller with no token has to be able to
+     * get one, and a throttle in front of the only way to satisfy the throttle would lock every
+     * visitor out permanently.</p>
+     */
+    public static final String VISITOR_TOKEN_PATH =
+            AUTHENTICATION_BASE_PATH + VISITOR_TOKEN_SUBPATH;
+
+    /**
      * Prevents instantiation of this constant holder.
      */
     private ApiEndpointPaths() {

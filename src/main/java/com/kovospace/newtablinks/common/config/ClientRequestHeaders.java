@@ -41,6 +41,23 @@ public final class ClientRequestHeaders {
     public static final String FRONTEND_API_KEY = "X-Frontend-Api-Key";
 
     /**
+     * Header carrying the metered pass an anonymous visitor was issued on page load.
+     *
+     * <p>Required by
+     * {@link com.kovospace.newtablinks.common.security.VisitorTokenAuthenticationFilter} on the
+     * two endpoints that disclose whether a username is registered:
+     * {@link ApiEndpointPaths#USERNAME_EXISTENCE_PATH} and
+     * {@link ApiEndpointPaths#REGISTRATION_PATH}.</p>
+     *
+     * <p>Like {@link #FRONTEND_API_KEY} this is not a secret, and unlike it, it is not meant to
+     * be. It is not a credential at all - anyone may ask for one, and asking is free. What it
+     * carries is a <em>budget</em>: a token may be spent only so fast and only so often, which
+     * is what makes walking a word list through these endpoints slow enough not to be worth
+     * doing. Nothing may be authorised by it.</p>
+     */
+    public static final String VISITOR_TOKEN = "X-Visitor-Token";
+
+    /**
      * Prevents instantiation of this constant holder.
      */
     private ClientRequestHeaders() {

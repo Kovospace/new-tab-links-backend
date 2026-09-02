@@ -3,7 +3,9 @@ package com.kovospace.newtablinks.common.config;
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import com.kovospace.newtablinks.auth.services.ProviderSignInSuccessHandler;
+import com.kovospace.newtablinks.auth.services.VisitorTokenService;
 import com.kovospace.newtablinks.common.security.FrontendApiKeyAuthenticationFilter;
+import com.kovospace.newtablinks.common.security.VisitorTokenAuthenticationFilter;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -55,7 +57,10 @@ public class SecurityConfiguration {
      * Endpoints reachable without a token, because they are how a caller obtains one.
      */
     private static final String[] PUBLIC_AUTHENTICATION_ENDPOINTS = {
-            "/api/v1/auth/register",
+            ApiEndpointPaths.REGISTRATION_PATH,
+            // Public because a visitor with no token has to be able to obtain one; the throttle
+            // it feeds must never stand in front of it. See VisitorTokenAuthenticationFilter.
+            ApiEndpointPaths.VISITOR_TOKEN_PATH,
             "/api/v1/auth/activate",
             "/api/v1/auth/resend-activation",
             "/api/v1/auth/login",
@@ -64,8 +69,9 @@ public class SecurityConfiguration {
             "/api/v1/auth/extension-connect",
             "/api/v1/auth/password/reset-request",
             "/api/v1/auth/password/reset-confirm",
-            // Public to the resource server, but not unguarded: the frontend API key filter is
-            // what stands in front of it. See FrontendApiKeyAuthenticationFilter.
+            // Public to the resource server, but not unguarded: the frontend API key filter and
+            // the visitor token filter both stand in front of it. Registration above is metered
+            // by the second of those too, because its 409 answers the same question.
             ApiEndpointPaths.USERNAME_EXISTENCE_PATH
     };
 
@@ -89,6 +95,10 @@ public class SecurityConfiguration {
      *       {@link FrontendApiKeyAuthenticationFilter} on the endpoints reserved for the site.
      *       Omitting it here would not merely weaken the guard, it would make the guarded
      *       endpoints unreachable: the browser would refuse to send the header at all.</li>
+     *   <li>{@link ClientRequestHeaders#VISITOR_TOKEN} - the metered pass demanded by
+     *       {@link VisitorTokenAuthenticationFilter} on registration and the username lookup.
+     *       Same trap as the entry above: leave it out and the website cannot register anybody.
+     *       </li>
      * </ul>
      *
      * <p>Two headers the endpoints also read are deliberately absent. {@code User-Agent} is a
@@ -105,7 +115,8 @@ public class SecurityConfiguration {
             "Authorization",
             "Content-Type",
             ClientRequestHeaders.DEVICE_NAME,
-            ClientRequestHeaders.FRONTEND_API_KEY);
+            ClientRequestHeaders.FRONTEND_API_KEY,
+            ClientRequestHeaders.VISITOR_TOKEN);
 
     /**
      * Endpoints that document the service or report its health.
@@ -122,6 +133,7 @@ public class SecurityConfiguration {
     private final AuthenticationProperties authenticationProperties;
     private final WebApplicationProperties webApplicationProperties;
     private final ObjectMapper objectMapper;
+    private final VisitorTokenService visitorTokenService;
     private final String[] allowedCorsOrigins;
 
     /**
@@ -130,17 +142,20 @@ public class SecurityConfiguration {
      * @param authenticationProperties signing secret and token lifetimes
      * @param webApplicationProperties supplies the website's shared API key
      * @param objectMapper             renders the error body a rejecting filter writes itself
+     * @param visitorTokenService      meters the endpoints open to anonymous visitors
      * @param allowedCorsOrigins       origins permitted to call the API from a browser
      */
     public SecurityConfiguration(
             final AuthenticationProperties authenticationProperties,
             final WebApplicationProperties webApplicationProperties,
             final ObjectMapper objectMapper,
+            final VisitorTokenService visitorTokenService,
             @Value("${newtablinks.security.allowed-cors-origins}") final String[] allowedCorsOrigins) {
 
         this.authenticationProperties = authenticationProperties;
         this.webApplicationProperties = webApplicationProperties;
         this.objectMapper = objectMapper;
+        this.visitorTokenService = visitorTokenService;
         this.allowedCorsOrigins = allowedCorsOrigins.clone();
     }
 
@@ -189,7 +204,14 @@ public class SecurityConfiguration {
                 // CORS filter so its 403 still carries the CORS headers a browser needs before
                 // it will let the site read the status - otherwise every rejection would reach
                 // the website as an unexplained CORS failure instead.
-                .addFilterAfter(buildFrontendApiKeyAuthenticationFilter(), CorsFilter.class);
+                .addFilterAfter(buildFrontendApiKeyAuthenticationFilter(), CorsFilter.class)
+                // Meters registration and the username lookup. Placed after the key filter
+                // rather than after the CORS filter as well, so that the order of the two is
+                // stated here instead of left to whichever was registered last: the cheap
+                // string comparison rejects before the metered one reaches the database.
+                .addFilterAfter(
+                        buildVisitorTokenAuthenticationFilter(),
+                        FrontendApiKeyAuthenticationFilter.class);
 
         // Browser flow: the website sends the user here to sign in with a provider.
         if (clientRegistrations.getIfAvailable() != null) {
@@ -222,6 +244,25 @@ public class SecurityConfiguration {
                     + "website will refuse every call. Set FRONTEND_API_KEY to enable them.");
         }
         return filter;
+    }
+
+    /**
+     * Builds the filter metering the endpoints open to anonymous visitors.
+     *
+     * <p>Constructed rather than declared as a bean for the same reason as the filter above: a
+     * {@code Filter} bean would also be picked up by Spring Boot's servlet filter
+     * auto-registration and run a second time, outside the security chain, where it would meter
+     * every request twice.</p>
+     *
+     * @return the filter
+     */
+    private VisitorTokenAuthenticationFilter buildVisitorTokenAuthenticationFilter() {
+        if (!visitorTokenService.isThrottleEnabled()) {
+            LOGGER.warn("Visitor token throttling is switched off, so registration and the "
+                    + "username lookup are open to unlimited automated calls. "
+                    + "Set VISITOR_TOKEN_ENABLED=true to enable it.");
+        }
+        return new VisitorTokenAuthenticationFilter(visitorTokenService, objectMapper);
     }
 
     /**
