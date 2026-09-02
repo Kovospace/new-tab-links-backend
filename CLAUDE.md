@@ -180,6 +180,16 @@ Flyway init-container contract — are in the **`deployment-pipeline` skill**
 (`.claude/skills/deployment-pipeline/`). Load it before touching `Dockerfile`,
 `.github/workflows/`, or anything about how a change reaches the cluster.
 
+The GitOps repository is checked out locally and may be used from here:
+
+- **Remote:** `git@github.com:Kovospace/kovostack-infra-gitops.git`
+- **Local checkout:** `/home/kovo/IdeaProjects/kovostack-infra-gitops`, reachable via
+  `permissions.additionalDirectories`. Work with it through `git -C … <cmd>`, not `cd`.
+- Read it freely — deployed image tag, Helm values, the Flyway init-container contract.
+- **Changes there are made by its `devops-engineer` agent** (`.claude/agents/devops-engineer.md`
+  in that repo), not by editing cluster resources from this side. Argo CD reconciles that repo's
+  `main`, so a commit there *is* a deployment.
+
 ## Known gaps and deferred decisions
 
 Deliberately not built yet. Do not treat any of these as oversights to quietly fix:
@@ -212,6 +222,9 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 - **`developer`** (`.claude/agents/developer.md`) — the working agent for this backend:
   risk/impact analysis, effort estimation, and implementation. It is the counterpart the
   extension's `backend-sync` agent talks to, and the one to invoke for backend feature work.
+- **`devops-engineer`** (in the GitOps repo, `kovostack-infra-gitops`) — owns everything that
+  changes the cluster: Argo CD Applications, app values, namespaces, umbrella charts. Hand it
+  any deployment-side change this backend needs.
 
 ## Maintaining this setup
 
