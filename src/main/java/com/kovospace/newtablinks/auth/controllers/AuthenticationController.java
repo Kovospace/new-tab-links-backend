@@ -136,9 +136,8 @@ public class AuthenticationController {
     public ResponseEntity<RegistrationAcceptedDto> register(
             @Valid @RequestBody final RegistrationRequestDto registrationRequest) {
 
-        registrationService.register(registrationRequest);
-        return ResponseEntity.accepted()
-                .body(new RegistrationAcceptedDto(UNIFORM_REGISTRATION_MESSAGE));
+        return ResponseEntity.accepted().body(RegistrationAcceptedDto.reportingDelivery(
+                UNIFORM_REGISTRATION_MESSAGE, registrationService.register(registrationRequest)));
     }
 
     /**
@@ -220,14 +219,17 @@ public class AuthenticationController {
      */
     @PostMapping("/resend-activation")
     @Operation(summary = "Send a fresh activation link",
-            description = "Always answers the same way, whether or not anything was sent.")
+            description = "Always answers the same way, whether or not anything was sent. "
+                    + "Unlike registration, this leaves emailDelivered unset: only one of its "
+                    + "two branches sends anything, so reporting delivery would disclose "
+                    + "whether the address is registered and awaiting activation.")
     @ApiResponse(responseCode = "202", description = "The request was accepted")
     public ResponseEntity<RegistrationAcceptedDto> resendActivation(
             @RequestParam @NotBlank @Email final String email) {
 
         registrationService.resendActivationLink(email);
         return ResponseEntity.accepted()
-                .body(new RegistrationAcceptedDto(UNIFORM_REGISTRATION_MESSAGE));
+                .body(RegistrationAcceptedDto.withoutDeliveryReport(UNIFORM_REGISTRATION_MESSAGE));
     }
 
     /**

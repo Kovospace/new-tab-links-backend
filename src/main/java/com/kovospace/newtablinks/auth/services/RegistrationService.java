@@ -3,6 +3,7 @@ package com.kovospace.newtablinks.auth.services;
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import com.kovospace.newtablinks.auth.dtos.RegistrationRequestDto;
+import com.kovospace.newtablinks.auth.models.AccountEmailDeliveryOutcome;
 import com.kovospace.newtablinks.auth.models.EmailedTokenEntity;
 import com.kovospace.newtablinks.auth.models.EmailedTokenPurpose;
 import com.kovospace.newtablinks.auth.repositories.EmailedTokenRepository;
@@ -72,11 +73,16 @@ public class RegistrationService {
      * {@link com.kovospace.newtablinks.common.exceptions.RegistrationConflictException}. A taken
      * username, being public information, is refused openly.</p>
      *
+     * <p>Exactly one message is sent either way, which is why the outcome of that send can be
+     * handed back to the caller without giving the two apart: it describes the mail relay, not
+     * the address.</p>
+     *
      * @param registrationRequest what the user submitted
+     * @return how far the message this attempt triggered got
      * @throws RegistrationConflictException when the username is already taken
      */
     @Transactional
-    public void register(final RegistrationRequestDto registrationRequest) {
+    public AccountEmailDeliveryOutcome register(final RegistrationRequestDto registrationRequest) {
         final String normalisedEmail = normaliseEmail(registrationRequest.email());
 
         if (userRepository.existsByUsername(registrationRequest.username())) {
@@ -85,8 +91,7 @@ public class RegistrationService {
 
         if (userRepository.existsByEmail(normalisedEmail)) {
             LOGGER.info("Registration attempted for an address that is already registered");
-            accountEmailSender.sendAddressAlreadyRegisteredNotice(normalisedEmail);
-            return;
+            return accountEmailSender.sendAddressAlreadyRegisteredNotice(normalisedEmail);
         }
 
         final UserEntity newUser = userRepository.save(new UserEntity(
@@ -96,7 +101,7 @@ public class RegistrationService {
                 registrationRequest.displayName(),
                 UserAccountStatus.PENDING_ACTIVATION));
 
-        mintAndSendActivationToken(newUser);
+        return mintAndSendActivationToken(newUser);
     }
 
     /**
@@ -172,8 +177,9 @@ public class RegistrationService {
      * Mints an activation token for an account and mails the link.
      *
      * @param account account awaiting activation
+     * @return how far the activation message got
      */
-    private void mintAndSendActivationToken(final UserEntity account) {
+    private AccountEmailDeliveryOutcome mintAndSendActivationToken(final UserEntity account) {
         final String rawToken = SecureTokenGenerator.generateMachineToken();
 
         emailedTokenRepository.save(new EmailedTokenEntity(
@@ -182,7 +188,7 @@ public class RegistrationService {
                 EmailedTokenPurpose.ACCOUNT_ACTIVATION,
                 Instant.now().plus(authenticationProperties.activationTokenLifetime())));
 
-        accountEmailSender.sendActivationLink(
+        return accountEmailSender.sendActivationLink(
                 account.getEmail(),
                 account.getDisplayName(),
                 webApplicationProperties.buildActivationLink(rawToken));
