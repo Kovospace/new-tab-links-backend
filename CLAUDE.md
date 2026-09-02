@@ -169,8 +169,8 @@ long descriptive names over short cryptic ones, short methods, small classes, no
   mirror, ask the user rather than inventing one.
 - Never merge or rebase onto `main`/`master` locally; never delete remote branches.
 - Commit only when asked. Confirm the branch with `git rev-parse --abbrev-ref HEAD` first.
-- `gh` is **not installed** — for a PR, either ask the user to install it or hand them the
-  GitHub compare URL.
+- `gh` is installed and authenticated as **K0V0** over SSH, so a PR can be opened directly.
+  Opening one is still the user's call to make, like any push.
 
 ## Deployment
 
