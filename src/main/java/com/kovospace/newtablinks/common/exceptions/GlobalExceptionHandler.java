@@ -171,6 +171,34 @@ public class GlobalExceptionHandler {
      * @param exception the exception that was thrown
      * @return a 409 response carrying the uniform error body
      */
+    /**
+     * Renders a lockout as HTTP 429, saying how long it lasts.
+     *
+     * <p>Deliberately not 401. The credentials were never looked at, so answering as though they
+     * had been would let a locked-out caller keep testing guesses and read the answer from which
+     * refusal comes back.</p>
+     *
+     * @param exception the exception that was thrown
+     * @return a 429 response carrying the uniform error body and a {@code Retry-After} header
+     */
+    @ExceptionHandler(TooManyAttemptsException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleTooManyAttempts(
+            final TooManyAttemptsException exception) {
+
+        LOGGER.warn("Refusing an attempt that is locked out for another {}",
+                exception.getRetryAfter());
+
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(org.springframework.http.HttpHeaders.RETRY_AFTER,
+                        Long.toString(Math.max(1L, exception.getRetryAfter().toSeconds())))
+                .body(new ApiErrorResponseDto(
+                        Instant.now(),
+                        HttpStatus.TOO_MANY_REQUESTS.value(),
+                        HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
+                        exception.getMessage(),
+                        List.of()));
+    }
+
     @ExceptionHandler(RegistrationConflictException.class)
     public ResponseEntity<ApiErrorResponseDto> handleRegistrationConflict(
             final RegistrationConflictException exception) {

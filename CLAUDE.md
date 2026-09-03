@@ -85,6 +85,7 @@ Caveats to keep in mind:
 ```
 com.kovospace.newtablinks
 ├── common/        config (OpenAPI, WebSocket, security), exceptions, models, security, utils
+├── admin/         the operator's identity: sign-in, lockout, the admin-scoped token
 ├── auth/          registration, activation, sign-in, passwords, tokens, provider sign-in
 ├── user/          the account itself, its provider identities, and its devices
 ├── environment/   workspaces, owned by a user
@@ -195,6 +196,15 @@ The GitOps repository is checked out locally and may be used from here:
 Deliberately not built yet. Do not treat any of these as oversights to quietly fix:
 
 - **Email change is refused by design**, not missing: users may not change their address.
+- **The admin surface is guarded by one shared password.** `/api/v1/admin/**` can read, change
+  and delete any account; `ADMIN_USERNAME` / `ADMIN_PASSWORD` are the entire wall in front of it,
+  and both blank disables it. Its sign-in locks after `ADMIN_USER_MAX_CONSECUTIVE_ATTEMPTS`
+  failures for `ADMIN_USER_BAD_ATTEMPTS_LOCK_TIME`, but **that counter is in memory, so it is per
+  replica** — scaling out multiplies the guesses. Move it to the database before scaling out.
+- **Admin tokens and user tokens are different kinds.** An admin token carries `scope=ADMIN` and a
+  username as its subject; a user token carries neither. `AuthenticatedUserProvider` refuses a
+  subject that is not a UUID, which is what stops an operator from acting *as* a user. Do not
+  "fix" that by giving admin tokens a UUID subject.
 - **No device limit, and no general rate limiting.** Two things exist and neither is that: the
   per-account failed-login counter (brute-force protection, unrelated to device counts — do not
   remove it), and the visitor token, which meters only registration and the username lookup.
