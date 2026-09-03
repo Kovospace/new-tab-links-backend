@@ -3,6 +3,8 @@ package com.kovospace.newtablinks.user.repositories;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -60,4 +62,26 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
      * @return {@code true} when the name is already taken
      */
     boolean existsByUsername(String username);
+
+    /**
+     * Finds the accounts whose username, email or display name contains the given text.
+     *
+     * <p>For the operator's account list, which is a search box over a table. Case-insensitive
+     * and unanchored, because somebody looking for an account has a fragment of one of the three
+     * and does not know which.</p>
+     *
+     * <p>Blank text is not a special case here - the caller passes an empty string and every
+     * account matches, which is exactly the unfiltered list.</p>
+     *
+     * @param searchText text to look for; an empty string matches everything
+     * @param pageable   which page to return and how to order it
+     * @return the matching page of accounts
+     */
+    @Query("""
+            SELECT user FROM UserEntity user
+            WHERE LOWER(user.username) LIKE LOWER(CONCAT('%', :searchText, '%'))
+               OR LOWER(user.email) LIKE LOWER(CONCAT('%', :searchText, '%'))
+               OR LOWER(user.displayName) LIKE LOWER(CONCAT('%', :searchText, '%'))
+            """)
+    Page<UserEntity> searchAccounts(@Param("searchText") String searchText, Pageable pageable);
 }

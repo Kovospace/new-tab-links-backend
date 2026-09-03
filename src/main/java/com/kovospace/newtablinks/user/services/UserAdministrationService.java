@@ -1,0 +1,246 @@
+package com.kovospace.newtablinks.user.services;
+
+import com.kovospace.newtablinks.common.exceptions.RegistrationConflictException;
+import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.user.dtos.AdminUserCreateRequestDto;
+import com.kovospace.newtablinks.user.dtos.AdminUserDto;
+import com.kovospace.newtablinks.user.dtos.AdminUserPageDto;
+import com.kovospace.newtablinks.user.dtos.AdminUserUpdateRequestDto;
+import com.kovospace.newtablinks.user.mappers.AdminUserMapper;
+import com.kovospace.newtablinks.user.models.UserEntity;
+import com.kovospace.newtablinks.user.repositories.UserRepository;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * What the operator can do to an account.
+ *
+ * <p>Separate from {@link UserService}, which serves a signed-in user acting on their own
+ * account, because these are different powers over the same rows and must not be reachable
+ * through one another. Everything here acts on an account named by identifier and is authorised
+ * only by an admin token; nothing here is ownership-scoped, which is the whole point and also
+ * exactly why it lives behind its own authority.</p>
+ *
+ * <p>It sits in the user module rather than in the admin one so that account persistence stays
+ * inside the module that owns it - the admin module owns the operator's identity, not the data
+ * they repair.</p>
+ *
+ * <p><strong>Every method here writes a log line naming the account.</strong> These operations
+ * have no owner to notice them and no undo, so the log is the only record that they happened.</p>
+ *
+ * @since 0.0.6
+ */
+@Service
+public class UserAdministrationService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UserAdministrationService.class);
+
+    /** Name used when reporting that an account could not be found. */
+    private static final String RESOURCE_NAME = "User";
+
+    /** Newest accounts first: the one somebody is looking for is usually a recent one. */
+    private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "createdAt");
+
+    private final UserRepository userRepository;
+    private final AdminUserMapper adminUserMapper;
+    private final PasswordEncoder passwordEncoder;
+
+    /**
+     * Creates the service.
+     *
+     * @param userRepository  persistence for accounts
+     * @param adminUserMapper renders an account in the operator's shape
+     * @param passwordEncoder hashes a password the operator sets
+     */
+    public UserAdministrationService(
+            final UserRepository userRepository,
+            final AdminUserMapper adminUserMapper,
+            final PasswordEncoder passwordEncoder) {
+
+        this.userRepository = userRepository;
+        this.adminUserMapper = adminUserMapper;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    /**
+     * Lists accounts, newest first, optionally narrowed by a search.
+     *
+     * @param searchText text to match against username, email and display name; blank matches all
+     * @param page       zero-based page index
+     * @param size       how many accounts to return
+     * @return the requested page
+     */
+    @Transactional(readOnly = true)
+    public AdminUserPageDto listAccounts(final String searchText, final int page, final int size) {
+        final Page<UserEntity> matchingAccounts = userRepository.searchAccounts(
+                searchText == null ? "" : searchText.trim(),
+                PageRequest.of(page, size, NEWEST_FIRST));
+
+        return new AdminUserPageDto(
+                adminUserMapper.toDtoList(matchingAccounts.getContent()),
+                matchingAccounts.getNumber(),
+                matchingAccounts.getSize(),
+                matchingAccounts.getTotalElements(),
+                matchingAccounts.getTotalPages());
+    }
+
+    /**
+     * Reads one account.
+     *
+     * @param userId identifier of the account
+     * @return the account
+     * @throws ResourceNotFoundException when no account has that identifier
+     */
+    @Transactional(readOnly = true)
+    public AdminUserDto findAccount(final UUID userId) {
+        return adminUserMapper.toDto(getRequiredAccount(userId));
+    }
+
+    /**
+     * Creates an account without going through registration.
+     *
+     * @param createRequest the account to create
+     * @return the created account
+     * @throws RegistrationConflictException when the username or email is already taken
+     */
+    @Transactional
+    public AdminUserDto createAccount(final AdminUserCreateRequestDto createRequest) {
+        if (userRepository.existsByUsername(createRequest.username())) {
+            throw new RegistrationConflictException("That username is already taken");
+        }
+        if (userRepository.existsByEmail(createRequest.email())) {
+            // Unlike registration, this says so plainly. Registration hides it to keep itself
+            // from being an address-discovery service; the operator is already trusted with
+            // every address in the database.
+            throw new RegistrationConflictException("That email address is already registered");
+        }
+
+        final UserEntity account = new UserEntity(
+                createRequest.username(),
+                createRequest.email(),
+                createRequest.password() == null || createRequest.password().isBlank()
+                        ? null
+                        : passwordEncoder.encode(createRequest.password()),
+                createRequest.displayName(),
+                createRequest.status());
+
+        final UserEntity createdAccount = userRepository.save(account);
+        LOGGER.info("Operator created account {} ({}) with status {}",
+                createdAccount.getId(), createdAccount.getUsername(), createdAccount.getStatus());
+
+        return adminUserMapper.toDto(createdAccount);
+    }
+
+    /**
+     * Replaces the fields an operator may change.
+     *
+     * @param userId        identifier of the account
+     * @param updateRequest the new values
+     * @return the updated account
+     * @throws ResourceNotFoundException     when no account has that identifier
+     * @throws RegistrationConflictException when the email address belongs to another account
+     */
+    @Transactional
+    public AdminUserDto updateAccount(
+            final UUID userId,
+            final AdminUserUpdateRequestDto updateRequest) {
+
+        final UserEntity account = getRequiredAccount(userId);
+        final String previousEmail = account.getEmail();
+
+        if (!previousEmail.equalsIgnoreCase(updateRequest.email())
+                && userRepository.existsByEmail(updateRequest.email())) {
+
+            throw new RegistrationConflictException("That email address is already registered");
+        }
+
+        account.setEmail(updateRequest.email());
+        account.setDisplayName(updateRequest.displayName());
+        account.setStatus(updateRequest.status());
+
+        if (!previousEmail.equals(updateRequest.email())) {
+            // Logged on its own because it is the one change here that moves an identity, and
+            // the one users are not allowed to make themselves.
+            LOGGER.warn("Operator changed the email address of account {}", userId);
+        }
+        LOGGER.info("Operator updated account {} to status {}", userId, updateRequest.status());
+
+        return adminUserMapper.toDto(account);
+    }
+
+    /**
+     * Clears the failed sign-in counter that locks an account out.
+     *
+     * @param userId identifier of the account
+     * @return the unlocked account
+     * @throws ResourceNotFoundException when no account has that identifier
+     */
+    @Transactional
+    public AdminUserDto unlockAccount(final UUID userId) {
+        final UserEntity account = getRequiredAccount(userId);
+        account.resetFailedLoginAttempts();
+
+        LOGGER.info("Operator cleared the failed sign-in counter of account {}", userId);
+        return adminUserMapper.toDto(account);
+    }
+
+    /**
+     * Sets an account's password, or takes it away.
+     *
+     * @param userId      identifier of the account
+     * @param newPassword the password to set, or {@code null} to leave the account without one
+     * @return the account
+     * @throws ResourceNotFoundException when no account has that identifier
+     */
+    @Transactional
+    public AdminUserDto setPassword(final UUID userId, final String newPassword) {
+        final UserEntity account = getRequiredAccount(userId);
+        account.setPasswordHash(
+                newPassword == null || newPassword.isBlank()
+                        ? null
+                        : passwordEncoder.encode(newPassword));
+
+        LOGGER.warn("Operator set the password of account {}", userId);
+        return adminUserMapper.toDto(account);
+    }
+
+    /**
+     * Deletes an account and everything it owns.
+     *
+     * <p><strong>Irreversible, and wider than it looks.</strong> Every environment, group,
+     * subgroup and link belonging to the account goes with it, by foreign keys declared
+     * {@code ON DELETE CASCADE}; so do its devices, sessions and pending tokens. There is no
+     * soft delete and nothing to undo it with - {@code DISABLED} is the reversible option, and
+     * usually the one that was meant.</p>
+     *
+     * @param userId identifier of the account
+     * @throws ResourceNotFoundException when no account has that identifier
+     */
+    @Transactional
+    public void deleteAccount(final UUID userId) {
+        final UserEntity account = getRequiredAccount(userId);
+        final String username = account.getUsername();
+
+        userRepository.delete(account);
+        LOGGER.warn("Operator deleted account {} ({}) and everything it owned", userId, username);
+    }
+
+    /**
+     * Loads an account or reports that there is none.
+     *
+     * @param userId identifier of the account
+     * @return the managed entity
+     * @throws ResourceNotFoundException when no account has that identifier
+     */
+    private UserEntity getRequiredAccount(final UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, userId));
+    }
+}

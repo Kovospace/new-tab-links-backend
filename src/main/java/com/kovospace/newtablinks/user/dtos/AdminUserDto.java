@@ -1,0 +1,41 @@
+package com.kovospace.newtablinks.user.dtos;
+
+import com.kovospace.newtablinks.user.models.UserAccountStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
+import java.util.UUID;
+
+/**
+ * A user as the operator sees them.
+ *
+ * <p>Everything {@link UserDto} carries, plus the two things only somebody repairing an account
+ * needs: how many failed sign-ins have piled up against it, and whether that count has locked it.
+ * A user has no business being told either about themselves, which is why this is a second shape
+ * rather than more fields on the first.</p>
+ *
+ * <p>What is <strong>not</strong> here is the password hash. An operator can give an account a
+ * new password; nobody needs to see the old one, and a hash on a screen is a hash in a log.</p>
+ *
+ * @param id                  identifier of the user
+ * @param username            name the user signs in with
+ * @param email               address identifying the user
+ * @param displayName         name shown in the user interface
+ * @param status              lifecycle state of the account
+ * @param hasPassword         whether the account can be signed into with a password
+ * @param failedLoginAttempts consecutive failed sign-ins since the last success
+ * @param createdAt           when the user was created
+ * @param updatedAt           when the user was last changed
+ * @since 0.0.6
+ */
+@Schema(description = "A user account, as the operator sees it")
+public record AdminUserDto(
+        @Schema(description = "Identifier of the user") UUID id,
+        @Schema(description = "Name the user signs in with", example = "kovo") String username,
+        @Schema(description = "Address identifying the user", example = "someone@example.com") String email,
+        @Schema(description = "Name shown in the user interface", example = "Matej") String displayName,
+        @Schema(description = "Lifecycle state of the account") UserAccountStatus status,
+        @Schema(description = "Whether the account has a password", example = "true") boolean hasPassword,
+        @Schema(description = "Consecutive failed sign-ins", example = "0") int failedLoginAttempts,
+        @Schema(description = "When the user was created") Instant createdAt,
+        @Schema(description = "When the user was last changed") Instant updatedAt) {
+}
