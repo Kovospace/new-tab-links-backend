@@ -1,0 +1,38 @@
+{
+  "target": {
+    "path": "deployment/new-tab-links-backend",
+    "namespace": "new-tab-links-backend"
+  },
+  "agent": {
+    "namespace": "new-tab-links-backend",
+    "ttl": 30
+  },
+  "operator": false,
+  "feature": {
+    "env": {
+      "override": {
+        "NEWTABLINKS_SECURITY_ALLOWED_CORS_ORIGINS": "http://localhost:5173,chrome-extension://*",
+        "NEWTABLINKS_WEBSOCKET_ALLOWED_ORIGIN_PATTERNS": "http://localhost:5173,chrome-extension://*",
+        "NEWTABLINKS_WEB_BASE_URL": "http://localhost:5173",
+        "SERVER_FORWARD_HEADERS_STRATEGY": "NONE"
+      }
+    },
+    "fs": {
+      "mode": "localwithoverrides",
+      "read_only": [
+        "^/etc/resolv\\.conf$",
+        "^/etc/hosts$"
+      ]
+    },
+    "network": {
+      "incoming": {
+        "mode": "mirror"
+      },
+      "outgoing": {
+        "tcp": true,
+        "udp": true
+      },
+      "dns": true
+    }
+  }
+}

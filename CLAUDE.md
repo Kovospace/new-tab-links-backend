@@ -230,11 +230,36 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 ## Agents
 
 - **`developer`** (`.claude/agents/developer.md`) — the working agent for this backend:
-  risk/impact analysis, effort estimation, and implementation. It is the counterpart the
-  extension's `backend-sync` agent talks to, and the one to invoke for backend feature work.
-- **`devops-engineer`** (in the GitOps repo, `kovostack-infra-gitops`) — owns everything that
-  changes the cluster: Argo CD Applications, app values, namespaces, umbrella charts. Hand it
-  any deployment-side change this backend needs.
+  risk/impact analysis, effort estimation, and implementation. The one to invoke for backend
+  feature work from inside this repo.
+- Every sibling repo is reached through a **user-level** agent in `~/.claude/agents/`, because a
+  project-scoped agent is invisible from another checkout. Each points at that repo's own agent
+  file and resolves its own checkout; none of them edits this one.
+
+  | Send it to | Agent | Points at |
+  |---|---|---|
+  | the website | **`frontend-developer`** | `new-tab-links-frontend/.claude/agents/developer.md` |
+  | the extension | **`extension-developer`** | `NewTabGroupedLinks/.claude/agents/backend-sync.md` |
+  | the cluster | **`devops-engineer`** | `kovostack-infra-gitops/.claude/agents/devops-engineer.md` |
+
+  This backend has one too — **`backend-developer`** — which is how the other three reach it.
+  Hand `devops-engineer` any deployment-side change: Argo CD Applications, app values,
+  namespaces, umbrella charts.
+
+## Running against the cluster — mirrord
+
+`.mirrord/mirrord.json` runs this source tree as though it were the deployed
+`new-tab-links-backend` Pod: the process inherits that Pod's Infisical secrets, DNS and outgoing
+network, so no PostgreSQL, Google client, SMTP relay or `.env` is needed locally.
+
+```bash
+mirrord exec -- ./mvnw spring-boot:run
+```
+
+**This is production** — every write hits the production database and every mail is really sent.
+`.mirrord/README.md` covers both profiles (mirror, and a header-filtered steal), what the env
+overrides are for, and what mirrord does not sandbox. Read it before the first run. The one-time
+setup lives in `kovostack-infra-gitops/docs/mirrord.md`; nothing is installed in the cluster.
 
 ## Maintaining this setup
 

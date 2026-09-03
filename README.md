@@ -40,6 +40,24 @@ grep -oP 'activate\?token=\K[^\s]+' app.log | tail -1
 
 ---
 
+## Running it against the cluster instead — mirrord
+
+The section above needs PostgreSQL, a Google client, an SMTP relay and a dozen variables on this
+machine. `mirrord` skips all of it: it runs this source tree as though it were the deployed
+`new-tab-links-backend` Pod, so the process inherits that Pod's Infisical secrets, its DNS and
+its network — real database, real mail, real OAuth client.
+
+```bash
+ssh -N -L 6443:127.0.0.1:6443 vm          # once, kept open
+export KUBECONFIG=~/.kube/config-kovostack
+mirrord exec -- ./mvnw spring-boot:run
+```
+
+**It is production.** Every write lands in the production database and every mail is really
+delivered. `.mirrord/README.md` explains both profiles, what the config overrides and why, and
+what mirrord does not sandbox — read it before the first run. One-time setup (kubeconfig, CLI,
+tunnel) is in `kovostack-infra-gitops/docs/mirrord.md`.
+
 ## Environment variables
 
 Every value below is read as `${VARIABLE:default}`, so **the application starts with none of
