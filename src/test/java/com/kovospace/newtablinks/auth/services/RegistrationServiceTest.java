@@ -126,9 +126,12 @@ class RegistrationServiceTest {
     /**
      * Builds a registration request that passes validation.
      *
+     * <p>The password is repeated because the confirmation field has to match; a request whose
+     * two passwords differ never reaches the service under test.</p>
+     *
      * @return a well formed request
      */
     private RegistrationRequestDto aRegistration() {
-        return new RegistrationRequestDto(USERNAME, EMAIL, PASSWORD, DISPLAY_NAME);
+        return new RegistrationRequestDto(USERNAME, EMAIL, PASSWORD, PASSWORD, DISPLAY_NAME);
     }
 }
