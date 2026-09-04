@@ -104,6 +104,18 @@ public class LinkEntity extends AbstractAuditableEntity {
     }
 
     /**
+     * Moves the link into another group.
+     *
+     * <p>Callers must also set a subgroup that belongs to the new group, or none at all: nothing
+     * in the schema stops a link from naming a subgroup of a different group.</p>
+     *
+     * @param parentGroup the group the link belongs to
+     */
+    public void setParentGroup(final GroupEntity parentGroup) {
+        this.parentGroup = parentGroup;
+    }
+
+    /**
      * Returns the subgroup this link is nested in.
      *
      * @return the subgroup, or {@code null} when the link sits directly in the group

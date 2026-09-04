@@ -18,12 +18,13 @@ import org.mapstruct.Mapping;
 public interface EnvironmentMapper {
 
     /**
-     * Converts a single environment, flattening the owner to its identifier.
+     * Converts a single environment, flattening the owner and the profile to their identifiers.
      *
      * @param environmentEntity entity to convert
      * @return the converted environment
      */
     @Mapping(target = "ownerId", source = "owner.id")
+    @Mapping(target = "profileId", source = "profile.id")
     EnvironmentDto toDto(EnvironmentEntity environmentEntity);
 
     /**

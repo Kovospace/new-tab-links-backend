@@ -34,6 +34,12 @@ public class GroupEntity extends AbstractAuditableEntity {
     private String name;
 
     /**
+     * Free text describing the group, or {@code null} when the user wrote none.
+     */
+    @Column(name = "description", length = 500)
+    private String description;
+
+    /**
      * Zero based position among the environment's groups, ascending.
      */
     @Column(name = "position", nullable = false)
@@ -50,11 +56,18 @@ public class GroupEntity extends AbstractAuditableEntity {
      *
      * @param environment environment the group is displayed in
      * @param name        title shown on the group header
+     * @param description free text describing the group, may be {@code null}
      * @param position    zero based position among the environment's groups
      */
-    public GroupEntity(final EnvironmentEntity environment, final String name, final int position) {
+    public GroupEntity(
+            final EnvironmentEntity environment,
+            final String name,
+            final String description,
+            final int position) {
+
         this.environment = environment;
         this.name = name;
+        this.description = description;
         this.position = position;
     }
 
@@ -65,6 +78,33 @@ public class GroupEntity extends AbstractAuditableEntity {
      */
     public EnvironmentEntity getEnvironment() {
         return environment;
+    }
+
+    /**
+     * Moves the group into another environment.
+     *
+     * @param environment the environment to display the group in
+     */
+    public void setEnvironment(final EnvironmentEntity environment) {
+        this.environment = environment;
+    }
+
+    /**
+     * Returns the free text describing the group.
+     *
+     * @return the description, or {@code null} when the user wrote none
+     */
+    public String getDescription() {
+        return description;
+    }
+
+    /**
+     * Replaces the free text describing the group.
+     *
+     * @param description the description to set, may be {@code null}
+     */
+    public void setDescription(final String description) {
+        this.description = description;
     }
 
     /**

@@ -3,14 +3,13 @@ package com.kovospace.newtablinks.sync.events;
 import java.util.UUID;
 
 /**
- * Raised when a user's stored data has been changed by something.
+ * Published when something a client synchronizes has changed for one account.
  *
- * <p>A domain fact rather than an HTTP one, so services raise it and anything interested - today
- * only the websocket notifier - reacts. The domain layer therefore knows nothing about
- * websockets, and a future non-HTTP writer gets notifications for free.</p>
- *
- * @param ownerId identifier of the user whose data changed
+ * @param ownerId        identifier of the user whose data changed
+ * @param originDeviceId opaque identifier of the device that caused the change, null when the
+ *                       change came from somewhere that does not name a device - the website, or
+ *                       any of the ordinary CRUD endpoints
  * @since 0.0.3
  */
-public record UserDataChangedEvent(UUID ownerId) {
+public record UserDataChangedEvent(UUID ownerId, String originDeviceId) {
 }

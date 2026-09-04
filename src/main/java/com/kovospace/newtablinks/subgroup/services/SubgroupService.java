@@ -7,6 +7,7 @@ import com.kovospace.newtablinks.group.services.GroupService;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupDto;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupSaveRequestDto;
 import com.kovospace.newtablinks.subgroup.mappers.SubgroupMapper;
+import com.kovospace.newtablinks.subgroup.models.SubgroupCollapseState;
 import com.kovospace.newtablinks.subgroup.models.SubgroupEntity;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
@@ -102,14 +103,19 @@ public class SubgroupService {
                 subgroupRepository.findHighestPositionByGroupId(parentGroup.getId()));
 
         final SubgroupEntity newSubgroup = new SubgroupEntity(
-                parentGroup, saveRequest.name(), position, saveRequest.collapsed());
+                parentGroup,
+                saveRequest.name(),
+                position,
+                new SubgroupCollapseState(saveRequest.collapsed(), saveRequest.defaultCollapsed()));
+
+        newSubgroup.setDescription(saveRequest.description());
 
         userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(subgroupRepository.save(newSubgroup));
     }
 
     /**
-     * Updates the name and folded state of an existing subgroup.
+     * Updates the name, description and both folded states of an existing subgroup.
      *
      * @param subgroupId  identifier of the subgroup to update
      * @param saveRequest the values to store
@@ -125,7 +131,9 @@ public class SubgroupService {
 
         final SubgroupEntity existingSubgroup = getRequiredSubgroupEntity(subgroupId, ownerId);
         existingSubgroup.setName(saveRequest.name());
+        existingSubgroup.setDescription(saveRequest.description());
         existingSubgroup.setCollapsed(saveRequest.collapsed());
+        existingSubgroup.setDefaultCollapsed(saveRequest.defaultCollapsed());
         userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(existingSubgroup);
     }

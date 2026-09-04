@@ -3,6 +3,7 @@ package com.kovospace.newtablinks.sync.dtos;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentDto;
 import com.kovospace.newtablinks.group.dtos.GroupDto;
 import com.kovospace.newtablinks.link.dtos.LinkDto;
+import com.kovospace.newtablinks.profile.dtos.ProfileDto;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupDto;
 import com.kovospace.newtablinks.user.dtos.UserDto;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -17,6 +18,7 @@ import java.util.List;
  * having to take a tree apart. Each child names its parent by identifier.</p>
  *
  * @param owner        the user this snapshot belongs to
+ * @param profiles     the owner's profiles, in display order
  * @param environments the owner's environments, in display order
  * @param groups       every group of those environments, in display order
  * @param subgroups    every subgroup of those groups, in display order
@@ -29,6 +31,9 @@ public record SyncSnapshotDto(
 
         @Schema(description = "The user this snapshot belongs to")
         UserDto owner,
+
+        @Schema(description = "The owner's profiles, in display order")
+        List<ProfileDto> profiles,
 
         @Schema(description = "The owner's environments, in display order")
         List<EnvironmentDto> environments,

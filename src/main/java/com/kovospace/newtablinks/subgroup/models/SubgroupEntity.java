@@ -36,6 +36,12 @@ public class SubgroupEntity extends AbstractAuditableEntity {
     private String name;
 
     /**
+     * Free text describing the subgroup, or {@code null} when the user wrote none.
+     */
+    @Column(name = "description", length = 500)
+    private String description;
+
+    /**
      * Zero based position among the group's subgroups, ascending.
      */
     @Column(name = "position", nullable = false)
@@ -48,6 +54,16 @@ public class SubgroupEntity extends AbstractAuditableEntity {
     private boolean collapsed;
 
     /**
+     * Whether the subgroup starts folded away when a page is freshly opened.
+     *
+     * <p>A different question from {@link #collapsed}, which records how the user last left it.
+     * The browser extension has always distinguished the two: a section can be one a person keeps
+     * folded by default and still be open right now.</p>
+     */
+    @Column(name = "default_collapsed", nullable = false)
+    private boolean defaultCollapsed;
+
+    /**
      * Required by JPA.
      */
     protected SubgroupEntity() {
@@ -56,21 +72,22 @@ public class SubgroupEntity extends AbstractAuditableEntity {
     /**
      * Creates a subgroup.
      *
-     * @param parentGroup group the subgroup is nested in
-     * @param name      title shown on the subgroup header
-     * @param position  zero based position among the group's subgroups
-     * @param collapsed whether the subgroup starts folded away
+     * @param parentGroup      group the subgroup is nested in
+     * @param name             title shown on the subgroup header
+     * @param position         zero based position among the group's subgroups
+     * @param collapseState    how the subgroup is folded now and how it starts out
      */
     public SubgroupEntity(
             final GroupEntity parentGroup,
             final String name,
             final int position,
-            final boolean collapsed) {
+            final SubgroupCollapseState collapseState) {
 
         this.parentGroup = parentGroup;
         this.name = name;
         this.position = position;
-        this.collapsed = collapsed;
+        this.collapsed = collapseState.collapsed();
+        this.defaultCollapsed = collapseState.defaultCollapsed();
     }
 
     /**
@@ -80,6 +97,33 @@ public class SubgroupEntity extends AbstractAuditableEntity {
      */
     public GroupEntity getParentGroup() {
         return parentGroup;
+    }
+
+    /**
+     * Moves the subgroup into another group.
+     *
+     * @param parentGroup the group to nest the subgroup in
+     */
+    public void setParentGroup(final GroupEntity parentGroup) {
+        this.parentGroup = parentGroup;
+    }
+
+    /**
+     * Returns the free text describing the subgroup.
+     *
+     * @return the description, or {@code null} when the user wrote none
+     */
+    public String getDescription() {
+        return description;
+    }
+
+    /**
+     * Replaces the free text describing the subgroup.
+     *
+     * @param description the description to set, may be {@code null}
+     */
+    public void setDescription(final String description) {
+        this.description = description;
     }
 
     /**
@@ -134,5 +178,23 @@ public class SubgroupEntity extends AbstractAuditableEntity {
      */
     public void setCollapsed(final boolean collapsed) {
         this.collapsed = collapsed;
+    }
+
+    /**
+     * Tells whether the subgroup starts folded away on a freshly opened page.
+     *
+     * @return {@code true} when it starts collapsed
+     */
+    public boolean isDefaultCollapsed() {
+        return defaultCollapsed;
+    }
+
+    /**
+     * Sets whether the subgroup starts folded away on a freshly opened page.
+     *
+     * @param defaultCollapsed {@code true} to start the subgroup collapsed
+     */
+    public void setDefaultCollapsed(final boolean defaultCollapsed) {
+        this.defaultCollapsed = defaultCollapsed;
     }
 }

@@ -97,13 +97,14 @@ public class GroupService {
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 groupRepository.findHighestPositionByEnvironmentId(environment.getId()));
 
-        final GroupEntity newGroup = new GroupEntity(environment, saveRequest.name(), position);
+        final GroupEntity newGroup = new GroupEntity(
+                environment, saveRequest.name(), saveRequest.description(), position);
         userDataChangePublisher.publishChangeFor(ownerId);
         return groupMapper.toDto(groupRepository.save(newGroup));
     }
 
     /**
-     * Renames an existing group.
+     * Updates the name and description of an existing group.
      *
      * @param groupId     identifier of the group to update
      * @param saveRequest the values to store
@@ -119,6 +120,7 @@ public class GroupService {
 
         final GroupEntity existingGroup = getRequiredGroupEntity(groupId, ownerId);
         existingGroup.setName(saveRequest.name());
+        existingGroup.setDescription(saveRequest.description());
         userDataChangePublisher.publishChangeFor(ownerId);
         return groupMapper.toDto(existingGroup);
     }
