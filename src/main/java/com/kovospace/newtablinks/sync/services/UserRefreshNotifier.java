@@ -60,7 +60,7 @@ public class UserRefreshNotifier {
             messagingTemplate.convertAndSendToUser(
                     event.ownerId().toString(),
                     REFRESH_DESTINATION,
-                    new DataChangedNotificationDto(Instant.now(), null));
+                    new DataChangedNotificationDto(Instant.now(), event.originDeviceId()));
 
             LOGGER.debug("Sent a refresh signal to account {}", event.ownerId());
         } catch (final RuntimeException deliveryFailed) {

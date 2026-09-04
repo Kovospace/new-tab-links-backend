@@ -11,6 +11,7 @@ import java.util.UUID;
  *
  * @param environmentId identifier of the environment the group is displayed in
  * @param name          title shown on the group header
+ * @param description   free text describing the group, may be {@code null}
  * @since 0.0.1
  */
 @Schema(description = "Body accepted when creating or replacing a group")
@@ -20,5 +21,8 @@ public record GroupSaveRequestDto(
         @NotNull UUID environmentId,
 
         @Schema(description = "Title shown on the group header", example = "Documentation")
-        @NotBlank @Size(max = 120) String name) {
+        @NotBlank @Size(max = 120) String name,
+
+        @Schema(description = "Free text describing the group", example = "Reference material")
+        @Size(max = 500) String description) {
 }

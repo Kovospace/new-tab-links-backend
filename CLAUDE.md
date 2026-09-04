@@ -9,8 +9,11 @@ for the `NewTabGroupedLinks` Chrome extension (new tab page with grouped links).
 
 **Status: running, authenticated application.** Module structure, JPA persistence, CRUD for the
 whole domain, registration and sign-in, OpenAPI docs, the Dockerfile and the CI pipeline all
-exist and are verified working. What is deliberately absent: any WebSocket messaging (transport
-is wired, nothing is published), and pushing changes *into* the server (sync is read-only).
+exist and are verified working.
+
+**Two-way synchronization with the extension exists.** `POST /api/v1/sync/push` accepts a batch
+of changes, and every mutation publishes a change event that `UserRefreshNotifier` delivers over
+the websocket to the account's other browsers. The extension is the client of both.
 
 **Every domain endpoint requires a bearer token, and the caller's identity comes only from that
 token.** Nothing accepts an owner id from the caller. See the `authentication` skill.
@@ -34,9 +37,13 @@ rather than `cd`. Reading it is allowed via `permissions.additionalDirectories` 
 
 **Read the extension's data model before designing any API.** Its entities are flat
 `Record<string, T>` maps keyed by UUID (`src/backend/entity/AppStateEntity.ts`): `environments`,
-`groups`, `subgroups`, `links`. They carry `createdAt` and ordering fields but **no `updatedAt`,
-no revision, no delete tombstones** — that gap is the central sync design problem and must be
-solved explicitly, not assumed away.
+`groups`, `subgroups`, `links` — grouped, one level above, into `profiles`.
+
+The extension has no `updatedAt`, no revision and no delete tombstones, and does not need them.
+A client pulls whole profiles and takes the snapshot as authoritative, so a deleted record is
+one that is simply absent; and it pushes by comparing its state against a stored baseline of
+what the server last confirmed, so a record missing from the current state *is* the deletion.
+Do not add tombstones on the assumption they are owed.
 
 ## How work arrives
 
@@ -91,7 +98,9 @@ com.kovospace.newtablinks
 ├── group/         titled boxes of links, owned by an environment
 ├── subgroup/      collapsible sections, owned by a group
 ├── link/          the bookmarks themselves
-└── sync/          whole-account snapshot, plus the change event that drives websocket pushes
+├── profile/       named sets of environments, the top of the hierarchy and the extension's own
+└── sync/          whole-account snapshot, the pushed change batch, and the change event that
+                   drives websocket pushes
 
 each feature module: controllers/ services/ repositories/ models/ dtos/ mappers/ utils/
 ```
@@ -134,7 +143,14 @@ Controller (@RestController, DTOs only)
   Never add an endpoint that resolves a domain object without the owner in the same query.
 - **Every mutation calls `userDataChangePublisher.publishChangeFor(ownerId)`.** That is what
   pushes a refresh to the user's other browsers; a new mutating method without it leaves other
-  devices silently stale.
+  devices silently stale. At most one announcement per account survives a transaction, so a push
+  of four hundred operations sends one notification — and the overload taking an `originDeviceId`
+  must be called *before* the work it describes, or the anonymous announcements behind it win
+  and the pushing device cannot recognise its own echo.
+- **The sync push accepts client-assigned identifiers**, the one place anything does. It is safe
+  because every lookup is still ownership-scoped: an identifier already taken by another account
+  is not an error but a remap, stored under a server-generated identifier and reported back.
+  Nothing else in the application may take an identifier from a caller.
 
 ### Configuration
 
@@ -206,13 +222,15 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   exception and the template — `VisitorTokenCleanupScheduler` sweeps it on a timer.
 - **The websocket broker is in-memory, so single-replica only.** Scaling out silently stops
   delivering to clients on the other pod.
-- **Sync is read-only** — `GET /api/v1/sync/snapshot` and nothing more. Accepting changes needs
-  conflict resolution, deletion semantics (tombstones), and a decision on whether the client or
-  the server assigns identifiers.
-- **Identifiers are server-generated** (`GenerationType.UUID`). The extension generates its own
-  UUIDs, so whichever side wins has to be decided before two-way sync exists.
-- **Reordering** has no endpoint. `position` is assigned on create and left alone on update; a
-  dedicated move operation should own it.
+- **Conflicts are resolved by arrival order**, and nothing detects them. Two devices editing the
+  same link means the later push wins and the earlier device is told to re-read. There is no
+  merge, no version check and no report that it happened; that is a deliberate trade, not an
+  oversight, because a push follows a change within a second.
+- **A pull transfers the whole account.** There is no delta endpoint, so a very large account
+  re-fetches everything whenever any device changes anything.
+- **Reordering has no endpoint of its own**, but is no longer unreachable: the CRUD update
+  methods still leave `position` alone deliberately, and the sync push is what sets it. A
+  reorder made on the website would still need one.
 - **`ddl-auto=update`** is a local-development convenience only. The migrations repository now
   exists and its image runs as an init container, so deployed environments must set
   `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.

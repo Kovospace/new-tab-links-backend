@@ -4,6 +4,7 @@ import com.kovospace.newtablinks.group.mappers.GroupMapper;
 import com.kovospace.newtablinks.group.repositories.GroupRepository;
 import com.kovospace.newtablinks.link.mappers.LinkMapper;
 import com.kovospace.newtablinks.link.repositories.LinkRepository;
+import com.kovospace.newtablinks.profile.services.ProfileService;
 import com.kovospace.newtablinks.subgroup.mappers.SubgroupMapper;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.sync.dtos.SyncSnapshotDto;
@@ -40,6 +41,7 @@ public class SyncSnapshotService {
     private final LinkRepository linkRepository;
     private final LinkMapper linkMapper;
     private final EnvironmentSnapshotReader environmentSnapshotReader;
+    private final ProfileService profileService;
 
     /**
      * Creates the service.
@@ -53,6 +55,7 @@ public class SyncSnapshotService {
      * @param linkRepository            reads every link of the owner
      * @param linkMapper                converts links
      * @param environmentSnapshotReader reads the owner's environments
+     * @param profileService            reads the owner's profiles
      */
     public SyncSnapshotService(
             final UserService userService,
@@ -63,7 +66,8 @@ public class SyncSnapshotService {
             final SubgroupMapper subgroupMapper,
             final LinkRepository linkRepository,
             final LinkMapper linkMapper,
-            final EnvironmentSnapshotReader environmentSnapshotReader) {
+            final EnvironmentSnapshotReader environmentSnapshotReader,
+            final ProfileService profileService) {
 
         this.userService = userService;
         this.userMapper = userMapper;
@@ -74,6 +78,7 @@ public class SyncSnapshotService {
         this.linkRepository = linkRepository;
         this.linkMapper = linkMapper;
         this.environmentSnapshotReader = environmentSnapshotReader;
+        this.profileService = profileService;
     }
 
     /**
@@ -88,6 +93,7 @@ public class SyncSnapshotService {
     public SyncSnapshotDto captureSnapshotForUser(final UUID ownerId) {
         return new SyncSnapshotDto(
                 userMapper.toDto(userService.getRequiredUserEntity(ownerId)),
+                profileService.findProfilesByOwner(ownerId),
                 environmentSnapshotReader.readEnvironmentsOfOwner(ownerId),
                 groupMapper.toDtoList(groupRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
                 subgroupMapper.toDtoList(subgroupRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),

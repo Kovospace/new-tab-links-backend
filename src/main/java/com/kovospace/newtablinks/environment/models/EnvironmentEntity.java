@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.environment.models;
 
 import com.kovospace.newtablinks.common.models.AbstractAuditableEntity;
+import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -15,6 +16,13 @@ import jakarta.persistence.Table;
  * <p>The browser extension shows exactly one environment at a time and lets the user switch
  * between them, which is why an environment carries its own display order.</p>
  *
+ * <p>An environment belongs to a {@link ProfileEntity} and, redundantly, straight to the profile's
+ * owner. The redundancy is deliberate: every ownership-scoped query in this application - and
+ * every ordered snapshot query - reaches the owner through this one join, and rerouting them all
+ * through the profile would buy nothing but risk. {@link #getOwner()} is therefore never set
+ * independently; it is always taken from the profile, which is what makes the two impossible to
+ * disagree.</p>
+ *
  * @since 0.0.1
  */
 @Entity
@@ -22,17 +30,30 @@ import jakarta.persistence.Table;
 public class EnvironmentEntity extends AbstractAuditableEntity {
 
     /**
-     * User this environment belongs to.
+     * User this environment belongs to. Always the owner of {@link #profile}.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private UserEntity owner;
 
     /**
+     * Profile this environment is filed under.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "profile_id", nullable = false)
+    private ProfileEntity profile;
+
+    /**
      * Name shown on the environment switcher.
      */
     @Column(name = "name", nullable = false, length = 120)
     private String name;
+
+    /**
+     * Free text describing the environment, or {@code null} when the user wrote none.
+     */
+    @Column(name = "description", length = 500)
+    private String description;
 
     /**
      * Zero based position among the owner's environments, ascending.
@@ -47,15 +68,26 @@ public class EnvironmentEntity extends AbstractAuditableEntity {
     }
 
     /**
-     * Creates an environment.
+     * Creates an environment inside a profile.
      *
-     * @param owner    user the environment belongs to
-     * @param name     name shown on the environment switcher
-     * @param position zero based position among the owner's environments
+     * <p>The owner is taken from the profile rather than accepted separately, so that an
+     * environment can never end up filed under one user's profile while belonging to another.</p>
+     *
+     * @param profile     profile the environment is filed under
+     * @param name        name shown on the environment switcher
+     * @param description free text describing the environment, may be {@code null}
+     * @param position    zero based position among the owner's environments
      */
-    public EnvironmentEntity(final UserEntity owner, final String name, final int position) {
-        this.owner = owner;
+    public EnvironmentEntity(
+            final ProfileEntity profile,
+            final String name,
+            final String description,
+            final int position) {
+
+        this.profile = profile;
+        this.owner = profile.getOwner();
         this.name = name;
+        this.description = description;
         this.position = position;
     }
 
@@ -66,6 +98,43 @@ public class EnvironmentEntity extends AbstractAuditableEntity {
      */
     public UserEntity getOwner() {
         return owner;
+    }
+
+    /**
+     * Returns the profile this environment is filed under.
+     *
+     * @return the profile
+     */
+    public ProfileEntity getProfile() {
+        return profile;
+    }
+
+    /**
+     * Moves the environment into another profile, and its ownership along with it.
+     *
+     * @param profile the profile to file the environment under
+     */
+    public void setProfile(final ProfileEntity profile) {
+        this.profile = profile;
+        this.owner = profile.getOwner();
+    }
+
+    /**
+     * Returns the free text describing the environment.
+     *
+     * @return the description, or {@code null} when the user wrote none
+     */
+    public String getDescription() {
+        return description;
+    }
+
+    /**
+     * Replaces the free text describing the environment.
+     *
+     * @param description the description to set, may be {@code null}
+     */
+    public void setDescription(final String description) {
+        this.description = description;
     }
 
     /**
