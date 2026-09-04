@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.user.repositories;
 
 import com.kovospace.newtablinks.user.models.AuthenticationProviderType;
 import com.kovospace.newtablinks.user.models.UserIdentityEntity;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -27,4 +28,12 @@ public interface UserIdentityRepository extends JpaRepository<UserIdentityEntity
     Optional<UserIdentityEntity> findByProviderAndProviderUserId(
             AuthenticationProviderType provider,
             String providerUserId);
+
+    /**
+     * Lists every external identity linked to a user.
+     *
+     * @param userId identifier of the owning user
+     * @return the user's linked identities, empty when there are none
+     */
+    List<UserIdentityEntity> findAllByUserId(UUID userId);
 }

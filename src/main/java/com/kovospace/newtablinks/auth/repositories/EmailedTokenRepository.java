@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.auth.repositories;
 
 import com.kovospace.newtablinks.auth.models.EmailedTokenEntity;
 import com.kovospace.newtablinks.auth.models.EmailedTokenPurpose;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -24,4 +25,12 @@ public interface EmailedTokenRepository extends JpaRepository<EmailedTokenEntity
      */
     Optional<EmailedTokenEntity> findByTokenHashAndPurpose(
             String tokenHash, EmailedTokenPurpose purpose);
+
+    /**
+     * Lists every token ever emailed to a user, used and unused alike.
+     *
+     * @param userId identifier of the owning user
+     * @return the user's emailed tokens, empty when there are none
+     */
+    List<EmailedTokenEntity> findAllByUserId(UUID userId);
 }
