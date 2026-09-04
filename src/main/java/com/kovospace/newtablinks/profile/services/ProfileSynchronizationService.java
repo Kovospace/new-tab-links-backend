@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.profile.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.ClientAssignedIdentifierPolicy;
 import com.kovospace.newtablinks.profile.dtos.ProfileSynchronizedValuesDto;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
@@ -34,22 +35,26 @@ public class ProfileSynchronizationService {
     private final ProfileRepository profileRepository;
     private final UserService userService;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param profileRepository       persistence access for profiles
-     * @param userService             resolves the owning user
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param profileRepository        persistence access for profiles
+     * @param userService              resolves the owning user
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public ProfileSynchronizationService(
             final ProfileRepository profileRepository,
             final UserService userService,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.profileRepository = profileRepository;
         this.userService = userService;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -96,7 +101,8 @@ public class ProfileSynchronizationService {
     }
 
     /**
-     * Deletes a profile if the owner still has one under that identifier.
+     * Deletes a profile, and everything inside it, if the owner still has one under that
+     * identifier.
      *
      * <p>A delete of something already gone is not an error: an offline queue is replayed at
      * least once, and the second replay of a delete has nothing left to remove.</p>
@@ -116,7 +122,7 @@ public class ProfileSynchronizationService {
         if (existingProfile.isEmpty()) {
             return false;
         }
-        profileRepository.delete(existingProfile.get());
+        hierarchyDeletionService.deleteProfileWithDescendants(existingProfile.get());
         userDataChangePublisher.publishChangeFor(ownerId);
         return true;
     }

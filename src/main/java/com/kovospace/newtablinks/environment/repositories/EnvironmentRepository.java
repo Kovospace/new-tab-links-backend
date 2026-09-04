@@ -40,6 +40,17 @@ public interface EnvironmentRepository extends JpaRepository<EnvironmentEntity, 
     Optional<EnvironmentEntity> findByIdAndOwnerId(UUID environmentId, UUID ownerId);
 
     /**
+     * Lists every environment belonging to a profile, in no particular order.
+     *
+     * <p>Used when a profile is being removed and everything under it has to go first; nothing
+     * reads the result in display order, so none is imposed.</p>
+     *
+     * @param profileId identifier of the owning profile
+     * @return the profile's environments, empty when it has none
+     */
+    List<EnvironmentEntity> findAllByProfileId(UUID profileId);
+
+    /**
      * Returns the highest position currently used among a user's environments.
      *
      * @param ownerId identifier of the owning user

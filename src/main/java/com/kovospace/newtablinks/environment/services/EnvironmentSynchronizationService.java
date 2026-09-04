@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.environment.services;
 
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.ClientAssignedIdentifierPolicy;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentSynchronizedValuesDto;
 import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
@@ -29,19 +30,23 @@ public class EnvironmentSynchronizationService {
 
     private final EnvironmentRepository environmentRepository;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param environmentRepository   persistence access for environments
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param environmentRepository    persistence access for environments
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public EnvironmentSynchronizationService(
             final EnvironmentRepository environmentRepository,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.environmentRepository = environmentRepository;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -88,7 +93,8 @@ public class EnvironmentSynchronizationService {
     }
 
     /**
-     * Deletes an environment if the owner still has one under that identifier.
+     * Deletes an environment, and everything inside it, if the owner still has one under
+     * that identifier.
      *
      * <p>A delete of something already gone is not an error; an offline queue is replayed at
      * least once.</p>
@@ -108,7 +114,7 @@ public class EnvironmentSynchronizationService {
         if (existingEnvironment.isEmpty()) {
             return false;
         }
-        environmentRepository.delete(existingEnvironment.get());
+        hierarchyDeletionService.deleteEnvironmentWithDescendants(existingEnvironment.get());
         userDataChangePublisher.publishChangeFor(ownerId);
         return true;
     }

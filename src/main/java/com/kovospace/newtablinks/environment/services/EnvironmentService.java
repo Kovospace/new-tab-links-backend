@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.environment.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentDto;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentSaveRequestDto;
@@ -29,6 +30,7 @@ public class EnvironmentService {
     private final EnvironmentMapper environmentMapper;
     private final ProfileService profileService;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
@@ -37,18 +39,21 @@ public class EnvironmentService {
      * @param environmentMapper       converter to the client facing shape
      * @param profileService          resolves the profile an environment is filed under, and with
      *                                it the owner
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public EnvironmentService(
             final EnvironmentRepository environmentRepository,
             final EnvironmentMapper environmentMapper,
             final ProfileService profileService,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.environmentRepository = environmentRepository;
         this.environmentMapper = environmentMapper;
         this.profileService = profileService;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -140,7 +145,8 @@ public class EnvironmentService {
     }
 
     /**
-     * Deletes an environment.
+     * Deletes an environment and everything inside it: its groups, and every subgroup and
+     * link in those.
      *
      * @param environmentId identifier of the environment to delete
      * @param ownerId       identifier of the user that must own it
@@ -148,7 +154,8 @@ public class EnvironmentService {
      */
     @Transactional
     public void deleteEnvironment(final UUID environmentId, final UUID ownerId) {
-        environmentRepository.delete(getRequiredEnvironmentEntity(environmentId, ownerId));
+        hierarchyDeletionService.deleteEnvironmentWithDescendants(
+                getRequiredEnvironmentEntity(environmentId, ownerId));
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 

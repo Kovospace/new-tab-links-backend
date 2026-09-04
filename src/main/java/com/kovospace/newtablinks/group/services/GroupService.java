@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.group.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.environment.services.EnvironmentService;
@@ -33,25 +34,29 @@ public class GroupService {
     private final GroupMapper groupMapper;
     private final EnvironmentService environmentService;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param groupRepository    persistence access for groups
-     * @param groupMapper        converter to the client facing shape
-     * @param environmentService resolves the owning environment
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param groupRepository          persistence access for groups
+     * @param groupMapper              converter to the client facing shape
+     * @param environmentService       resolves the owning environment
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public GroupService(
             final GroupRepository groupRepository,
             final GroupMapper groupMapper,
             final EnvironmentService environmentService,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.groupRepository = groupRepository;
         this.groupMapper = groupMapper;
         this.environmentService = environmentService;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -126,7 +131,8 @@ public class GroupService {
     }
 
     /**
-     * Deletes a group.
+     * Deletes a group and everything inside it: its subgroups, and every link in the group
+     * whether or not it sits in one of them.
      *
      * @param groupId identifier of the group to delete
      * @param ownerId identifier of the user that must own it
@@ -134,7 +140,8 @@ public class GroupService {
      */
     @Transactional
     public void deleteGroup(final UUID groupId, final UUID ownerId) {
-        groupRepository.delete(getRequiredGroupEntity(groupId, ownerId));
+        hierarchyDeletionService.deleteGroupWithDescendants(
+                getRequiredGroupEntity(groupId, ownerId));
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 
