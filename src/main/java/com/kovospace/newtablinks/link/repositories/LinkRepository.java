@@ -34,6 +34,17 @@ public interface LinkRepository extends JpaRepository<LinkEntity, UUID> {
     List<LinkEntity> findAllByParentSubgroupIdOrderByPositionAsc(UUID subgroupId);
 
     /**
+     * Lists every link belonging to a group, including the ones nested in its subgroups.
+     *
+     * <p>Used when a group is being removed: a link is attached to its group whether or not it
+     * also sits in a subgroup, so this is what has to be cleared before the group can go.</p>
+     *
+     * @param groupId identifier of the owning group
+     * @return the group's links, empty when it has none
+     */
+    List<LinkEntity> findAllByParentGroupId(UUID groupId);
+
+    /**
      * Lists every link belonging to the given user, in display order.
      *
      * @param ownerId identifier of the owning user

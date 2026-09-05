@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.subgroup.services;
 
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.ClientAssignedIdentifierPolicy;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupSynchronizedValuesDto;
@@ -28,19 +29,23 @@ public class SubgroupSynchronizationService {
 
     private final SubgroupRepository subgroupRepository;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param subgroupRepository      persistence access for subgroups
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param subgroupRepository       persistence access for subgroups
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public SubgroupSynchronizationService(
             final SubgroupRepository subgroupRepository,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.subgroupRepository = subgroupRepository;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -87,7 +92,8 @@ public class SubgroupSynchronizationService {
     }
 
     /**
-     * Deletes a subgroup if the owner still has one under that identifier.
+     * Deletes a subgroup, and the links nested in it, if the owner still has one under that
+     * identifier.
      *
      * <p>The links inside it survive and fall back to sitting directly under their group, which
      * is what the {@code ON DELETE SET NULL} rule on the schema is for.</p>
@@ -107,7 +113,7 @@ public class SubgroupSynchronizationService {
         if (existingSubgroup.isEmpty()) {
             return false;
         }
-        subgroupRepository.delete(existingSubgroup.get());
+        hierarchyDeletionService.deleteSubgroupWithDescendants(existingSubgroup.get());
         userDataChangePublisher.publishChangeFor(ownerId);
         return true;
     }

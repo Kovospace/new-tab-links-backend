@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.group.services;
 
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.ClientAssignedIdentifierPolicy;
 import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.group.dtos.GroupSynchronizedValuesDto;
@@ -28,19 +29,23 @@ public class GroupSynchronizationService {
 
     private final GroupRepository groupRepository;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param groupRepository         persistence access for groups
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param groupRepository          persistence access for groups
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public GroupSynchronizationService(
             final GroupRepository groupRepository,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.groupRepository = groupRepository;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -84,7 +89,8 @@ public class GroupSynchronizationService {
     }
 
     /**
-     * Deletes a group if the owner still has one under that identifier.
+     * Deletes a group, and everything inside it, if the owner still has one under that
+     * identifier.
      *
      * @param groupId identifier of the group to delete
      * @param ownerId identifier of the user that must own it
@@ -101,7 +107,7 @@ public class GroupSynchronizationService {
         if (existingGroup.isEmpty()) {
             return false;
         }
-        groupRepository.delete(existingGroup.get());
+        hierarchyDeletionService.deleteGroupWithDescendants(existingGroup.get());
         userDataChangePublisher.publishChangeFor(ownerId);
         return true;
     }

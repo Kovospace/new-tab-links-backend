@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.profile.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.profile.dtos.ProfileDto;
 import com.kovospace.newtablinks.profile.dtos.ProfileSaveRequestDto;
@@ -33,25 +34,29 @@ public class ProfileService {
     private final ProfileMapper profileMapper;
     private final UserService userService;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param profileRepository       persistence access for profiles
-     * @param profileMapper           converter to the client facing shape
-     * @param userService             resolves the owning user
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param profileRepository        persistence access for profiles
+     * @param profileMapper            converter to the client facing shape
+     * @param userService              resolves the owning user
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public ProfileService(
             final ProfileRepository profileRepository,
             final ProfileMapper profileMapper,
             final UserService userService,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.profileRepository = profileRepository;
         this.profileMapper = profileMapper;
         this.userService = userService;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -124,7 +129,8 @@ public class ProfileService {
     }
 
     /**
-     * Deletes a profile and, by cascade, every environment inside it.
+     * Deletes a profile and everything inside it: its environments, their groups, and every
+     * subgroup and link in those.
      *
      * @param profileId identifier of the profile to delete
      * @param ownerId   identifier of the user that must own it
@@ -132,7 +138,8 @@ public class ProfileService {
      */
     @Transactional
     public void deleteProfile(final UUID profileId, final UUID ownerId) {
-        profileRepository.delete(getRequiredProfileEntity(profileId, ownerId));
+        hierarchyDeletionService.deleteProfileWithDescendants(
+                getRequiredProfileEntity(profileId, ownerId));
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 
