@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.auth.repositories;
 
 import com.kovospace.newtablinks.auth.models.SingleUseCodeEntity;
 import com.kovospace.newtablinks.auth.models.SingleUseCodePurpose;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -26,4 +27,12 @@ public interface SingleUseCodeRepository extends JpaRepository<SingleUseCodeEnti
      * @return the matching code, or an empty optional when there is none
      */
     Optional<SingleUseCodeEntity> findByCodeHashAndPurpose(String codeHash, SingleUseCodePurpose purpose);
+
+    /**
+     * Lists every single use code minted for a user, redeemed ones included.
+     *
+     * @param userId identifier of the owning user
+     * @return the user's codes, empty when there are none
+     */
+    List<SingleUseCodeEntity> findAllByUserId(UUID userId);
 }

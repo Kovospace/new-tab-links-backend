@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.user.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.AccountDeletionService;
 import com.kovospace.newtablinks.user.dtos.UserDto;
 import com.kovospace.newtablinks.user.dtos.UserProfileUpdateRequestDto;
 import com.kovospace.newtablinks.user.mappers.UserMapper;
@@ -28,16 +29,23 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final AccountDeletionService accountDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param userRepository persistence access for users
-     * @param userMapper     converter to the client facing shape
+     * @param userRepository         persistence access for users
+     * @param userMapper             converter to the client facing shape
+     * @param accountDeletionService removes an account and everything it owns
      */
-    public UserService(final UserRepository userRepository, final UserMapper userMapper) {
+    public UserService(
+            final UserRepository userRepository,
+            final UserMapper userMapper,
+            final AccountDeletionService accountDeletionService) {
+
         this.userRepository = userRepository;
         this.userMapper = userMapper;
+        this.accountDeletionService = accountDeletionService;
     }
 
     /**
@@ -71,14 +79,18 @@ public class UserService {
     }
 
     /**
-     * Deletes a user.
+     * Deletes a user, and with them their profiles, links, devices, sessions and linked
+     * identities.
+     *
+     * <p>Nothing is kept back and nothing is anonymised: the account is gone, which is what the
+     * endpoint offering this promises.</p>
      *
      * @param userId identifier of the user to delete
      * @throws ResourceNotFoundException when no user has that identifier
      */
     @Transactional
     public void deleteUser(final UUID userId) {
-        userRepository.delete(getRequiredUserEntity(userId));
+        accountDeletionService.deleteAccountWithEverythingItOwns(getRequiredUserEntity(userId));
         LOGGER.info("Account {} deleted", userId);
     }
 

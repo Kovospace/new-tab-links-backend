@@ -61,4 +61,16 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
     @Query("update RefreshTokenEntity refreshToken set refreshToken.revokedAt = :revokedAt "
             + "where refreshToken.user.id = :userId and refreshToken.revokedAt is null")
     int revokeAllLiveTokensOfUser(@Param("userId") UUID userId, @Param("revokedAt") Instant revokedAt);
+
+    /**
+     * Lists every refresh token issued to a user, revoked ones included.
+     *
+     * <p>Distinct from {@link #findAllByUserIdAndRevokedAtIsNull(UUID)}, which answers "which
+     * sessions are live". This one exists for account deletion, where a revoked row still holds
+     * a foreign key and still has to go.</p>
+     *
+     * @param userId identifier of the owning user
+     * @return the user's refresh tokens, empty when there are none
+     */
+    List<RefreshTokenEntity> findAllByUserId(UUID userId);
 }
