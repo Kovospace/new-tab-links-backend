@@ -1,10 +1,16 @@
 package com.kovospace.newtablinks.auth.services;
 
+import com.kovospace.newtablinks.auth.models.AccountEmailDeliveryOutcome;
+
 /**
  * Sends the messages the account flows depend on.
  *
  * <p>An interface rather than a concrete sender so that the transactional provider, and the
  * decision to send at all, stay out of the services that hold the business logic.</p>
+ *
+ * <p>Every method reports how far the message got instead of throwing. A relay that is down
+ * must never fail the surrounding request - see {@link SmtpAccountEmailSender} - but the
+ * caller is still entitled to know, and some callers pass that on to the user.</p>
  *
  * @since 0.0.2
  */
@@ -16,8 +22,10 @@ public interface AccountEmailSender {
      * @param recipientAddress address to send to
      * @param displayName      name to greet the recipient by
      * @param activationLink   absolute link that activates the account
+     * @return how far the message got
      */
-    void sendActivationLink(String recipientAddress, String displayName, String activationLink);
+    AccountEmailDeliveryOutcome sendActivationLink(
+            String recipientAddress, String displayName, String activationLink);
 
     /**
      * Tells the owner of an already registered address that someone tried to register it again.
@@ -27,8 +35,9 @@ public interface AccountEmailSender {
      * doubles as a warning that somebody is poking at the account.</p>
      *
      * @param recipientAddress address that is already registered
+     * @return how far the message got
      */
-    void sendAddressAlreadyRegisteredNotice(String recipientAddress);
+    AccountEmailDeliveryOutcome sendAddressAlreadyRegisteredNotice(String recipientAddress);
 
     /**
      * Sends a password reset link.
@@ -36,6 +45,8 @@ public interface AccountEmailSender {
      * @param recipientAddress address to send to
      * @param displayName      name to greet the recipient by
      * @param passwordResetLink absolute link that lets a new password be set
+     * @return how far the message got
      */
-    void sendPasswordResetLink(String recipientAddress, String displayName, String passwordResetLink);
+    AccountEmailDeliveryOutcome sendPasswordResetLink(
+            String recipientAddress, String displayName, String passwordResetLink);
 }

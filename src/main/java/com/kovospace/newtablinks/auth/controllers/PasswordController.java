@@ -69,7 +69,10 @@ public class PasswordController {
             @Valid @RequestBody final PasswordResetRequestDto resetRequest) {
 
         passwordService.requestPasswordReset(resetRequest.email());
-        return ResponseEntity.accepted().body(new RegistrationAcceptedDto(UNIFORM_RESET_MESSAGE));
+        // Delivery is deliberately not reported here: an address with no account sends nothing
+        // at all, so a delivery outcome would say which of those two happened.
+        return ResponseEntity.accepted()
+                .body(RegistrationAcceptedDto.withoutDeliveryReport(UNIFORM_RESET_MESSAGE));
     }
 
     /**

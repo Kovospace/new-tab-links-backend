@@ -67,6 +67,36 @@ public final class ApiEndpointPaths {
             AUTHENTICATION_BASE_PATH + VISITOR_TOKEN_SUBPATH;
 
     /**
+     * Root path of every endpoint reserved for the operator.
+     *
+     * <p>Needed as a constant because the security configuration guards the whole subtree by
+     * string match: everything below it demands the {@code SCOPE_ADMIN} authority, and the one
+     * exception - the sign-in that grants it - is listed separately.</p>
+     */
+    public static final String ADMINISTRATION_BASE_PATH = "/api/v1/admin";
+
+    /**
+     * Everything below {@link #ADMINISTRATION_BASE_PATH}, as a matcher pattern.
+     */
+    public static final String ADMINISTRATION_PATH_PATTERN = ADMINISTRATION_BASE_PATH + "/**";
+
+    /**
+     * Path, relative to {@link #ADMINISTRATION_BASE_PATH}, of the operator sign-in.
+     */
+    public static final String ADMINISTRATION_SIGN_IN_SUBPATH = "/login";
+
+    /**
+     * Absolute path of the operator sign-in.
+     *
+     * <p>The one admin path reachable without an admin token, because it is how one is obtained.
+     * It is not unguarded: {@link com.kovospace.newtablinks.admin.services.AdminSignInService}
+     * refuses it outright when no credentials are configured, and locks it after too many
+     * failures.</p>
+     */
+    public static final String ADMINISTRATION_SIGN_IN_PATH =
+            ADMINISTRATION_BASE_PATH + ADMINISTRATION_SIGN_IN_SUBPATH;
+
+    /**
      * Prevents instantiation of this constant holder.
      */
     private ApiEndpointPaths() {

@@ -1,0 +1,38 @@
+{
+  "target": {
+    "path": "deployment/new-tab-links-backend",
+    "namespace": "new-tab-links-backend"
+  },
+  "agent": {
+    "namespace": "new-tab-links-backend",
+    "ttl": 30
+  },
+  "operator": false,
+  "feature": {
+    "env": {
+      "override": {
+        "SERVER_FORWARD_HEADERS_STRATEGY": "FRAMEWORK"
+      }
+    },
+    "fs": {
+      "mode": "localwithoverrides",
+      "read_only": [
+        "^/etc/resolv\\.conf$",
+        "^/etc/hosts$"
+      ]
+    },
+    "network": {
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "(?i)^x-mirrord-steal: 1$"
+        }
+      },
+      "outgoing": {
+        "tcp": true,
+        "udp": true
+      },
+      "dns": true
+    }
+  }
+}

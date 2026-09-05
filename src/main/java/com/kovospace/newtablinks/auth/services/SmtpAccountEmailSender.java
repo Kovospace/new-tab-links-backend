@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.auth.services;
 
 import com.kovospace.newtablinks.auth.config.MailProperties;
+import com.kovospace.newtablinks.auth.models.AccountEmailDeliveryOutcome;
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -23,6 +24,10 @@ import org.springframework.stereotype.Service;
  * <p>A failure to send never fails the surrounding request. Registration has already succeeded by
  * the time mail is attempted, and rolling it back because a relay was briefly unreachable would
  * lose the account and tell the caller something it must not learn. The user resends instead.</p>
+ *
+ * <p>The failure is not swallowed either: it is logged, and returned as
+ * {@link AccountEmailDeliveryOutcome#FAILED} so a caller can decide whether the person waiting
+ * on the request should be told.</p>
  *
  * @since 0.0.2
  */
@@ -53,12 +58,12 @@ public class SmtpAccountEmailSender implements AccountEmailSender {
     }
 
     @Override
-    public void sendActivationLink(
+    public AccountEmailDeliveryOutcome sendActivationLink(
             final String recipientAddress,
             final String displayName,
             final String activationLink) {
 
-        sendOrLog(
+        return sendOrLog(
                 recipientAddress,
                 "Activate your NewTabLinks account",
                 """
@@ -73,12 +78,12 @@ public class SmtpAccountEmailSender implements AccountEmailSender {
     }
 
     @Override
-    public void sendPasswordResetLink(
+    public AccountEmailDeliveryOutcome sendPasswordResetLink(
             final String recipientAddress,
             final String displayName,
             final String passwordResetLink) {
 
-        sendOrLog(
+        return sendOrLog(
                 recipientAddress,
                 "Reset your NewTabLinks password",
                 """
@@ -96,8 +101,8 @@ public class SmtpAccountEmailSender implements AccountEmailSender {
     }
 
     @Override
-    public void sendAddressAlreadyRegisteredNotice(final String recipientAddress) {
-        sendOrLog(
+    public AccountEmailDeliveryOutcome sendAddressAlreadyRegisteredNotice(final String recipientAddress) {
+        return sendOrLog(
                 recipientAddress,
                 "Someone tried to register your address",
                 """
@@ -116,15 +121,17 @@ public class SmtpAccountEmailSender implements AccountEmailSender {
      * @param recipientAddress address to send to
      * @param subject          subject line
      * @param body             plain text body
+     * @return how far the message got; never throws, however badly the relay behaves
      */
-    private void sendOrLog(final String recipientAddress, final String subject, final String body) {
+    private AccountEmailDeliveryOutcome sendOrLog(
+            final String recipientAddress, final String subject, final String body) {
         if (!mailProperties.enabled()) {
             LOGGER.info("""
                     Mail sending is disabled; the message below was NOT transmitted.
                     To: {}
                     Subject: {}
                     {}""", recipientAddress, subject, body);
-            return;
+            return AccountEmailDeliveryOutcome.SUPPRESSED;
         }
 
         try {
@@ -136,8 +143,11 @@ public class SmtpAccountEmailSender implements AccountEmailSender {
             helper.setText(body, false);
             javaMailSender.send(message);
             LOGGER.debug("Sent \"{}\" to {}", subject, recipientAddress);
+            return AccountEmailDeliveryOutcome.SENT;
+
         } catch (final MailException | MessagingException | UnsupportedEncodingException sendingFailed) {
             LOGGER.error("Could not send \"{}\" to {}", subject, recipientAddress, sendingFailed);
+            return AccountEmailDeliveryOutcome.FAILED;
         }
     }
 }

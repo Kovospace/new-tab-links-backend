@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.common.config;
 
+import com.kovospace.newtablinks.admin.services.AdminAccessTokenIssuer;
 import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import com.kovospace.newtablinks.auth.services.ProviderSignInSuccessHandler;
@@ -61,6 +62,10 @@ public class SecurityConfiguration {
             // Public because a visitor with no token has to be able to obtain one; the throttle
             // it feeds must never stand in front of it. See VisitorTokenAuthenticationFilter.
             ApiEndpointPaths.VISITOR_TOKEN_PATH,
+            // The operator's way in, and the only admin path reachable without an admin token.
+            // Not unguarded: AdminSignInService refuses it outright when no credentials are
+            // configured, and locks it after too many failures.
+            ApiEndpointPaths.ADMINISTRATION_SIGN_IN_PATH,
             "/api/v1/auth/activate",
             "/api/v1/auth/resend-activation",
             "/api/v1/auth/login",
@@ -198,6 +203,12 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_SUPPORT_ENDPOINTS).permitAll()
                         .requestMatchers(PUBLIC_AUTHENTICATION_ENDPOINTS).permitAll()
+                        // Everything else under /api/v1/admin demands the authority that only an
+                        // operator sign-in grants. Declared before the catch-all below, because
+                        // `authenticated()` would otherwise let any user's token through to
+                        // endpoints that can read, change and delete every account.
+                        .requestMatchers(ApiEndpointPaths.ADMINISTRATION_PATH_PATTERN)
+                        .hasAuthority(AdminAccessTokenIssuer.ADMIN_AUTHORITY)
                         // The websocket handshake is open on purpose: a browser cannot set an
                         // Authorization header on a WebSocket, so the token travels in the STOMP
                         // CONNECT frame instead and is checked by StompAuthenticationInterceptor.
