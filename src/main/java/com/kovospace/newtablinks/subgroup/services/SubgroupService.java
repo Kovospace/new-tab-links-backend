@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.subgroup.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import com.kovospace.newtablinks.group.services.GroupService;
@@ -32,25 +33,29 @@ public class SubgroupService {
     private final SubgroupMapper subgroupMapper;
     private final GroupService groupService;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final HierarchyDeletionService hierarchyDeletionService;
 
     /**
      * Creates the service.
      *
-     * @param subgroupRepository persistence access for subgroups
-     * @param subgroupMapper     converter to the client facing shape
-     * @param groupService       resolves the owning group
-     * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param subgroupRepository       persistence access for subgroups
+     * @param subgroupMapper           converter to the client facing shape
+     * @param groupService             resolves the owning group
+     * @param userDataChangePublisher  announces changes to the user's other browsers
+     * @param hierarchyDeletionService removes a record together with everything beneath it
      */
     public SubgroupService(
             final SubgroupRepository subgroupRepository,
             final SubgroupMapper subgroupMapper,
             final GroupService groupService,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final HierarchyDeletionService hierarchyDeletionService) {
 
         this.subgroupRepository = subgroupRepository;
         this.subgroupMapper = subgroupMapper;
         this.groupService = groupService;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.hierarchyDeletionService = hierarchyDeletionService;
     }
 
     /**
@@ -139,7 +144,7 @@ public class SubgroupService {
     }
 
     /**
-     * Deletes a subgroup.
+     * Deletes a subgroup and the links nested in it.
      *
      * @param subgroupId identifier of the subgroup to delete
      * @param ownerId    identifier of the user that must own it
@@ -147,7 +152,8 @@ public class SubgroupService {
      */
     @Transactional
     public void deleteSubgroup(final UUID subgroupId, final UUID ownerId) {
-        subgroupRepository.delete(getRequiredSubgroupEntity(subgroupId, ownerId));
+        hierarchyDeletionService.deleteSubgroupWithDescendants(
+                getRequiredSubgroupEntity(subgroupId, ownerId));
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 
