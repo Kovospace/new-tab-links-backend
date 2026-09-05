@@ -73,4 +73,15 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
      * @return the user's refresh tokens, empty when there are none
      */
     List<RefreshTokenEntity> findAllByUserId(UUID userId);
+
+    /**
+     * Lists every token issued to one device, revoked ones included.
+     *
+     * <p>Used when one installation takes a device row over from another: the tokens the taker
+     * already holds have to move with it, or the row they point at disappears under them.</p>
+     *
+     * @param deviceId identifier of the device
+     * @return the device's tokens, empty when it has none
+     */
+    List<RefreshTokenEntity> findAllByDeviceId(UUID deviceId);
 }

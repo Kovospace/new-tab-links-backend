@@ -96,6 +96,11 @@ public class SecurityConfiguration {
      *       of the CORS-safelisted content types and therefore triggers a preflight.</li>
      *   <li>{@link ClientRequestHeaders#DEVICE_NAME} - read by the three endpoints that issue
      *       tokens, to label a row in the user's device list.</li>
+     *   <li>{@link ClientRequestHeaders#INSTALLATION_ID} - read by the same three endpoints, and
+     *       what actually identifies the device the names merely label. Sent by the extension
+     *       rather than the website, but listed here for the same reason as the rest: a browser
+     *       will not send a header the preflight has not allowed, and the extension's calls are
+     *       ordinary cross-origin requests.</li>
      *   <li>{@link ClientRequestHeaders#FRONTEND_API_KEY} - the website's shared key, demanded by
      *       {@link FrontendApiKeyAuthenticationFilter} on the endpoints reserved for the site.
      *       Omitting it here would not merely weaken the guard, it would make the guarded
@@ -120,6 +125,7 @@ public class SecurityConfiguration {
             "Authorization",
             "Content-Type",
             ClientRequestHeaders.DEVICE_NAME,
+            ClientRequestHeaders.INSTALLATION_ID,
             ClientRequestHeaders.FRONTEND_API_KEY,
             ClientRequestHeaders.VISITOR_TOKEN);
 

@@ -189,6 +189,39 @@ long descriptive names over short cryptic ones, short methods, small classes, no
 - `gh` is installed and authenticated as **K0V0** over SSH, so a PR can be opened directly.
   Opening one is still the user's call to make, like any push.
 
+## The schema is owned by another repository
+
+`new-tab-links-migrations` owns the database schema. This application never migrates its own —
+`spring.flyway.enabled=false`, and two things migrating one schema is a race.
+
+- **Remote:** `git@github.com:Kovospace/new-tab-links-migrations.git`
+- **Local checkout:** `/home/kovo/IdeaProjects/new-tab-links-migrations`, already granted through
+  `permissions.additionalDirectories`. Work with it through `git -C … <cmd>`, not `cd`.
+- `sql/V<n>__<description>.sql` is **append-only**. Flyway checksums an applied migration and
+  refuses to run when one has changed; CI enforces it against the newest tag.
+- **The image tag is the schema version.** A migration is only usable once its image is built and
+  the deployment pinned to it, and the Maven property `flyway.migrations.schema.version` must be
+  bumped in the same commit that starts depending on it. Deployed environments run
+  `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`, so a mismatch stops the pod instead of corrupting
+  data.
+
+**Read `sql/` before claiming anything about how the database behaves.** A schema Hibernate
+generates for itself is *not* equivalent to the migrated one, and the difference is not visible
+from this repository:
+
+- The migrated schema declares `ON DELETE CASCADE` throughout the hierarchy (and
+  `ON DELETE SET NULL` for `link.subgroup_id`); a Hibernate-generated one has no delete rules at
+  all, because no entity maps the parent side of any of those relations.
+- `validate` checks tables, columns and types. It does **not** check foreign key delete rules,
+  unique constraints or indexes — so a rule that exists only in `sql/` is a rule nothing in this
+  repository verifies, and a rule dropped there fails at runtime with nothing failing at startup.
+- Consequently `ddl-auto=update` against a local Postgres reproduces neither. Behaviour verified
+  that way says nothing about production. Run the migration image locally to get a schema that
+  behaves like it.
+
+Changes here are ordinary work, unlike the GitOps repo — but shipping one is a release sequence:
+migration image first, backend after.
+
 ## Deployment
 
 CI builds the image and commits its tag to a GitOps repository; Argo CD rolls it out. Nothing in
@@ -241,9 +274,10 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 - **Reordering has no endpoint of its own**, but is no longer unreachable: the CRUD update
   methods still leave `position` alone deliberately, and the sync push is what sets it. A
   reorder made on the website would still need one.
-- **`ddl-auto=update`** is a local-development convenience only. The migrations repository now
-  exists and its image runs as an init container, so deployed environments must set
-  `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`.
+- **`ddl-auto=update`** is a local-development convenience only, and not a faithful one — it
+  builds a schema with no foreign key delete rules, where the migrated schema cascades. Deployed
+  environments must set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`. See *The schema is owned by
+  another repository* above.
 
 ## Agents
 

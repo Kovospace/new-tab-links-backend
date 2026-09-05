@@ -12,9 +12,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
+import com.kovospace.newtablinks.common.config.ClientRequestHeaders;
+import com.kovospace.newtablinks.user.dtos.DeviceRenameRequestDto;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -61,6 +69,66 @@ public class UserDeviceController {
     public List<UserDeviceDto> listMyDevices() {
         return userDeviceService.findDevicesOfUser(
                 authenticatedUserProvider.getAuthenticatedUserId());
+    }
+
+    /**
+     * Renames one device.
+     *
+     * @param deviceId      identifier of the device to rename
+     * @param renameRequest the new label
+     * @return an empty response
+     */
+    @PatchMapping("/{deviceId}")
+    @Operation(summary = "Rename one device",
+            description = "Changes the label only. A device is identified by the installation "
+                    + "that reported it, so two devices may share a name without merging, and "
+                    + "duplicates are neither refused nor reported here.")
+    @ApiResponse(responseCode = "204", description = "The device was renamed")
+    @ApiResponse(responseCode = "401", description = "No valid access token was presented",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "404", description = "No such device belongs to this account",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    public ResponseEntity<Void> renameDevice(
+            @PathVariable final UUID deviceId,
+            @Valid @RequestBody final DeviceRenameRequestDto renameRequest) {
+
+        userDeviceService.renameDevice(
+                deviceId,
+                authenticatedUserProvider.getAuthenticatedUserId(),
+                renameRequest.name());
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Hands one device over to the installation making the request.
+     *
+     * @param deviceId       identifier of the device to take over
+     * @param installationId installation making the request
+     * @return an empty response
+     */
+    @PostMapping("/{deviceId}/take-over")
+    @Operation(summary = "Take one device over for this installation",
+            description = "For a reinstall: this installation adopts the device row the user "
+                    + "recognises, keeping its history and the date it was first seen. The "
+                    + "installation that held it is signed out, and the row this one was given "
+                    + "when it signed in is removed. Repeating it is harmless.")
+    @ApiResponse(responseCode = "204", description = "The device now belongs to this installation")
+    @ApiResponse(responseCode = "401", description = "No valid access token was presented",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "404", description = "No such device belongs to this account",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    public ResponseEntity<Void> takeOverDevice(
+            @PathVariable final UUID deviceId,
+            @RequestHeader(value = ClientRequestHeaders.INSTALLATION_ID, required = false)
+                    final String installationId) {
+
+        userDeviceService.takeOverDevice(
+                deviceId,
+                authenticatedUserProvider.getAuthenticatedUserId(),
+                ClientDescriptionDto.from(null, null, installationId).installationId());
+
+        return ResponseEntity.noContent().build();
     }
 
     /**

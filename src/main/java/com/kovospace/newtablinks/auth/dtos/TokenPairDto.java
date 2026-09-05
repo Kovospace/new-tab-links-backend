@@ -16,6 +16,7 @@ import java.util.UUID;
  * @param refreshToken          opaque token used to obtain the next pair
  * @param userId                identifier of the authenticated user
  * @param username              name of the authenticated user
+ * @param deviceId              identifier of the device row this sign-in was recorded against
  * @since 0.0.2
  */
 @Schema(description = "Access and refresh tokens issued to a signed-in client")
@@ -34,5 +35,8 @@ public record TokenPairDto(
         UUID userId,
 
         @Schema(description = "Name of the authenticated user", example = "kovo")
-        String username) {
+        String username,
+
+        @Schema(description = "Identifier of the device this sign-in was recorded against")
+        UUID deviceId) {
 }

@@ -18,10 +18,19 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Profile, environment, group, subgroup and link form one containment hierarchy, and every
  * child names its parent through a non-null foreign key. No entity declares the reverse
- * association, so nothing cascades: deleting a profile that still owns environments, or a group
- * that still owns links, is a constraint violation that fails at flush time - and because a
- * pushed batch is applied in one transaction, that one violation used to roll back every other
- * change the device had sent with it.</p>
+ * association, so nothing cascades in the mapping. Deleting a parent used to work anyway, but
+ * only because of a rule written somewhere this code cannot see: the migrated schema declares
+ * {@code ON DELETE CASCADE} on each of those keys, and the database was quietly doing the work.
+ * </p>
+ *
+ * <p>That is not a dependency worth keeping implicit. The schema lives in its own repository,
+ * {@code new-tab-links-migrations}, and can be changed without this one being rebuilt; the
+ * application runs {@code ddl-auto=validate}, which checks columns and types but <em>not</em>
+ * foreign key delete rules, so dropping the cascade would break deletion with nothing failing at
+ * startup to say so. Locally the mismatch is already real: a schema Hibernate generates itself
+ * has no delete rules at all, so the same code that works deployed raises a constraint violation
+ * on a developer's machine - and inside a pushed batch, applied in one transaction, that one
+ * violation takes every other change the device sent with it.</p>
  *
  * <p>The alternative would have been {@code @OneToMany(orphanRemoval = true)} on each parent.
  * That was not taken: it makes every module's entity depend on the module below it in both

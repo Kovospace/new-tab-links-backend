@@ -18,9 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Seven tables carry a non-null foreign key to a user - profiles, environments, refresh
  * tokens, devices, emailed tokens, single use codes and linked identities - and none of them is
- * mapped from the user's side, so nothing cascades. Deleting the user row on its own was a
- * constraint violation for every account that had ever signed in, which is to say all of them.
- * The delete endpoint therefore answered 500 and the account survived.</p>
+ * mapped from the user's side. Deleting the user row on its own therefore relied entirely on the
+ * migrated schema's {@code ON DELETE CASCADE}, for the same reason and with the same risk set out
+ * on {@link HierarchyDeletionService}: the rule lives in another repository, {@code validate}
+ * does not check it, and a schema Hibernate generates itself does not have it, so the delete
+ * fails outright on a developer's machine.</p>
  *
  * <p>Two orderings matter and neither is obvious from the user table alone. A refresh token
  * names the device it was issued to as well as the user, so tokens go before devices. And an
