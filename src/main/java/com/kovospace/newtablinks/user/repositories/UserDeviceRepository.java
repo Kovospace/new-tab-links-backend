@@ -32,6 +32,18 @@ public interface UserDeviceRepository extends JpaRepository<UserDeviceEntity, UU
      * @param userId identifier of the owning account
      * @return the devices, empty when there are none
      */
+    /**
+     * Finds the device an installation reported, whatever it currently calls itself.
+     *
+     * <p>This is the identity lookup. The name-based one below it is the fallback for clients
+     * that report no installation.</p>
+     *
+     * @param userId         identifier of the owning user
+     * @param installationId identifier the client installation minted for itself
+     * @return the device, or an empty optional when this installation is new to the account
+     */
+    Optional<UserDeviceEntity> findByUserIdAndInstallationId(UUID userId, UUID installationId);
+
     List<UserDeviceEntity> findAllByUserIdOrderByLastUsedAtDesc(UUID userId);
 
     /**

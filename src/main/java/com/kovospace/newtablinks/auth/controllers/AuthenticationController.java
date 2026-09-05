@@ -64,6 +64,7 @@ public class AuthenticationController {
      * and the two lists must not drift.</p>
      */
     private static final String DEVICE_NAME_HEADER = ClientRequestHeaders.DEVICE_NAME;
+    private static final String INSTALLATION_ID_HEADER = ClientRequestHeaders.INSTALLATION_ID;
 
     /**
      * Wording returned to every registration attempt, successful or not.
@@ -235,6 +236,8 @@ public class AuthenticationController {
      *
      * @param loginRequest the submitted credentials
      * @param deviceName   optional name of the machine, for the user's device list
+     * @param installationId optional identifier of the client installation, which is what
+     *                       actually identifies the device
      * @param userAgent    used to name the browser in the user's device list
      * @return the issued token pair
      */
@@ -246,10 +249,12 @@ public class AuthenticationController {
     public TokenPairDto login(
             @Valid @RequestBody final LoginRequestDto loginRequest,
             @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
+            @RequestHeader(value = INSTALLATION_ID_HEADER, required = false)
+                    final String installationId,
             @RequestHeader(value = "User-Agent", required = false) final String userAgent) {
 
         return authenticationService.login(
-                loginRequest, ClientDescriptionDto.from(deviceName, userAgent));
+                loginRequest, ClientDescriptionDto.from(deviceName, userAgent, installationId));
     }
 
     /**
@@ -288,6 +293,8 @@ public class AuthenticationController {
      *
      * @param redemptionRequest the code received on the website's callback page
      * @param deviceName        optional name of the machine, for the user's device list
+     * @param installationId    optional identifier of the client installation, which is what
+     *                          actually identifies the device
      * @param userAgent         used to name the browser in the user's device list
      * @return the issued token pair
      */
@@ -301,12 +308,14 @@ public class AuthenticationController {
     public TokenPairDto exchangeSessionHandoffCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,
             @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
+            @RequestHeader(value = INSTALLATION_ID_HEADER, required = false)
+                    final String installationId,
             @RequestHeader(value = "User-Agent", required = false) final String userAgent) {
 
         return singleUseCodeService.redeemCode(
                 redemptionRequest.code(),
                 SingleUseCodePurpose.WEB_SESSION_HANDOFF,
-                ClientDescriptionDto.from(deviceName, userAgent));
+                ClientDescriptionDto.from(deviceName, userAgent, installationId));
     }
 
     /**
@@ -335,6 +344,8 @@ public class AuthenticationController {
      *
      * @param redemptionRequest the code the user typed
      * @param deviceName        optional name of the machine, for the user's device list
+     * @param installationId    optional identifier of the client installation, which is what
+     *                          actually identifies the device
      * @param userAgent         used to name the browser in the user's device list
      * @return the issued token pair
      */
@@ -348,11 +359,13 @@ public class AuthenticationController {
     public TokenPairDto exchangeExtensionConnectCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,
             @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
+            @RequestHeader(value = INSTALLATION_ID_HEADER, required = false)
+                    final String installationId,
             @RequestHeader(value = "User-Agent", required = false) final String userAgent) {
 
         return singleUseCodeService.redeemCode(
                 redemptionRequest.code(),
                 SingleUseCodePurpose.EXTENSION_CONNECT,
-                ClientDescriptionDto.from(deviceName, userAgent));
+                ClientDescriptionDto.from(deviceName, userAgent, installationId));
     }
 }

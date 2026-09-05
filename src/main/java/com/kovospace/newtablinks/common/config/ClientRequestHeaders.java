@@ -26,6 +26,22 @@ public final class ClientRequestHeaders {
     public static final String DEVICE_NAME = "X-Device-Name";
 
     /**
+     * Header carrying the identifier a client installation minted for itself.
+     *
+     * <p>Optional, and like {@link #DEVICE_NAME} never trusted for anything: it names a row in
+     * the caller's own device list and nothing else. What it is good for is being <em>stable and
+     * distinct</em>, which the names are not - the extension builds its device name from
+     * {@code navigator.platform}, which is frozen and names the operating system, and Chromium
+     * forks impersonate Chrome in the user agent on purpose. Two Chromium browsers on one machine
+     * are indistinguishable by name and used to collapse into a single device.</p>
+     *
+     * <p>Sent by the extension, which has minted one per installation since synchronisation
+     * arrived. Not sent by the website: a website is not an installation, and its device rows are
+     * still identified by name.</p>
+     */
+    public static final String INSTALLATION_ID = "X-Installation-Id";
+
+    /**
      * Header the website presents on the endpoints reserved for it.
      *
      * <p>Currently only
