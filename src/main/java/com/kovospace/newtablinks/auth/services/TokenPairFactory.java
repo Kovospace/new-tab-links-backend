@@ -96,6 +96,7 @@ public class TokenPairFactory {
                 accessTokenIssuer.getAccessTokenLifetimeSeconds(),
                 rawRefreshToken,
                 user.getId(),
-                user.getUsername());
+                user.getUsername(),
+                device.getId());
     }
 }

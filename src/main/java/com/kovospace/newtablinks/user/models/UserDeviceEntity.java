@@ -144,6 +144,20 @@ public class UserDeviceEntity extends AbstractAuditableEntity {
     }
 
     /**
+     * Moves this device row to a different installation, whoever held it before.
+     *
+     * <p>Separate from {@link #attributeToInstallation(UUID)}, which only ever fills a blank, and
+     * deliberately so: filling a blank is a migration and can happen on any sign-in, whereas
+     * this discards an existing owner and may only happen when a user has asked for it. One
+     * method doing both would make the destructive case reachable by accident.</p>
+     *
+     * @param newInstallationId installation this row now belongs to
+     */
+    public void reassignToInstallation(final UUID newInstallationId) {
+        this.installationId = newInstallationId;
+    }
+
+    /**
      * Replaces the labels, so a device that has been renamed or upgraded stays recognisable.
      *
      * <p>Only meaningful once identity is the installation: while the names <em>were</em> the

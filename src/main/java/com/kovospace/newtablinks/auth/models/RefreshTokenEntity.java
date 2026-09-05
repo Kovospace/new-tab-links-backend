@@ -108,6 +108,19 @@ public class RefreshTokenEntity extends AbstractAuditableEntity {
     }
 
     /**
+     * Re-points this token at another device row.
+     *
+     * <p>Only for a take-over, where one installation adopts the device row another was using:
+     * the tokens the taker holds have to follow the row it keeps, or they would be left naming a
+     * row that is about to be deleted.</p>
+     *
+     * @param newDevice device this token now belongs to
+     */
+    public void moveToDevice(final UserDeviceEntity newDevice) {
+        this.device = newDevice;
+    }
+
+    /**
      * Tells whether the token may still be exchanged for an access token.
      *
      * @param now moment to judge against

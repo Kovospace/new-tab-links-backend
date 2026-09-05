@@ -207,6 +207,95 @@ public class UserDeviceService {
     }
 
     /**
+     * Renames a device.
+     *
+     * <p>Duplicate names are allowed and not checked for. A device is identified by the
+     * installation that reported it, so two devices sharing a label are still two devices and
+     * nothing about them merges - which is what lets a client offer a free-text name at all. A
+     * client that would rather its user avoided a duplicate can see the existing names in the
+     * device list and say so itself; that is a matter of presentation, not of correctness.</p>
+     *
+     * @param deviceId identifier of the device to rename
+     * @param userId   identifier of the account that must own it
+     * @param newName  what to call it from now on
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     */
+    @Transactional
+    public void renameDevice(final UUID deviceId, final UUID userId, final String newName) {
+        final UserDeviceEntity device = userDeviceRepository.findByIdAndUserId(deviceId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, deviceId));
+
+        device.relabel(newName, device.getBrowserName());
+        LOGGER.info("Device {} of account {} renamed", deviceId, userId);
+    }
+
+    /**
+     * Hands a device row over to the installation making the request.
+     *
+     * <p>This is what "I have reinstalled on this machine" means once a device is identified by
+     * its installation rather than by its name. The row the user recognises is kept, with its
+     * history and the date it was first seen; the installation that used to hold it is signed
+     * out, and the row this installation was given moments ago is removed, because it was only
+     * ever an accident of signing in before the user said which device this is.</p>
+     *
+     * <p>Order matters and none of it is interchangeable. The target's live tokens are revoked
+     * first, while they are still the only ones pointing at it - revoking after the move would
+     * sign the taker out of the session it is making the request with. The taker's tokens are
+     * then moved across, and only then is the emptied row safe to delete.</p>
+     *
+     * <p>The installation is reassigned <em>last</em>, after that delete has reached the
+     * database, and the flush that makes it do so is not removable. Both rows hold the taker's
+     * installation identifier for as long as the old one exists, and
+     * {@code uk_user_device_installation} permits one row per account and installation - so
+     * assigning it any earlier raises a duplicate key. That is what happens by default, because
+     * Hibernate orders every update ahead of every delete when it flushes.</p>
+     *
+     * @param targetDeviceId identifier of the device to take over
+     * @param userId         identifier of the account that must own it
+     * @param installationId installation making the request, taken from its header
+     * @throws ResourceNotFoundException when the target does not exist or is somebody else's
+     */
+    @Transactional
+    public void takeOverDevice(
+            final UUID targetDeviceId,
+            final UUID userId,
+            final UUID installationId) {
+
+        final UserDeviceEntity target = userDeviceRepository
+                .findByIdAndUserId(targetDeviceId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, targetDeviceId));
+
+        if (installationId == null || installationId.equals(target.getInstallationId())) {
+            // Either the caller has no installation identity to take anything over with, or it
+            // already owns the row. Both are a no-op rather than an error: repeating a take-over
+            // that already happened must not fail, because a client retrying after a lost
+            // response cannot tell the difference.
+            return;
+        }
+
+        final Optional<UserDeviceEntity> takersOwnRow =
+                userDeviceRepository.findByUserIdAndInstallationId(userId, installationId);
+
+        refreshTokenRepository.revokeAllLiveTokensOfDevice(target.getId(), Instant.now());
+
+        takersOwnRow.ifPresent(surrendered -> {
+            refreshTokenRepository.findAllByDeviceId(surrendered.getId())
+                    .forEach(token -> token.moveToDevice(target));
+            target.relabel(target.getDeviceName(), surrendered.getBrowserName());
+            userDeviceRepository.delete(surrendered);
+            // Frees the installation identifier before it is claimed again below. See the note
+            // on this method: without it the unique index rejects the pair while both rows hold
+            // it, because Hibernate orders every update ahead of every delete in a flush.
+            userDeviceRepository.flush();
+        });
+
+        target.reassignToInstallation(installationId);
+
+        LOGGER.info("Installation {} took over device {} of account {}",
+                installationId, targetDeviceId, userId);
+    }
+
+    /**
      * Signs one device out by revoking every token it holds.
      *
      * <p>The device itself is kept, so the history of where the account has been used survives
