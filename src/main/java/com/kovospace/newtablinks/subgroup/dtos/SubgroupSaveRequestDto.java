@@ -14,6 +14,8 @@ import java.util.UUID;
  * @param description      free text describing the subgroup, may be {@code null}
  * @param collapsed        whether the subgroup is folded away right now
  * @param defaultCollapsed whether the subgroup starts folded away on a freshly opened page
+ * @param catchLinksIntoTabGroup whether tabs navigating to the subgroup's links are pulled into
+ *                               its browser tab group
  * @since 0.0.1
  */
 @Schema(description = "Body accepted when creating or replacing a subgroup")
@@ -33,5 +35,9 @@ public record SubgroupSaveRequestDto(
 
         @Schema(description = "Whether the subgroup starts folded away on a freshly opened page",
                 example = "false")
-        boolean defaultCollapsed) {
+        boolean defaultCollapsed,
+
+        @Schema(description = "Whether tabs navigating to the subgroup's links are pulled into its "
+                + "browser tab group", example = "false")
+        boolean catchLinksIntoTabGroup) {
 }

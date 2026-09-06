@@ -134,6 +134,7 @@ public class SubgroupSynchronizationService {
         final SubgroupEntity newSubgroup = new SubgroupEntity(
                 parentGroup, values.name(), values.position(), values.collapseState());
         newSubgroup.setDescription(values.description());
+        newSubgroup.setCatchLinksIntoTabGroup(values.catchLinksIntoTabGroup());
 
         newSubgroup.setId(ClientAssignedIdentifierPolicy.chooseIdentifierForInsert(
                 requestedSubgroupId, subgroupRepository::existsById));
@@ -159,6 +160,7 @@ public class SubgroupSynchronizationService {
         existingSubgroup.setDescription(values.description());
         existingSubgroup.setCollapsed(values.collapseState().collapsed());
         existingSubgroup.setDefaultCollapsed(values.collapseState().defaultCollapsed());
+        existingSubgroup.setCatchLinksIntoTabGroup(values.catchLinksIntoTabGroup());
         existingSubgroup.setPosition(values.position());
         return existingSubgroup;
     }

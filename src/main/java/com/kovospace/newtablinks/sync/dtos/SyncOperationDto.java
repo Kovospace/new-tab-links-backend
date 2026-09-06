@@ -34,6 +34,8 @@ import java.util.UUID;
  * @param faviconUrl       cached favicon address, for a link
  * @param collapsed        whether a subgroup is folded away right now
  * @param defaultCollapsed whether a subgroup starts folded away
+ * @param catchLinksIntoTabGroup whether tabs navigating to a subgroup's links are pulled into its
+ *                               browser tab group
  * @param position         zero based position among the record's siblings
  * @since 0.0.6
  */
@@ -82,6 +84,10 @@ public record SyncOperationDto(
 
         @Schema(description = "Whether a subgroup starts folded away", example = "false")
         Boolean defaultCollapsed,
+
+        @Schema(description = "Whether tabs navigating to a subgroup's links are pulled into its "
+                + "browser tab group", example = "false")
+        Boolean catchLinksIntoTabGroup,
 
         @Schema(description = "Zero based position among the record's siblings", example = "0")
         Integer position) {

@@ -11,13 +11,16 @@ import com.kovospace.newtablinks.subgroup.models.SubgroupCollapseState;
  *
  * @param name          title shown on the subgroup header
  * @param description   free text describing the subgroup, may be {@code null}
- * @param collapseState how the subgroup is folded now and how it starts out
- * @param position      zero based position among the group's subgroups
+ * @param collapseState          how the subgroup is folded now and how it starts out
+ * @param catchLinksIntoTabGroup whether tabs navigating to the subgroup's links are pulled into
+ *                               its browser tab group
+ * @param position               zero based position among the group's subgroups
  * @since 0.0.6
  */
 public record SubgroupSynchronizedValuesDto(
         String name,
         String description,
         SubgroupCollapseState collapseState,
+        boolean catchLinksIntoTabGroup,
         int position) {
 }

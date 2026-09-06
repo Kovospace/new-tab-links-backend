@@ -14,6 +14,8 @@ import java.util.UUID;
  * @param position         zero based position among the group's subgroups
  * @param collapsed        whether the subgroup is folded away right now
  * @param defaultCollapsed whether the subgroup starts folded away on a freshly opened page
+ * @param catchLinksIntoTabGroup whether tabs navigating to the subgroup's links are pulled into
+ *                               its browser tab group
  * @param createdAt     when the subgroup was created
  * @param updatedAt     when the subgroup was last changed
  * @since 0.0.1
@@ -31,6 +33,9 @@ public record SubgroupDto(
         @Schema(description = "Whether the subgroup starts folded away on a freshly opened page",
                 example = "false")
         boolean defaultCollapsed,
+        @Schema(description = "Whether tabs navigating to the subgroup's links are pulled into its "
+                + "browser tab group", example = "false")
+        boolean catchLinksIntoTabGroup,
         @Schema(description = "When the subgroup was created") Instant createdAt,
         @Schema(description = "When the subgroup was last changed") Instant updatedAt) {
 }

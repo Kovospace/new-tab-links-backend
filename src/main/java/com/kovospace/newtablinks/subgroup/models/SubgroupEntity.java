@@ -64,6 +64,17 @@ public class SubgroupEntity extends AbstractAuditableEntity {
     private boolean defaultCollapsed;
 
     /**
+     * Whether tabs navigating to this subgroup's links are pulled into its browser tab group.
+     *
+     * <p>A property of the subgroup rather than of the device that switched it on, which is why it
+     * is stored here and travels with the row. Not a constructor argument: like the description, it
+     * is off until somebody sets it, and a fifth positional boolean would be one more thing to
+     * transpose by accident.</p>
+     */
+    @Column(name = "catch_links_into_tab_group", nullable = false)
+    private boolean catchLinksIntoTabGroup;
+
+    /**
      * Required by JPA.
      */
     protected SubgroupEntity() {
@@ -196,5 +207,23 @@ public class SubgroupEntity extends AbstractAuditableEntity {
      */
     public void setDefaultCollapsed(final boolean defaultCollapsed) {
         this.defaultCollapsed = defaultCollapsed;
+    }
+
+    /**
+     * Tells whether tabs navigating to this subgroup's links are pulled into its tab group.
+     *
+     * @return {@code true} when such tabs are caught
+     */
+    public boolean isCatchLinksIntoTabGroup() {
+        return catchLinksIntoTabGroup;
+    }
+
+    /**
+     * Sets whether tabs navigating to this subgroup's links are pulled into its tab group.
+     *
+     * @param catchLinksIntoTabGroup {@code true} to catch such tabs
+     */
+    public void setCatchLinksIntoTabGroup(final boolean catchLinksIntoTabGroup) {
+        this.catchLinksIntoTabGroup = catchLinksIntoTabGroup;
     }
 }
