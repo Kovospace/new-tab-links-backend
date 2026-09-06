@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.user.services;
 
 import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
+import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.user.dtos.UserDeviceDto;
@@ -315,5 +316,48 @@ public class UserDeviceService {
 
         LOGGER.info("Signed out device {} of account {}, revoking {} token(s)",
                 deviceId, userId, revoked);
+    }
+
+    /**
+     * Signs one device out and removes it from the account's list for good.
+     *
+     * <p>The other half of {@link #signOutDevice(UUID, UUID)}, and the destructive one: where
+     * signing out ends a session and keeps the record of it, this discards the record as well, so
+     * the device stops being listed at all. It is not reversible - the history that row carried,
+     * the date it was first seen included, is gone - and it is not a way of hiding a device from
+     * whoever is using it: signing in again from the same installation simply records a new row.
+     * </p>
+     *
+     * <p>A device still holding a live session may be forgotten, and is signed out by the same
+     * act, because the tokens go with the row. Nothing here refuses that, or asks whether the row
+     * is the one backing the caller's own request: an access token names the account and never
+     * the device it was issued to, so the question cannot be answered, and a user who asks for
+     * this device to be forgotten while sitting at it has asked for exactly what happens - their
+     * refresh token disappears and their session lasts until its access token expires.</p>
+     *
+     * <p>The tokens are deleted explicitly rather than left to the foreign key, for the reason
+     * set out on {@code AccountDeletionService}: {@code refresh_token.device_id} cascades only in
+     * the migrated schema, nothing on this side maps the relation, {@code ddl-auto=validate} does
+     * not check delete rules, and a schema Hibernate generates for itself has none - so relying on
+     * the cascade would fail on a developer's machine and pass in production. Deleting them is
+     * also strictly more than revoking them, which is why nothing revokes first.</p>
+     *
+     * @param deviceId identifier of the device to sign out and delete
+     * @param userId   identifier of the account that must own it
+     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     */
+    @Transactional
+    public void signOutAndForgetDevice(final UUID deviceId, final UUID userId) {
+        final UserDeviceEntity device = userDeviceRepository.findByIdAndUserId(deviceId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, deviceId));
+
+        final List<RefreshTokenEntity> tokensIssuedToDevice =
+                refreshTokenRepository.findAllByDeviceId(device.getId());
+
+        refreshTokenRepository.deleteAll(tokensIssuedToDevice);
+        userDeviceRepository.delete(device);
+
+        LOGGER.info("Forgot device {} of account {}, deleting it and {} token(s)",
+                deviceId, userId, tokensIssuedToDevice.size());
     }
 }

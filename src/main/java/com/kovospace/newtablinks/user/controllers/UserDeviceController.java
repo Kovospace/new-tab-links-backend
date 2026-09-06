@@ -5,6 +5,7 @@ import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
 import com.kovospace.newtablinks.user.dtos.UserDeviceDto;
 import com.kovospace.newtablinks.user.services.UserDeviceService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -132,23 +134,50 @@ public class UserDeviceController {
     }
 
     /**
-     * Signs one device out.
+     * Signs one device out, and deletes it as well when the caller asks for that.
      *
-     * @param deviceId identifier of the device to sign out
+     * <p>Which of the two operations is performed is the caller's to state, so this method routes
+     * to one service method or the other rather than passing the flag on. Neither operation is
+     * expressible in terms of the other: one deliberately keeps the row, the other deliberately
+     * destroys it.</p>
+     *
+     * @param deviceId        identifier of the device to sign out
+     * @param deleteAndForget whether to delete the device as well as ending its session
      * @return an empty response
      */
     @DeleteMapping("/{deviceId}")
-    @Operation(summary = "Sign one device out",
-            description = "Revokes every token that device holds. The device stays in the list, "
-                    + "because the history of where the account has been used is worth keeping.")
-    @ApiResponse(responseCode = "204", description = "The device was signed out")
+    @Operation(summary = "Sign one device out, and optionally forget it entirely",
+            description = "Two behaviours on one endpoint, chosen by `deleteAndForget`.\n\n"
+                    + "Absent or `false` - the behaviour this endpoint has always had: every "
+                    + "token the device holds is revoked and the device stays in the list, "
+                    + "because the history of where the account has been used is worth keeping.\n\n"
+                    + "`true` - the device is deleted along with its tokens and stops appearing "
+                    + "in the list at all. This is permanent: the row's history, the date it was "
+                    + "first seen included, goes with it, and signing in from that browser again "
+                    + "records a new device rather than restoring this one. It is allowed on a "
+                    + "device that still holds a live session, which the same call signs out - "
+                    + "including the device the caller is making the request from, whose session "
+                    + "then lasts only until its access token expires.")
+    @ApiResponse(responseCode = "204",
+            description = "The device was signed out, and deleted when `deleteAndForget` was set")
     @ApiResponse(responseCode = "401", description = "No valid access token was presented",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No such device belongs to this account",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    public ResponseEntity<Void> signOutDevice(@PathVariable final UUID deviceId) {
-        userDeviceService.signOutDevice(
-                deviceId, authenticatedUserProvider.getAuthenticatedUserId());
+    public ResponseEntity<Void> signOutOrForgetDevice(
+            @PathVariable final UUID deviceId,
+            @Parameter(description = "Delete the device as well as signing it out, removing it "
+                    + "from the list for good. Defaults to false, which signs out and keeps it.")
+            @RequestParam(defaultValue = "false") final boolean deleteAndForget) {
+
+        final UUID accountId = authenticatedUserProvider.getAuthenticatedUserId();
+
+        if (deleteAndForget) {
+            userDeviceService.signOutAndForgetDevice(deviceId, accountId);
+        } else {
+            userDeviceService.signOutDevice(deviceId, accountId);
+        }
+
         return ResponseEntity.noContent().build();
     }
 }
