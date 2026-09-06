@@ -1,7 +1,10 @@
 package com.kovospace.newtablinks.user.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -11,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
+import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.user.models.UserDeviceEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserDeviceRepository;
@@ -31,6 +35,10 @@ import org.mockito.InOrder;
  * from a frozen {@code navigator.platform} and Chromium forks impersonate Chrome in the user
  * agent - so what matters here is that two installations sending identical names are two devices,
  * and that a client sending no installation at all still behaves as it always did.</p>
+ *
+ * <p>It also covers the two ways a device leaves a session behind, which are deliberately not the
+ * same operation: signing out revokes and keeps the row, forgetting deletes both the row and the
+ * tokens naming it.</p>
  *
  * @since 0.0.7
  */
@@ -260,6 +268,88 @@ class UserDeviceServiceTest {
         assertThat(device.getDeviceName()).isEqualTo("Work desktop");
         assertThat(device.getBrowserName()).isEqualTo(SHARED_BROWSER_NAME);
         assertThat(device.getInstallationId()).isEqualTo(installation);
+    }
+
+    @Test
+    @DisplayName("signs a device out and keeps its row when no deletion was asked for")
+    void signOutRevokesTheTokensAndLeavesTheDeviceListed() {
+
+        final UserDeviceEntity device =
+                deviceOf(UUID.randomUUID(), SHARED_DEVICE_NAME, SHARED_BROWSER_NAME);
+
+        when(userDeviceRepository.findByIdAndUserId(device.getId(), ACCOUNT_ID))
+                .thenReturn(Optional.of(device));
+
+        userDeviceService.signOutDevice(device.getId(), ACCOUNT_ID);
+
+        // The history of where the account has been used is the whole point of the row, so
+        // signing out must revoke and never delete - neither the device nor the token rows.
+        verify(refreshTokenRepository).revokeAllLiveTokensOfDevice(eq(device.getId()), any());
+        verify(userDeviceRepository, never()).delete(any(UserDeviceEntity.class));
+        verify(refreshTokenRepository, never()).deleteAll(anyIterable());
+    }
+
+    @Test
+    @DisplayName("deletes the device and its tokens when asked to forget it")
+    void forgetDeletesTheTokensBeforeTheDeviceTheyPointAt() {
+
+        final UserDeviceEntity device =
+                deviceOf(UUID.randomUUID(), SHARED_DEVICE_NAME, SHARED_BROWSER_NAME);
+        final List<RefreshTokenEntity> tokens = List.of(mock(RefreshTokenEntity.class));
+
+        when(userDeviceRepository.findByIdAndUserId(device.getId(), ACCOUNT_ID))
+                .thenReturn(Optional.of(device));
+        when(refreshTokenRepository.findAllByDeviceId(device.getId())).thenReturn(tokens);
+
+        userDeviceService.signOutAndForgetDevice(device.getId(), ACCOUNT_ID);
+
+        // Deleting the tokens explicitly, and first, is not decoration: the cascade that would
+        // otherwise do it exists only in the migrated schema, and a token still naming the device
+        // holds it in place on a schema Hibernate generated for itself.
+        final InOrder order = inOrder(refreshTokenRepository, userDeviceRepository);
+        order.verify(refreshTokenRepository).deleteAll(tokens);
+        order.verify(userDeviceRepository).delete(device);
+    }
+
+    @Test
+    @DisplayName("forgets a device that is still signed in, signing it out by the same act")
+    void forgetIsAllowedOnADeviceThatStillHoldsASession() {
+
+        final UserDeviceEntity device =
+                deviceOf(UUID.randomUUID(), SHARED_DEVICE_NAME, SHARED_BROWSER_NAME);
+        final RefreshTokenEntity liveToken = mock(RefreshTokenEntity.class);
+
+        when(userDeviceRepository.findByIdAndUserId(device.getId(), ACCOUNT_ID))
+                .thenReturn(Optional.of(device));
+        when(refreshTokenRepository.findAllByDeviceId(device.getId()))
+                .thenReturn(List.of(liveToken));
+
+        userDeviceService.signOutAndForgetDevice(device.getId(), ACCOUNT_ID);
+
+        // A live session is not a reason to refuse: the flag is the user's stated intent, and the
+        // session ends because the token goes with the row rather than being revoked beforehand.
+        verify(userDeviceRepository).delete(device);
+        verify(refreshTokenRepository).deleteAll(List.of(liveToken));
+        verify(refreshTokenRepository, never()).revokeAllLiveTokensOfDevice(any(), any());
+    }
+
+    @Test
+    @DisplayName("refuses to forget a device belonging to another account, as a 404")
+    void forgetOfSomebodyElsesDeviceIsNotFound() {
+
+        final UUID somebodyElsesDevice = UUID.randomUUID();
+
+        when(userDeviceRepository.findByIdAndUserId(somebodyElsesDevice, ACCOUNT_ID))
+                .thenReturn(Optional.empty());
+
+        // Ownership is in the query, and a missing row and another account's row are answered
+        // identically - a 403 here would confirm the identifier names something real.
+        assertThatThrownBy(() ->
+                userDeviceService.signOutAndForgetDevice(somebodyElsesDevice, ACCOUNT_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(userDeviceRepository, never()).delete(any(UserDeviceEntity.class));
+        verify(refreshTokenRepository, never()).deleteAll(anyIterable());
     }
 
     /** A stored device with an identifier of its own, which take-over needs to tell rows apart. */
