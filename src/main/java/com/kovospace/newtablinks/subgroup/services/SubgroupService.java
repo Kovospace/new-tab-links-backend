@@ -114,13 +114,14 @@ public class SubgroupService {
                 new SubgroupCollapseState(saveRequest.collapsed(), saveRequest.defaultCollapsed()));
 
         newSubgroup.setDescription(saveRequest.description());
+        newSubgroup.setCatchLinksIntoTabGroup(saveRequest.catchLinksIntoTabGroup());
 
         userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(subgroupRepository.save(newSubgroup));
     }
 
     /**
-     * Updates the name, description and both folded states of an existing subgroup.
+     * Updates the name, description, both folded states and the tab group setting of a subgroup.
      *
      * @param subgroupId  identifier of the subgroup to update
      * @param saveRequest the values to store
@@ -139,6 +140,7 @@ public class SubgroupService {
         existingSubgroup.setDescription(saveRequest.description());
         existingSubgroup.setCollapsed(saveRequest.collapsed());
         existingSubgroup.setDefaultCollapsed(saveRequest.defaultCollapsed());
+        existingSubgroup.setCatchLinksIntoTabGroup(saveRequest.catchLinksIntoTabGroup());
         userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(existingSubgroup);
     }
