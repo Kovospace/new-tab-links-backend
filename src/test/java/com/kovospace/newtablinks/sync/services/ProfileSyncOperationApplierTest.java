@@ -35,6 +35,10 @@ import org.junit.jupiter.api.Test;
  * its synchronization baseline on the status code alone would record a rename as stored that never
  * was.</p>
  *
+ * <p>The profile's settings are read here too. They are boxed on the wire so that an operation
+ * about another kind of record can leave them out, and unboxing them is where a pushed
+ * {@code true} would be lost - or where the subgroup's flag next to them would be read instead.</p>
+ *
  * @since 0.0.7
  */
 class ProfileSyncOperationApplierTest {
@@ -100,7 +104,53 @@ class ProfileSyncOperationApplierTest {
         syncPushService.applyPushedOperations(push(rename), OWNER_ID);
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
-                rename.id(), OWNER_ID, new ProfileSynchronizedValuesDto("Work and study", 3));
+                rename.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work and study", false, 3));
+    }
+
+    @Test
+    @DisplayName("a pushed profile setting is carried through to the profile being stored")
+    void shouldPassThePushedDragAndDropSettingOn() {
+
+        final SyncOperationDto settingsChange =
+                upsertProfile(UUID.randomUUID(), "Work", 0, Boolean.TRUE);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(settingsChange), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                settingsChange.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", true, 0));
+    }
+
+    @Test
+    @DisplayName("a profile upsert that omits the setting switches it off rather than keeping it")
+    void shouldTreatAnOmittedDragAndDropSettingAsOff() {
+
+        // An extension build from before the settings dialog sends no such field, and an upsert
+        // replaces every synchronized field: there is no "unchanged" to express, exactly as with
+        // the subgroup's collapse flags.
+        final SyncOperationDto rename = upsertProfile(UUID.randomUUID(), "Work", 0, null);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(rename), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                rename.id(), OWNER_ID, new ProfileSynchronizedValuesDto("Work", false, 0));
+    }
+
+    @Test
+    @DisplayName("a profile does not take its setting from the subgroup's tab group flag")
+    void shouldNotReadTheSubgroupTabGroupFlagAsTheProfileSetting() {
+
+        final SyncOperationDto confusable =
+                upsertProfileCarryingTheSubgroupTabGroupFlag(UUID.randomUUID(), "Work", 0);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(confusable), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                confusable.id(), OWNER_ID, new ProfileSynchronizedValuesDto("Work", false, 0));
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -130,7 +180,8 @@ class ProfileSyncOperationApplierTest {
     }
 
     /**
-     * Builds a pushed profile upsert - the shape the extension sends a rename as.
+     * Builds a pushed profile upsert that says nothing about the profile's settings - the shape
+     * an extension build from before they existed sends a rename as.
      *
      * @param id       identifier of the profile
      * @param name     name to store, may be blank to exercise a refusal
@@ -140,10 +191,52 @@ class ProfileSyncOperationApplierTest {
     private SyncOperationDto upsertProfile(
             final UUID id, final String name, final Integer position) {
 
+        return upsertProfile(id, name, position, null);
+    }
+
+    /**
+     * Builds a pushed profile upsert carrying a settings flag.
+     *
+     * @param id                identifier of the profile
+     * @param name              name to store
+     * @param position          display position to store
+     * @param enableDragAndDrop the drag and drop setting as the operation carries it, {@code null}
+     *                          when the operation leaves it out
+     * @return the operation
+     */
+    private SyncOperationDto upsertProfile(
+            final UUID id,
+            final String name,
+            final Integer position,
+            final Boolean enableDragAndDrop) {
+
         return new SyncOperationDto(
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, position);
+                null, null, null, enableDragAndDrop, position);
+    }
+
+    /**
+     * Builds a pushed profile upsert carrying the <em>subgroup's</em> tab group flag and no
+     * settings flag of its own.
+     *
+     * <p>Only meaningful because {@link SyncOperationDto} is one flat shape covering every kind of
+     * record: both booleans are present on a profile operation, and reading the wrong one would
+     * look like working code.</p>
+     *
+     * @param id       identifier of the profile
+     * @param name     name to store
+     * @param position display position to store
+     * @return the operation
+     */
+    private SyncOperationDto upsertProfileCarryingTheSubgroupTabGroupFlag(
+            final UUID id, final String name, final Integer position) {
+
+        return new SyncOperationDto(
+                SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
+                null, null, null, null,
+                name, null, null, null, null,
+                null, null, Boolean.TRUE, null, position);
     }
 }

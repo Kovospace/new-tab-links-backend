@@ -51,6 +51,7 @@ public class ProfileSyncOperationApplier implements SyncOperationApplier {
 
         final ProfileSynchronizedValuesDto values = new ProfileSynchronizedValuesDto(
                 PushedOperationValues.requireSuppliedText(operation.name()),
+                PushedOperationValues.flagOrFalse(operation.enableDragAndDrop()),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
         return profileSynchronizationService.upsertProfileFromPushedOperation(

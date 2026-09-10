@@ -36,6 +36,8 @@ import java.util.UUID;
  * @param defaultCollapsed whether a subgroup starts folded away
  * @param catchLinksIntoTabGroup whether tabs navigating to a subgroup's links are pulled into its
  *                               browser tab group
+ * @param enableDragAndDrop      whether a profile lets its links and groups be rearranged by
+ *                               dragging
  * @param position         zero based position among the record's siblings
  * @since 0.0.6
  */
@@ -88,6 +90,10 @@ public record SyncOperationDto(
         @Schema(description = "Whether tabs navigating to a subgroup's links are pulled into its "
                 + "browser tab group", example = "false")
         Boolean catchLinksIntoTabGroup,
+
+        @Schema(description = "Whether a profile lets its links and groups be rearranged by "
+                + "dragging", example = "false")
+        Boolean enableDragAndDrop,
 
         @Schema(description = "Zero based position among the record's siblings", example = "0")
         Integer position) {

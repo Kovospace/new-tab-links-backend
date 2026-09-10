@@ -102,14 +102,14 @@ public class ProfileController {
     }
 
     /**
-     * Renames a profile.
+     * Updates the name and settings of a profile.
      *
      * @param profileId   identifier of the profile to update
      * @param saveRequest the values to store
      * @return the updated profile
      */
     @PutMapping("/{profileId}")
-    @Operation(summary = "Rename a profile")
+    @Operation(summary = "Update the name and settings of a profile")
     @ApiResponse(responseCode = "200", description = "The updated profile")
     @ApiResponse(responseCode = "400", description = "The request body failed validation",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
