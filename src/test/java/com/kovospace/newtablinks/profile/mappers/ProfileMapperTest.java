@@ -58,6 +58,40 @@ class ProfileMapperTest {
         assertThat(profileDto.enableDragAndDrop()).isTrue();
     }
 
+    @Test
+    @DisplayName("puts the dismissal of the tips into the shape a client pulls")
+    void carriesTheHideTipsSettingIntoTheDto() {
+
+        final ProfileEntity profile = profileWithDragAndDrop(false);
+        profile.setHideTips(true);
+
+        final ProfileDto profileDto = profileMapper.toDto(profile);
+
+        assertThat(profileDto.hideTips()).isTrue();
+    }
+
+    @Test
+    @DisplayName("reports the tips as shown rather than leaving the setting out")
+    void carriesTheHideTipsSettingEvenWhenItIsOff() {
+
+        final ProfileDto profileDto = profileMapper.toDto(profileWithDragAndDrop(false));
+
+        assertThat(profileDto.hideTips()).isFalse();
+    }
+
+    @Test
+    @DisplayName("keeps the two settings of a profile apart on the way out")
+    void doesNotConfuseTheTwoSettings() {
+
+        final ProfileEntity profile = profileWithDragAndDrop(true);
+        profile.setHideTips(false);
+
+        final ProfileDto profileDto = profileMapper.toDto(profile);
+
+        assertThat(profileDto.enableDragAndDrop()).isTrue();
+        assertThat(profileDto.hideTips()).isFalse();
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     /**

@@ -38,6 +38,8 @@ import java.util.UUID;
  *                               browser tab group
  * @param enableDragAndDrop      whether a profile lets its links and groups be rearranged by
  *                               dragging
+ * @param hideTips               whether a profile hides the tips shown on the new tab page
+ *                               background
  * @param color                  name of the Chrome tab group colour a subgroup is painted with,
  *                               absent when it has none
  * @param position         zero based position among the record's siblings
@@ -96,6 +98,10 @@ public record SyncOperationDto(
         @Schema(description = "Whether a profile lets its links and groups be rearranged by "
                 + "dragging", example = "false")
         Boolean enableDragAndDrop,
+
+        @Schema(description = "Whether a profile hides the tips shown on the new tab page "
+                + "background", example = "false")
+        Boolean hideTips,
 
         @Schema(description = "Name of the Chrome tab group colour a subgroup is painted with, "
                 + "one of the names Chrome accepts; absent leaves the subgroup without one",

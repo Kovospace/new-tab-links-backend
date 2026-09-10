@@ -59,6 +59,17 @@ public class ProfileEntity extends AbstractAuditableEntity {
     private boolean enableDragAndDrop;
 
     /**
+     * Whether this profile has dismissed the tips shown on the new tab page background.
+     *
+     * <p>The second of the profile's settings, and stored the same way as the first. Named for
+     * hiding rather than for showing because the column is {@code NOT NULL DEFAULT false}: every
+     * profile that existed before it did reads as {@code false}, and {@code false} therefore has
+     * to be the state those profiles are already in - tips visible.</p>
+     */
+    @Column(name = "hide_tips", nullable = false)
+    private boolean hideTips;
+
+    /**
      * Required by JPA.
      */
     protected ProfileEntity() {
@@ -138,5 +149,23 @@ public class ProfileEntity extends AbstractAuditableEntity {
      */
     public void setEnableDragAndDrop(final boolean enableDragAndDrop) {
         this.enableDragAndDrop = enableDragAndDrop;
+    }
+
+    /**
+     * Tells whether this profile hides the tips shown on the new tab page background.
+     *
+     * @return {@code true} when the tips have been dismissed and are not shown
+     */
+    public boolean isHideTips() {
+        return hideTips;
+    }
+
+    /**
+     * Sets whether this profile hides the tips shown on the new tab page background.
+     *
+     * @param hideTips {@code true} to keep the tips dismissed
+     */
+    public void setHideTips(final boolean hideTips) {
+        this.hideTips = hideTips;
     }
 }

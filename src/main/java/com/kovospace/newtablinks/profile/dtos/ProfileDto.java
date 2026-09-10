@@ -12,6 +12,7 @@ import java.util.UUID;
  * @param name      name shown on the profile switcher
  * @param position  zero based position among the owner's profiles
  * @param enableDragAndDrop whether the profile lets its links and groups be rearranged by dragging
+ * @param hideTips  whether the profile hides the tips shown on the new tab page background
  * @param createdAt when the profile was created
  * @param updatedAt when the profile was last changed
  * @since 0.0.6
@@ -25,6 +26,9 @@ public record ProfileDto(
         @Schema(description = "Whether the profile lets its links and groups be rearranged by "
                 + "dragging", example = "false")
         boolean enableDragAndDrop,
+        @Schema(description = "Whether the profile hides the tips shown on the new tab page "
+                + "background", example = "false")
+        boolean hideTips,
         @Schema(description = "When the profile was created") Instant createdAt,
         @Schema(description = "When the profile was last changed") Instant updatedAt) {
 }

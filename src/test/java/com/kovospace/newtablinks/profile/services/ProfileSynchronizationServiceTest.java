@@ -189,7 +189,7 @@ class ProfileSynchronizationServiceTest {
 
         profileSynchronizationService.upsertProfileFromPushedOperation(
                 profileId, OWNER_ID,
-                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, 0));
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, 0));
 
         assertThat(existingProfile.isEnableDragAndDrop()).isTrue();
     }
@@ -204,7 +204,7 @@ class ProfileSynchronizationServiceTest {
 
         profileSynchronizationService.upsertProfileFromPushedOperation(
                 profileId, OWNER_ID,
-                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, 0));
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, false, 0));
 
         // The whole point of an upsert replacing every synchronized field: switching the setting
         // off is a change like any other, and a device that never learns of it keeps dragging.
@@ -222,9 +222,71 @@ class ProfileSynchronizationServiceTest {
         final ProfileEntity storedProfile = profileSynchronizationService
                 .upsertProfileFromPushedOperation(
                         profileId, OWNER_ID,
-                        new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, 0));
+                        new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, 0));
 
         assertThat(storedProfile.isEnableDragAndDrop()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a pushed upsert stores the profile's dismissal of the tips")
+    void shouldStoreTheHideTipsSettingOfAnExistingProfile() {
+
+        final UUID profileId = UUID.randomUUID();
+        final ProfileEntity existingProfile = anExistingProfile(profileId, NAME_BEFORE_RENAME, 0);
+
+        profileSynchronizationService.upsertProfileFromPushedOperation(
+                profileId, OWNER_ID,
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, true, 0));
+
+        assertThat(existingProfile.isHideTips()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a pushed upsert brings the tips back when it carries the setting off")
+    void shouldClearTheHideTipsSettingWhenTheUpsertCarriesItOff() {
+
+        final UUID profileId = UUID.randomUUID();
+        final ProfileEntity existingProfile = anExistingProfile(profileId, NAME_BEFORE_RENAME, 0);
+        existingProfile.setHideTips(true);
+
+        profileSynchronizationService.upsertProfileFromPushedOperation(
+                profileId, OWNER_ID,
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, false, 0));
+
+        // Undismissing the tips is a change like any other, and reaches the other devices the
+        // same way dismissing them does.
+        assertThat(existingProfile.isHideTips()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a pushed upsert does not confuse the two settings of a profile")
+    void shouldKeepTheTwoProfileSettingsApart() {
+
+        final UUID profileId = UUID.randomUUID();
+        final ProfileEntity existingProfile = anExistingProfile(profileId, NAME_BEFORE_RENAME, 0);
+
+        profileSynchronizationService.upsertProfileFromPushedOperation(
+                profileId, OWNER_ID,
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, 0));
+
+        assertThat(existingProfile.isEnableDragAndDrop()).isTrue();
+        assertThat(existingProfile.isHideTips()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a profile inserted from a push keeps the tips setting the push carried")
+    void shouldStoreTheHideTipsSettingOnAnInsertedProfile() {
+
+        final UUID profileId = UUID.randomUUID();
+        anAccountWithoutThatProfile(profileId);
+        when(profileRepository.existsById(profileId)).thenReturn(false);
+
+        final ProfileEntity storedProfile = profileSynchronizationService
+                .upsertProfileFromPushedOperation(
+                        profileId, OWNER_ID,
+                        new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, true, 0));
+
+        assertThat(storedProfile.isHideTips()).isTrue();
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -237,7 +299,7 @@ class ProfileSynchronizationServiceTest {
      * @return the values a pushed upsert would carry
      */
     private ProfileSynchronizedValuesDto valuesRenaming(final String name, final int position) {
-        return new ProfileSynchronizedValuesDto(name, false, position);
+        return new ProfileSynchronizedValuesDto(name, false, false, position);
     }
 
     /**

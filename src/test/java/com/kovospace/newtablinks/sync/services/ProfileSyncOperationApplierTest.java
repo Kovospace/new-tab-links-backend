@@ -37,7 +37,8 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The profile's settings are read here too. They are boxed on the wire so that an operation
  * about another kind of record can leave them out, and unboxing them is where a pushed
- * {@code true} would be lost - or where the subgroup's flag next to them would be read instead.</p>
+ * {@code true} would be lost - or where the flag next to them, whether the subgroup's or the
+ * profile's other one, would be read instead.</p>
  *
  * @since 0.0.7
  */
@@ -105,7 +106,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work and study", false, 3));
+                new ProfileSynchronizedValuesDto("Work and study", false, false, 3));
     }
 
     @Test
@@ -120,7 +121,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 settingsChange.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", true, 0));
+                new ProfileSynchronizedValuesDto("Work", true, false, 0));
     }
 
     @Test
@@ -136,7 +137,8 @@ class ProfileSyncOperationApplierTest {
         syncPushService.applyPushedOperations(push(rename), OWNER_ID);
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
-                rename.id(), OWNER_ID, new ProfileSynchronizedValuesDto("Work", false, 0));
+                rename.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, false, 0));
     }
 
     @Test
@@ -150,7 +152,59 @@ class ProfileSyncOperationApplierTest {
         syncPushService.applyPushedOperations(push(confusable), OWNER_ID);
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
-                confusable.id(), OWNER_ID, new ProfileSynchronizedValuesDto("Work", false, 0));
+                confusable.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, false, 0));
+    }
+
+    @Test
+    @DisplayName("a pushed tips setting is carried through to the profile being stored")
+    void shouldPassThePushedHideTipsSettingOn() {
+
+        final SyncOperationDto tipsDismissed =
+                upsertProfileHidingTips(UUID.randomUUID(), "Work", 0, Boolean.TRUE);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(tipsDismissed), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                tipsDismissed.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, true, 0));
+    }
+
+    @Test
+    @DisplayName("a profile upsert that omits the tips setting shows the tips rather than keeping "
+            + "them hidden")
+    void shouldTreatAnOmittedHideTipsSettingAsOff() {
+
+        // An extension build from before the tips sends no such field, and an upsert replaces
+        // every synchronized field: there is no "unchanged" to express. Off means visible, which
+        // is why the flag is named for hiding.
+        final SyncOperationDto rename = upsertProfileHidingTips(UUID.randomUUID(), "Work", 0, null);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(rename), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                rename.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, false, 0));
+    }
+
+    @Test
+    @DisplayName("a profile does not take its tips setting from the drag and drop setting beside "
+            + "it")
+    void shouldNotReadTheDragAndDropSettingAsTheTipsSetting() {
+
+        // The two profile settings are adjacent booleans of the same flat operation, so reading
+        // the wrong one is the mistake that would still look like working code.
+        final SyncOperationDto draggableOnly =
+                upsertProfile(UUID.randomUUID(), "Work", 0, Boolean.TRUE);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(draggableOnly), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                draggableOnly.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", true, false, 0));
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -195,7 +249,8 @@ class ProfileSyncOperationApplierTest {
     }
 
     /**
-     * Builds a pushed profile upsert carrying a settings flag.
+     * Builds a pushed profile upsert carrying the drag and drop setting and no other settings
+     * flag.
      *
      * @param id                identifier of the profile
      * @param name              name to store
@@ -214,7 +269,30 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, enableDragAndDrop, null, position);
+                null, null, null, enableDragAndDrop, null, null, position);
+    }
+
+    /**
+     * Builds a pushed profile upsert carrying the tips setting and no other settings flag.
+     *
+     * @param id       identifier of the profile
+     * @param name     name to store
+     * @param position display position to store
+     * @param hideTips the tips setting as the operation carries it, {@code null} when the
+     *                 operation leaves it out
+     * @return the operation
+     */
+    private SyncOperationDto upsertProfileHidingTips(
+            final UUID id,
+            final String name,
+            final Integer position,
+            final Boolean hideTips) {
+
+        return new SyncOperationDto(
+                SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
+                null, null, null, null,
+                name, null, null, null, null,
+                null, null, null, null, hideTips, null, position);
     }
 
     /**
@@ -237,6 +315,6 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, Boolean.TRUE, null, null, position);
+                null, null, Boolean.TRUE, null, null, null, position);
     }
 }
