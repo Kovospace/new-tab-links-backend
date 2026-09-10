@@ -99,13 +99,14 @@ public class ProfileService {
                 profileRepository.findHighestPositionByOwnerId(owner.getId()));
 
         final ProfileEntity newProfile = new ProfileEntity(owner, saveRequest.name(), position);
+        newProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
 
         userDataChangePublisher.publishChangeFor(ownerId);
         return profileMapper.toDto(profileRepository.save(newProfile));
     }
 
     /**
-     * Renames an existing profile.
+     * Updates the name and the settings of an existing profile.
      *
      * <p>The position is left untouched, as it is on every other interactive update in this
      * application; synchronization is what moves things.</p>
@@ -124,6 +125,7 @@ public class ProfileService {
 
         final ProfileEntity existingProfile = getRequiredProfileEntity(profileId, ownerId);
         existingProfile.setName(saveRequest.name());
+        existingProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         userDataChangePublisher.publishChangeFor(ownerId);
         return profileMapper.toDto(existingProfile);
     }

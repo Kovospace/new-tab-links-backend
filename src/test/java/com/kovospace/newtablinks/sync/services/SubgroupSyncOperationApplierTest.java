@@ -119,6 +119,6 @@ class SubgroupSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.SUBGROUP, UUID.randomUUID(),
                 null, null, PARENT_GROUP_ID, null,
                 "Internal", null, null, null, null,
-                null, null, catchLinksIntoTabGroup, 0);
+                null, null, catchLinksIntoTabGroup, null, 0);
     }
 }

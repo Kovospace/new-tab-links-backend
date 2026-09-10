@@ -46,6 +46,19 @@ public class ProfileEntity extends AbstractAuditableEntity {
     private int position;
 
     /**
+     * Whether this profile lets its links and groups be rearranged by dragging.
+     *
+     * <p>The first of the profile's settings, and the reason they ride on this row rather than in
+     * a table of their own: a setting describes the profile, so it has to survive a pull, which
+     * replaces a profile wholesale from the snapshot. Not a constructor argument, for the reason
+     * given on {@link com.kovospace.newtablinks.subgroup.models.SubgroupEntity}'s tab group
+     * setting - it is off until somebody sets it, and a third positional argument would be one
+     * more thing to transpose by accident.</p>
+     */
+    @Column(name = "enable_drag_and_drop", nullable = false)
+    private boolean enableDragAndDrop;
+
+    /**
      * Required by JPA.
      */
     protected ProfileEntity() {
@@ -107,5 +120,23 @@ public class ProfileEntity extends AbstractAuditableEntity {
      */
     public void setPosition(final int position) {
         this.position = position;
+    }
+
+    /**
+     * Tells whether this profile lets its links and groups be rearranged by dragging.
+     *
+     * @return {@code true} when dragging rearranges them
+     */
+    public boolean isEnableDragAndDrop() {
+        return enableDragAndDrop;
+    }
+
+    /**
+     * Sets whether this profile lets its links and groups be rearranged by dragging.
+     *
+     * @param enableDragAndDrop {@code true} to let dragging rearrange them
+     */
+    public void setEnableDragAndDrop(final boolean enableDragAndDrop) {
+        this.enableDragAndDrop = enableDragAndDrop;
     }
 }

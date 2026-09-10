@@ -11,11 +11,16 @@ import jakarta.validation.constraints.Size;
  * supplied in the body would be a request to act as whoever the caller names.</p>
  *
  * @param name name shown on the profile switcher
+ * @param enableDragAndDrop whether the profile lets its links and groups be rearranged by dragging
  * @since 0.0.6
  */
 @Schema(description = "Body accepted when creating or replacing a profile")
 public record ProfileSaveRequestDto(
 
         @Schema(description = "Name shown on the profile switcher", example = "Default")
-        @NotBlank @Size(max = 120) String name) {
+        @NotBlank @Size(max = 120) String name,
+
+        @Schema(description = "Whether the profile lets its links and groups be rearranged by "
+                + "dragging", example = "false")
+        boolean enableDragAndDrop) {
 }
