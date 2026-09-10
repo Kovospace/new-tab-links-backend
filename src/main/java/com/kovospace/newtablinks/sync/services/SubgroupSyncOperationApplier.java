@@ -64,6 +64,7 @@ public class SubgroupSyncOperationApplier implements SyncOperationApplier {
                         PushedOperationValues.flagOrFalse(operation.collapsed()),
                         PushedOperationValues.flagOrFalse(operation.defaultCollapsed())),
                 PushedOperationValues.flagOrFalse(operation.catchLinksIntoTabGroup()),
+                operation.color(),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
         return subgroupSynchronizationService.upsertSubgroupFromPushedOperation(

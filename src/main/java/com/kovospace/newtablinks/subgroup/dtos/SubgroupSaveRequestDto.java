@@ -16,6 +16,8 @@ import java.util.UUID;
  * @param defaultCollapsed whether the subgroup starts folded away on a freshly opened page
  * @param catchLinksIntoTabGroup whether tabs navigating to the subgroup's links are pulled into
  *                               its browser tab group
+ * @param color            name of the Chrome tab group colour to paint the subgroup with, may be
+ *                         {@code null} to leave it without one
  * @since 0.0.1
  */
 @Schema(description = "Body accepted when creating or replacing a subgroup")
@@ -39,5 +41,10 @@ public record SubgroupSaveRequestDto(
 
         @Schema(description = "Whether tabs navigating to the subgroup's links are pulled into its "
                 + "browser tab group", example = "false")
-        boolean catchLinksIntoTabGroup) {
+        boolean catchLinksIntoTabGroup,
+
+        @Schema(description = "Name of the Chrome tab group colour to paint the subgroup with, "
+                + "one of the names Chrome accepts; null leaves the subgroup without one",
+                example = "cyan")
+        @Size(max = 16) String color) {
 }

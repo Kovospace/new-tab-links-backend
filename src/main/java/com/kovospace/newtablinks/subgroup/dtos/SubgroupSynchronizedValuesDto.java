@@ -14,6 +14,8 @@ import com.kovospace.newtablinks.subgroup.models.SubgroupCollapseState;
  * @param collapseState          how the subgroup is folded now and how it starts out
  * @param catchLinksIntoTabGroup whether tabs navigating to the subgroup's links are pulled into
  *                               its browser tab group
+ * @param color                  name of the Chrome tab group colour the subgroup is painted
+ *                               with, {@code null} when it has none
  * @param position               zero based position among the group's subgroups
  * @since 0.0.6
  */
@@ -22,5 +24,6 @@ public record SubgroupSynchronizedValuesDto(
         String description,
         SubgroupCollapseState collapseState,
         boolean catchLinksIntoTabGroup,
+        String color,
         int position) {
 }

@@ -214,7 +214,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, enableDragAndDrop, position);
+                null, null, null, enableDragAndDrop, null, position);
     }
 
     /**
@@ -237,6 +237,6 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, Boolean.TRUE, null, position);
+                null, null, Boolean.TRUE, null, null, position);
     }
 }

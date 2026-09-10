@@ -58,6 +58,40 @@ class SubgroupMapperTest {
         assertThat(subgroupDto.catchLinksIntoTabGroup()).isTrue();
     }
 
+    @Test
+    @DisplayName("puts the colour into the shape a client pulls")
+    void carriesTheColorIntoTheDto() {
+
+        final SubgroupEntity subgroup = subgroupCatchingLinks(false);
+        subgroup.setColor("cyan");
+
+        assertThat(subgroupMapper.toDto(subgroup).color()).isEqualTo("cyan");
+    }
+
+    @Test
+    @DisplayName("reports a subgroup that has never been coloured as having no colour")
+    void reportsAnAbsentColorAsNull() {
+
+        // Absent rather than defaulted: this is what every subgroup stored before the column
+        // existed looks like, and the extension is what decides to give it a colour.
+        assertThat(subgroupMapper.toDto(subgroupCatchingLinks(false)).color()).isNull();
+    }
+
+    @Test
+    @DisplayName("keeps the colour apart from the subgroup's own free text")
+    void doesNotConfuseTheColorWithTheNameOrDescription() {
+
+        final SubgroupEntity subgroup = subgroupCatchingLinks(false);
+        subgroup.setDescription("Only reachable on the VPN");
+        subgroup.setColor("cyan");
+
+        final SubgroupDto subgroupDto = subgroupMapper.toDto(subgroup);
+
+        assertThat(subgroupDto.name()).isEqualTo("Internal");
+        assertThat(subgroupDto.description()).isEqualTo("Only reachable on the VPN");
+        assertThat(subgroupDto.color()).isEqualTo("cyan");
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     /**

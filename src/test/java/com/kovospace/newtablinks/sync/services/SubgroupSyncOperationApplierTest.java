@@ -29,6 +29,10 @@ import org.mockito.ArgumentCaptor;
  * another kind of record can leave them out, and unboxing them is where a pushed {@code true}
  * would be lost.</p>
  *
+ * <p>The colour is read differently from the flags on purpose. It is passed through as it
+ * arrived, {@code null} included, because an absent colour is a subgroup that has never been
+ * given one rather than one whose colour was switched off.</p>
+ *
  * @since 0.0.8
  */
 class SubgroupSyncOperationApplierTest {
@@ -51,7 +55,7 @@ class SubgroupSyncOperationApplierTest {
     @DisplayName("carries a pushed tab group setting through to the subgroup being stored")
     void passesThePushedTabGroupSettingToTheSynchronizationService() {
 
-        assertThat(applyUpsertAndCaptureStoredValues(Boolean.TRUE).catchLinksIntoTabGroup())
+        assertThat(applyUpsertAndCaptureStoredValues(Boolean.TRUE, null).catchLinksIntoTabGroup())
                 .isTrue();
     }
 
@@ -61,7 +65,8 @@ class SubgroupSyncOperationApplierTest {
 
         // An older extension build sends no such field at all, and a subgroup it pushes must not
         // acquire a behaviour its user never asked for.
-        assertThat(applyUpsertAndCaptureStoredValues(null).catchLinksIntoTabGroup()).isFalse();
+        assertThat(applyUpsertAndCaptureStoredValues(null, null).catchLinksIntoTabGroup())
+                .isFalse();
     }
 
     @Test
@@ -69,11 +74,49 @@ class SubgroupSyncOperationApplierTest {
     void doesNotConfuseTheTabGroupSettingWithTheCollapseFlags() {
 
         final SubgroupSynchronizedValuesDto storedValues =
-                applyUpsertAndCaptureStoredValues(Boolean.TRUE);
+                applyUpsertAndCaptureStoredValues(Boolean.TRUE, null);
 
         assertThat(storedValues.collapseState().collapsed()).isFalse();
         assertThat(storedValues.collapseState().defaultCollapsed()).isFalse();
         assertThat(storedValues.catchLinksIntoTabGroup()).isTrue();
+    }
+
+    @Test
+    @DisplayName("carries a pushed colour through to the subgroup being stored")
+    void passesThePushedColorToTheSynchronizationService() {
+
+        assertThat(applyUpsertAndCaptureStoredValues(null, "cyan").color()).isEqualTo("cyan");
+    }
+
+    @Test
+    @DisplayName("stores a colour Chrome learned after this release rather than refusing it")
+    void passesThroughAColorThisApplicationHasNeverHeardOf() {
+
+        // The vocabulary is Chrome's. A name this build does not know is still a name the
+        // extension must be able to push, which is why nothing here validates against a list.
+        assertThat(applyUpsertAndCaptureStoredValues(null, "turquoise").color())
+                .isEqualTo("turquoise");
+    }
+
+    @Test
+    @DisplayName("leaves the colour unset when the operation omits it, rather than inventing one")
+    void keepsAnOmittedColorNull() {
+
+        // Unlike the flags, an absent colour is not "off": it is a subgroup nobody has coloured
+        // yet, and an older extension build that sends no such field must not acquire one.
+        assertThat(applyUpsertAndCaptureStoredValues(Boolean.TRUE, null).color()).isNull();
+    }
+
+    @Test
+    @DisplayName("keeps the colour apart from the other free text an operation carries")
+    void doesNotConfuseTheColorWithTheNameOrDescription() {
+
+        final SubgroupSynchronizedValuesDto storedValues =
+                applyUpsertAndCaptureStoredValues(null, "cyan");
+
+        assertThat(storedValues.name()).isEqualTo("Internal");
+        assertThat(storedValues.description()).isNull();
+        assertThat(storedValues.color()).isEqualTo("cyan");
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -83,10 +126,13 @@ class SubgroupSyncOperationApplierTest {
      *
      * @param catchLinksIntoTabGroup the flag as the operation carries it, {@code null} when the
      *                               operation leaves it out
+     * @param color                  the colour as the operation carries it, {@code null} when the
+     *                               operation leaves it out
      * @return the captured values
      */
     private SubgroupSynchronizedValuesDto applyUpsertAndCaptureStoredValues(
-            final Boolean catchLinksIntoTabGroup) {
+            final Boolean catchLinksIntoTabGroup,
+            final String color) {
 
         final GroupEntity parentGroup = mock(GroupEntity.class);
         when(groupSynchronizationService.findGroupEntityForOwner(PARENT_GROUP_ID, OWNER_ID))
@@ -98,7 +144,7 @@ class SubgroupSyncOperationApplierTest {
                 any(), eq(parentGroup), any())).thenReturn(storedSubgroup);
 
         subgroupSyncOperationApplier.applyUpsert(
-                upsertSubgroup(catchLinksIntoTabGroup), context);
+                upsertSubgroup(catchLinksIntoTabGroup, color), context);
 
         final ArgumentCaptor<SubgroupSynchronizedValuesDto> storedValues =
                 ArgumentCaptor.forClass(SubgroupSynchronizedValuesDto.class);
@@ -112,13 +158,17 @@ class SubgroupSyncOperationApplierTest {
      * Builds an otherwise ordinary subgroup upsert.
      *
      * @param catchLinksIntoTabGroup the flag to put on it, may be {@code null}
+     * @param color                  the colour name to put on it, may be {@code null}
      * @return the operation
      */
-    private SyncOperationDto upsertSubgroup(final Boolean catchLinksIntoTabGroup) {
+    private SyncOperationDto upsertSubgroup(
+            final Boolean catchLinksIntoTabGroup,
+            final String color) {
+
         return new SyncOperationDto(
                 SyncOperationKind.UPSERT, SyncEntityKind.SUBGROUP, UUID.randomUUID(),
                 null, null, PARENT_GROUP_ID, null,
                 "Internal", null, null, null, null,
-                null, null, catchLinksIntoTabGroup, null, 0);
+                null, null, catchLinksIntoTabGroup, null, color, 0);
     }
 }

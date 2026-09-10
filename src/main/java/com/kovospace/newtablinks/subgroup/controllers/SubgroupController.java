@@ -104,14 +104,14 @@ public class SubgroupController {
     }
 
     /**
-     * Updates the name, folded state and tab group setting of a subgroup.
+     * Updates the name, folded state, tab group setting and colour of a subgroup.
      *
      * @param subgroupId  identifier of the subgroup to update
      * @param saveRequest the values to store
      * @return the updated subgroup
      */
     @PutMapping("/{subgroupId}")
-    @Operation(summary = "Update the name, folded state and tab group setting of a subgroup")
+    @Operation(summary = "Update a subgroup's name, folded state, tab group setting and colour")
     @ApiResponse(responseCode = "200", description = "The updated subgroup")
     @ApiResponse(responseCode = "400", description = "The request body failed validation",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))

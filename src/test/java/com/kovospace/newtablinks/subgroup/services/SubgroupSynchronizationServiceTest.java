@@ -57,7 +57,7 @@ class SubgroupSynchronizationServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         subgroupSynchronizationService.upsertSubgroupFromPushedOperation(
-                SUBGROUP_ID, parentGroup, pushedValues(true));
+                SUBGROUP_ID, parentGroup, pushedValues(true, null));
 
         final ArgumentCaptor<SubgroupEntity> insertedSubgroup =
                 ArgumentCaptor.forClass(SubgroupEntity.class);
@@ -75,7 +75,7 @@ class SubgroupSynchronizationServiceTest {
                 .thenReturn(Optional.of(existingSubgroup));
 
         subgroupSynchronizationService.upsertSubgroupFromPushedOperation(
-                SUBGROUP_ID, parentGroup, pushedValues(true));
+                SUBGROUP_ID, parentGroup, pushedValues(true, null));
 
         assertThat(existingSubgroup.isCatchLinksIntoTabGroup()).isTrue();
     }
@@ -91,9 +91,59 @@ class SubgroupSynchronizationServiceTest {
                 .thenReturn(Optional.of(existingSubgroup));
 
         subgroupSynchronizationService.upsertSubgroupFromPushedOperation(
-                SUBGROUP_ID, parentGroup, pushedValues(false));
+                SUBGROUP_ID, parentGroup, pushedValues(false, null));
 
         assertThat(existingSubgroup.isCatchLinksIntoTabGroup()).isFalse();
+    }
+
+    @Test
+    @DisplayName("stores the colour on a subgroup the account has never seen")
+    void writesTheColorWhenInsertingASubgroup() {
+
+        when(subgroupRepository.findByIdAndOwnerId(SUBGROUP_ID, OWNER_ID))
+                .thenReturn(Optional.empty());
+        when(subgroupRepository.save(any(SubgroupEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        subgroupSynchronizationService.upsertSubgroupFromPushedOperation(
+                SUBGROUP_ID, parentGroup, pushedValues(false, "cyan"));
+
+        final ArgumentCaptor<SubgroupEntity> insertedSubgroup =
+                ArgumentCaptor.forClass(SubgroupEntity.class);
+        verify(subgroupRepository).save(insertedSubgroup.capture());
+
+        assertThat(insertedSubgroup.getValue().getColor()).isEqualTo("cyan");
+    }
+
+    @Test
+    @DisplayName("recolours a subgroup the account already holds")
+    void writesTheColorWhenUpdatingASubgroup() {
+
+        final SubgroupEntity existingSubgroup = storedSubgroupColored("grey");
+        when(subgroupRepository.findByIdAndOwnerId(SUBGROUP_ID, OWNER_ID))
+                .thenReturn(Optional.of(existingSubgroup));
+
+        subgroupSynchronizationService.upsertSubgroupFromPushedOperation(
+                SUBGROUP_ID, parentGroup, pushedValues(false, "cyan"));
+
+        assertThat(existingSubgroup.getColor()).isEqualTo("cyan");
+    }
+
+    @Test
+    @DisplayName("clears a stored colour when the push carries none")
+    void clearsTheColorWhenTheOperationOmitsIt() {
+
+        // The upsert replaces every synchronized field, colour included: a client that takes the
+        // colour off a subgroup has no other way to say so, and a null that failed to overwrite
+        // a stored name would be a change the user cannot undo.
+        final SubgroupEntity existingSubgroup = storedSubgroupColored("cyan");
+        when(subgroupRepository.findByIdAndOwnerId(SUBGROUP_ID, OWNER_ID))
+                .thenReturn(Optional.of(existingSubgroup));
+
+        subgroupSynchronizationService.upsertSubgroupFromPushedOperation(
+                SUBGROUP_ID, parentGroup, pushedValues(false, null));
+
+        assertThat(existingSubgroup.getColor()).isNull();
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -102,12 +152,29 @@ class SubgroupSynchronizationServiceTest {
      * Builds the values a pushed subgroup upsert carries.
      *
      * @param catchLinksIntoTabGroup the tab group setting to push
+     * @param color                  the colour to push, {@code null} when the operation carries
+     *                               none
      * @return the values
      */
-    private SubgroupSynchronizedValuesDto pushedValues(final boolean catchLinksIntoTabGroup) {
+    private SubgroupSynchronizedValuesDto pushedValues(
+            final boolean catchLinksIntoTabGroup,
+            final String color) {
+
         return new SubgroupSynchronizedValuesDto(
                 "Internal", null, new SubgroupCollapseState(false, false),
-                catchLinksIntoTabGroup, 0);
+                catchLinksIntoTabGroup, color, 0);
+    }
+
+    /**
+     * Builds a subgroup as it is already stored, with a colour already on it.
+     *
+     * @param color the stored colour
+     * @return the entity
+     */
+    private SubgroupEntity storedSubgroupColored(final String color) {
+        final SubgroupEntity storedSubgroup = storedSubgroupWithTabGroupSetting(false);
+        storedSubgroup.setColor(color);
+        return storedSubgroup;
     }
 
     /**

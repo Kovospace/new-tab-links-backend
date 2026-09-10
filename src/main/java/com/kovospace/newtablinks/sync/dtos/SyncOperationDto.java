@@ -38,6 +38,8 @@ import java.util.UUID;
  *                               browser tab group
  * @param enableDragAndDrop      whether a profile lets its links and groups be rearranged by
  *                               dragging
+ * @param color                  name of the Chrome tab group colour a subgroup is painted with,
+ *                               absent when it has none
  * @param position         zero based position among the record's siblings
  * @since 0.0.6
  */
@@ -94,6 +96,11 @@ public record SyncOperationDto(
         @Schema(description = "Whether a profile lets its links and groups be rearranged by "
                 + "dragging", example = "false")
         Boolean enableDragAndDrop,
+
+        @Schema(description = "Name of the Chrome tab group colour a subgroup is painted with, "
+                + "one of the names Chrome accepts; absent leaves the subgroup without one",
+                example = "cyan")
+        @Size(max = 16) String color,
 
         @Schema(description = "Zero based position among the record's siblings", example = "0")
         Integer position) {

@@ -75,6 +75,21 @@ public class SubgroupEntity extends AbstractAuditableEntity {
     private boolean catchLinksIntoTabGroup;
 
     /**
+     * Name of the Chrome tab group colour this subgroup is painted with, or {@code null}.
+     *
+     * <p>Nullable rather than defaulted, unlike the flags above: an absent colour is not "no
+     * colour" but a subgroup nobody has given one yet - which is what every subgroup stored
+     * before this column existed is.</p>
+     *
+     * <p>Plain text on purpose, not an enumeration. The vocabulary belongs to Chrome - grey,
+     * blue, red, yellow, green, pink, purple, cyan, orange - so a tenth colour in some future
+     * release has to be storable without a release of this application. The length cap is the
+     * only rule this side imposes.</p>
+     */
+    @Column(name = "color", length = 16)
+    private String color;
+
+    /**
      * Required by JPA.
      */
     protected SubgroupEntity() {
@@ -225,5 +240,23 @@ public class SubgroupEntity extends AbstractAuditableEntity {
      */
     public void setCatchLinksIntoTabGroup(final boolean catchLinksIntoTabGroup) {
         this.catchLinksIntoTabGroup = catchLinksIntoTabGroup;
+    }
+
+    /**
+     * Returns the name of the Chrome tab group colour this subgroup is painted with.
+     *
+     * @return the colour name, or {@code null} when the subgroup has never been given one
+     */
+    public String getColor() {
+        return color;
+    }
+
+    /**
+     * Replaces the name of the Chrome tab group colour this subgroup is painted with.
+     *
+     * @param color the colour name to set, may be {@code null} to leave the subgroup without one
+     */
+    public void setColor(final String color) {
+        this.color = color;
     }
 }

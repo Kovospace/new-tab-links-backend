@@ -115,13 +115,15 @@ public class SubgroupService {
 
         newSubgroup.setDescription(saveRequest.description());
         newSubgroup.setCatchLinksIntoTabGroup(saveRequest.catchLinksIntoTabGroup());
+        newSubgroup.setColor(saveRequest.color());
 
         userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(subgroupRepository.save(newSubgroup));
     }
 
     /**
-     * Updates the name, description, both folded states and the tab group setting of a subgroup.
+     * Updates the name, description, both folded states, the tab group setting and the colour
+     * of a subgroup.
      *
      * @param subgroupId  identifier of the subgroup to update
      * @param saveRequest the values to store
@@ -141,6 +143,7 @@ public class SubgroupService {
         existingSubgroup.setCollapsed(saveRequest.collapsed());
         existingSubgroup.setDefaultCollapsed(saveRequest.defaultCollapsed());
         existingSubgroup.setCatchLinksIntoTabGroup(saveRequest.catchLinksIntoTabGroup());
+        existingSubgroup.setColor(saveRequest.color());
         userDataChangePublisher.publishChangeFor(ownerId);
         return subgroupMapper.toDto(existingSubgroup);
     }
