@@ -99,6 +99,7 @@ com.kovospace.newtablinks
 ├── group/         titled boxes of links, owned by an environment
 ├── subgroup/      collapsible sections, owned by a group
 ├── link/          the bookmarks themselves
+├── closedtab/     recently closed browser tabs, a capped log hanging off a profile
 ├── profile/       named sets of environments, the top of the hierarchy and the extension's own
 └── sync/          whole-account snapshot, the pushed change batch, and the change event that
                    drives websocket pushes
@@ -148,6 +149,13 @@ Controller (@RestController, DTOs only)
   of four hundred operations sends one notification — and the overload taking an `originDeviceId`
   must be called *before* the work it describes, or the anonymous announcements behind it win
   and the pushing device cannot recognise its own echo.
+- **A closed tab is a log, not user data.** It hangs off a profile directly, has no `position`
+  (its order is `closedAt`, descending), and is never edited — only inserted and deleted. The
+  extension caps the list at 50 per profile and pushes what it prunes as deletes, so it is by far
+  the highest-churn kind. **`closedAt` is the client's clock and is stored exactly as sent** — the
+  row may arrive hours later and a server timestamp would refile it at the top of the list; an
+  operation without one is refused rather than stamped. There is no server-side cap: the client
+  prunes, and nothing here enforces it.
 - **The sync push accepts client-assigned identifiers**, the one place anything does. It is safe
   because every lookup is still ownership-scoped: an identifier already taken by another account
   is not an error but a remap, stored under a server-generated identifier and reported back.

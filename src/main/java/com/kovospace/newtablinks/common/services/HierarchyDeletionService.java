@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.common.services;
 
+import com.kovospace.newtablinks.closedtab.repositories.ClosedTabRepository;
 import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.environment.repositories.EnvironmentRepository;
 import com.kovospace.newtablinks.group.models.GroupEntity;
@@ -17,11 +18,15 @@ import org.springframework.transaction.annotation.Transactional;
  * Removes a record together with everything that hangs beneath it.
  *
  * <p>Profile, environment, group, subgroup and link form one containment hierarchy, and every
- * child names its parent through a non-null foreign key. No entity declares the reverse
- * association, so nothing cascades in the mapping. Deleting a parent used to work anyway, but
- * only because of a rule written somewhere this code cannot see: the migrated schema declares
- * {@code ON DELETE CASCADE} on each of those keys, and the database was quietly doing the work.
+ * child names its parent through a non-null foreign key. A closed tab hangs off the profile
+ * beside that hierarchy rather than inside it - it has no children of its own, and nothing
+ * beneath a profile points at it - so it is cleared when the profile is, and at no other level.
  * </p>
+ *
+ * <p>No entity declares the reverse association, so nothing cascades in the mapping. Deleting a
+ * parent used to work anyway, but only because of a rule written somewhere this code cannot
+ * see: the migrated schema declares {@code ON DELETE CASCADE} on each of those keys, and the
+ * database was quietly doing the work.</p>
  *
  * <p>That is not a dependency worth keeping implicit. The schema lives in its own repository,
  * {@code new-tab-links-migrations}, and can be changed without this one being rebuilt; the
@@ -53,6 +58,7 @@ public class HierarchyDeletionService {
     private final GroupRepository groupRepository;
     private final SubgroupRepository subgroupRepository;
     private final LinkRepository linkRepository;
+    private final ClosedTabRepository closedTabRepository;
 
     /**
      * Creates the service.
@@ -62,23 +68,30 @@ public class HierarchyDeletionService {
      * @param groupRepository       persistence access for groups
      * @param subgroupRepository    persistence access for subgroups
      * @param linkRepository        persistence access for links
+     * @param closedTabRepository   persistence access for closed tabs
      */
     public HierarchyDeletionService(
             final ProfileRepository profileRepository,
             final EnvironmentRepository environmentRepository,
             final GroupRepository groupRepository,
             final SubgroupRepository subgroupRepository,
-            final LinkRepository linkRepository) {
+            final LinkRepository linkRepository,
+            final ClosedTabRepository closedTabRepository) {
 
         this.profileRepository = profileRepository;
         this.environmentRepository = environmentRepository;
         this.groupRepository = groupRepository;
         this.subgroupRepository = subgroupRepository;
         this.linkRepository = linkRepository;
+        this.closedTabRepository = closedTabRepository;
     }
 
     /**
-     * Deletes a profile, its environments, and everything inside them.
+     * Deletes a profile, its closed tabs, its environments, and everything inside them.
+     *
+     * <p>The closed tabs go first, like every other child: they name the profile through a
+     * non-null foreign key and would hold it in place. They are not touched at any deeper level,
+     * because nothing deeper owns one.</p>
      *
      * @param profile the profile to remove; already resolved as the caller's own
      */
@@ -88,6 +101,7 @@ public class HierarchyDeletionService {
         final List<EnvironmentEntity> environments =
                 environmentRepository.findAllByProfileId(profile.getId());
 
+        closedTabRepository.deleteAll(closedTabRepository.findAllByProfileId(profile.getId()));
         environments.forEach(this::deleteEnvironmentWithDescendants);
         profileRepository.delete(profile);
     }

@@ -8,6 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kovospace.newtablinks.closedtab.models.ClosedTabEntity;
+import com.kovospace.newtablinks.closedtab.repositories.ClosedTabRepository;
 import com.kovospace.newtablinks.common.models.AbstractAuditableEntity;
 import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.environment.repositories.EnvironmentRepository;
@@ -41,10 +43,11 @@ class HierarchyDeletionServiceTest {
     private final GroupRepository groupRepository = mock(GroupRepository.class);
     private final SubgroupRepository subgroupRepository = mock(SubgroupRepository.class);
     private final LinkRepository linkRepository = mock(LinkRepository.class);
+    private final ClosedTabRepository closedTabRepository = mock(ClosedTabRepository.class);
 
     private final HierarchyDeletionService hierarchyDeletionService = new HierarchyDeletionService(
             profileRepository, environmentRepository, groupRepository, subgroupRepository,
-            linkRepository);
+            linkRepository, closedTabRepository);
 
     @Test
     @DisplayName("empties a profile from the links upwards before removing the profile itself")
@@ -124,6 +127,38 @@ class HierarchyDeletionServiceTest {
         verify(profileRepository).delete(profile);
         verify(environmentRepository, never()).delete(any(EnvironmentEntity.class));
         verify(linkRepository, never()).deleteAll(anyList());
+    }
+
+    @Test
+    @DisplayName("clears a profile's closed tabs before removing the profile itself")
+    void clearsTheClosedTabsOfAProfileBeforeTheProfile() {
+
+        final ProfileEntity profile = entity(mock(ProfileEntity.class));
+        final ClosedTabEntity closedTab = mock(ClosedTabEntity.class);
+
+        when(closedTabRepository.findAllByProfileId(profile.getId()))
+                .thenReturn(List.of(closedTab));
+
+        hierarchyDeletionService.deleteProfileWithDescendants(profile);
+
+        // The row names the profile through a non-null foreign key, so the order is the whole
+        // point: deleting the profile first is a constraint violation that takes the surrounding
+        // pushed batch with it.
+        final InOrder order = inOrder(closedTabRepository, profileRepository);
+        order.verify(closedTabRepository).deleteAll(List.of(closedTab));
+        order.verify(profileRepository).delete(profile);
+    }
+
+    @Test
+    @DisplayName("leaves closed tabs alone when something below a profile is deleted")
+    void doesNotTouchClosedTabsWhenDeletingAnEnvironment() {
+
+        // A closed tab hangs off the profile, not off anything inside it. Sweeping them here
+        // would empty the panel every time the user deleted a workspace.
+        hierarchyDeletionService.deleteEnvironmentWithDescendants(
+                entity(mock(EnvironmentEntity.class)));
+
+        verify(closedTabRepository, never()).deleteAll(anyList());
     }
 
     /** Gives a mocked entity an identifier, which is all this service reads off one. */

@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.sync.utils;
 
 import com.kovospace.newtablinks.sync.dtos.SyncRejectionReason;
 import com.kovospace.newtablinks.sync.exceptions.SyncOperationRejectedException;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -68,6 +69,42 @@ public final class PushedOperationValues {
             throw new SyncOperationRejectedException(SyncRejectionReason.MISSING_REQUIRED_VALUE);
         }
         return suppliedPosition;
+    }
+
+    /**
+     * Returns a moment the operation had to carry.
+     *
+     * <p>Not defaulted to the server's clock when absent, and that is the whole point of the
+     * method. A closed tab is ordered by when it was closed, which the device that closed it
+     * knows and this server does not: the row may arrive minutes or hours later, and stamping
+     * {@code now()} onto it would quietly file it at the top of somebody's list. An operation
+     * that forgot the value is refused instead, and the client is told which one.</p>
+     *
+     * @param suppliedMoment the value read from the operation
+     * @return the same value
+     * @throws SyncOperationRejectedException when it is {@code null}
+     */
+    public static Instant requireSuppliedMoment(final Instant suppliedMoment) {
+        if (suppliedMoment == null) {
+            throw new SyncOperationRejectedException(SyncRejectionReason.MISSING_REQUIRED_VALUE);
+        }
+        return suppliedMoment;
+    }
+
+    /**
+     * Reads a text that is allowed to be missing, as an empty string.
+     *
+     * <p>For a field whose absence is an ordinary state rather than a broken operation: the title
+     * of a closed tab, where a page that never named itself is a normal page. The column behind
+     * it is {@code NOT NULL}, and the client models it as a string it always has, so an absent
+     * value becomes empty rather than {@code null} and the two ends agree on what "no title"
+     * looks like.</p>
+     *
+     * @param suppliedText the value read from the operation, may be {@code null}
+     * @return the same value, or an empty string when it is {@code null}
+     */
+    public static String textOrEmpty(final String suppliedText) {
+        return suppliedText == null ? "" : suppliedText;
     }
 
     /**
