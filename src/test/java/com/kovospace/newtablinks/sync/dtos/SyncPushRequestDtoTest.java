@@ -117,7 +117,8 @@ class SyncPushRequestDtoTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, UUID.randomUUID(),
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, null, null, 0);
+                null, null, null, null, null, null,
+                null, null, 0);
     }
 
     /**

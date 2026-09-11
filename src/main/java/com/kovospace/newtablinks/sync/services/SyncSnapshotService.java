@@ -41,6 +41,7 @@ public class SyncSnapshotService {
     private final LinkRepository linkRepository;
     private final LinkMapper linkMapper;
     private final EnvironmentSnapshotReader environmentSnapshotReader;
+    private final ClosedTabSnapshotReader closedTabSnapshotReader;
     private final ProfileService profileService;
 
     /**
@@ -55,6 +56,7 @@ public class SyncSnapshotService {
      * @param linkRepository            reads every link of the owner
      * @param linkMapper                converts links
      * @param environmentSnapshotReader reads the owner's environments
+     * @param closedTabSnapshotReader   reads the owner's closed tabs
      * @param profileService            reads the owner's profiles
      */
     public SyncSnapshotService(
@@ -67,6 +69,7 @@ public class SyncSnapshotService {
             final LinkRepository linkRepository,
             final LinkMapper linkMapper,
             final EnvironmentSnapshotReader environmentSnapshotReader,
+            final ClosedTabSnapshotReader closedTabSnapshotReader,
             final ProfileService profileService) {
 
         this.userService = userService;
@@ -78,6 +81,7 @@ public class SyncSnapshotService {
         this.linkRepository = linkRepository;
         this.linkMapper = linkMapper;
         this.environmentSnapshotReader = environmentSnapshotReader;
+        this.closedTabSnapshotReader = closedTabSnapshotReader;
         this.profileService = profileService;
     }
 
@@ -98,6 +102,7 @@ public class SyncSnapshotService {
                 groupMapper.toDtoList(groupRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
                 subgroupMapper.toDtoList(subgroupRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
                 linkMapper.toDtoList(linkRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
+                closedTabSnapshotReader.readClosedTabsOfOwner(ownerId),
                 Instant.now());
     }
 }

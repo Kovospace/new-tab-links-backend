@@ -269,7 +269,8 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, enableDragAndDrop, null, null, position);
+                null, null, null, enableDragAndDrop, null, null,
+                null, null, position);
     }
 
     /**
@@ -292,7 +293,8 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, hideTips, null, position);
+                null, null, null, null, hideTips, null,
+                null, null, position);
     }
 
     /**
@@ -315,6 +317,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, Boolean.TRUE, null, null, null, position);
+                null, null, Boolean.TRUE, null, null, null,
+                null, null, position);
     }
 }
