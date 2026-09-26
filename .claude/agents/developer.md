@@ -52,7 +52,7 @@ Keep it short and concrete. Answer in this shape:
    whether the change is reversible.
 5. **Sync semantics touched** — conflict resolution, deletions/tombstones, ordering, offline
    behaviour, identity/auth, payload size.
-6. **Extension-side cost** — what has to change in `/home/kovo/IdeaProjects/NewTabGroupedLinks`.
+6. **Extension-side cost** — what has to change in `/home/kovo/IdeaProjects/new-tab-links-extension`.
    Read it; do not guess. Hand that work to its `backend-sync` agent.
 7. **Risk** — rank the parts most likely to go wrong, with the reason each is risky. Call out
    anything irreversible (data loss, a released breaking contract) explicitly.
@@ -95,7 +95,7 @@ worth less than the question — surface the question.
   A `PreToolUse` hook enforces this; treat it as a backstop, not permission to try.
 - **Cross-repo branches mirror each other.** Before creating a branch for work that touches both
   repos, read the other repo's current branch with
-  `git -C /home/kovo/IdeaProjects/NewTabGroupedLinks rev-parse --abbrev-ref HEAD`
+  `git -C /home/kovo/IdeaProjects/new-tab-links-extension rev-parse --abbrev-ref HEAD`
   and reuse that exact name. If it is on `main`/`master` or you cannot tell, do not invent a
   name — put the question in your report and use it in both repos once answered.
 - Never merge or rebase onto `main`/`master` locally; never delete remote branches.

@@ -22,16 +22,18 @@ token.** Nothing accepts an owner id from the caller. See the `authentication` s
 
 The client this backend serves lives in its own repository:
 
-- **Remote:** `git@github.com:K0V0/NewTabGroupedLinks.git`
-- **Local checkout:** `/home/kovo/IdeaProjects/NewTabGroupedLinks`
+- **Remote:** `git@github.com:Kovospace/new-tab-links-extension.git`
+- **Local checkout:** `/home/kovo/IdeaProjects/new-tab-links-extension`
 - Its `CLAUDE.md` is authoritative for the extension's architecture, data model and code style.
 - It has a mirror-image `backend-sync` agent (`.claude/agents/backend-sync.md`) that does the
   extension-side half of any cross-repo change.
 
-Note the owner mismatch: the extension is under **K0V0**, this backend under **Kovospace**.
-Both remotes are SSH and `~/.ssh/id_ed25519` authenticates for both — no extra key or token.
+The extension, this backend and the website are all under **Kovospace**. Both remotes are SSH
+and `~/.ssh/id_ed25519` authenticates for both — no extra key or token. The extension was
+formerly `K0V0/NewTabGroupedLinks` and GitHub still redirects that URL, so a stale remote
+appears to work — it is the same repository, renamed and transferred, not a fork.
 
-Work with the extension checkout through `git -C /home/kovo/IdeaProjects/NewTabGroupedLinks <cmd>`
+Work with the extension checkout through `git -C /home/kovo/IdeaProjects/new-tab-links-extension <cmd>`
 rather than `cd`. Reading it is allowed via `permissions.additionalDirectories` in the gitignored
 `.claude/settings.local.json`; if Claude Code refuses to read that path, that entry is missing.
 
@@ -299,7 +301,7 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   | Send it to | Agent | Points at |
   |---|---|---|
   | the website | **`frontend-developer`** | `new-tab-links-frontend/.claude/agents/developer.md` |
-  | the extension | **`extension-developer`** | `NewTabGroupedLinks/.claude/agents/backend-sync.md` |
+  | the extension | **`extension-developer`** | `new-tab-links-extension/.claude/agents/backend-sync.md` |
   | the cluster | **`devops-engineer`** | `kovostack-infra-gitops/.claude/agents/devops-engineer.md` |
 
   This backend has one too — **`backend-developer`** — which is how the other three reach it.

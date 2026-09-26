@@ -1,7 +1,7 @@
 # new-tab-links-backend
 
 Backend service for the **NewTabLinks** Chrome extension
-([`K0V0/NewTabGroupedLinks`](https://github.com/K0V0/NewTabGroupedLinks)) — stores and
+([`Kovospace/new-tab-links-extension`](https://github.com/Kovospace/new-tab-links-extension)) — stores and
 synchronizes the user's environments, groups, subgroups and links, and handles registration
 and sign-in.
 
