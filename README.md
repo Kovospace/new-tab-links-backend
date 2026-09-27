@@ -188,7 +188,7 @@ webhook **refuses** every delivery with 503 rather than accepting one it cannot 
 | `CREEM_API_BASE_URL` | *(derived from the key)* | | Leave unset. If set, it must be the key's own host, or **startup fails** |
 | `CREEM_LIFETIME_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the one-time product. Blank means the plan is not on sale |
 | `CREEM_SUBSCRIPTION_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the yearly product |
-| `CREEM_CHECKOUT_SUCCESS_PATH` | `/account` | | Where Creem returns the customer, relative to `NEWTABLINKS_WEB_BASE_URL`; blank uses the product's own default |
+| `CREEM_CHECKOUT_SUCCESS_PATH` | `/thank-you` | | Where Creem returns the customer, relative to `NEWTABLINKS_WEB_BASE_URL`; blank uses the product's own default |
 | `CREEM_API_TIMEOUT` | `PT10S` | | Connect and read timeout for calls to Creem |
 | `PAYMENT_SUBSCRIPTION_CANCELLATION_RETRY_INTERVAL` | `PT15M` | | How often a subscription replaced by a lifetime purchase, and not yet confirmed cancelled at Creem, is retried |
 
