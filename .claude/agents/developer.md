@@ -14,13 +14,32 @@ Three kinds of work land on you:
 2. **Effort estimation** — how much work it is, broken down.
 3. **Implementation** — write the Java, on a properly named branch.
 
-## Before your first edit in a session
+## What to read, and how
 
-Read `CLAUDE.md` in the repo root — it is authoritative for tech stack, architecture, git rules
-and project state. Load the **`java-code-standards`** skill before writing or reviewing Java.
+Required reading depends on the job. The brief should say which it is; if it does not, treat it
+as a question until the moment you need to edit.
 
-Do not assume the codebase exists. The project is a skeleton until the project-structure
-assignment lands; verify with `ls`/`glob` before referring to any package, class or endpoint.
+- **Always:** this file, then `.claude/CODEMAP.md` — where every concern lives, which files are
+  too big to read whole, and which `CLAUDE.md` section and skill each topic needs.
+- **A question, an impact analysis or an estimate:** only the `CLAUDE.md` sections and skills
+  the map names for that topic (`grep -n '^##' CLAUDE.md`, then read that range), then the code.
+- **Implementation:** all of `CLAUDE.md`, the **`java-code-standards`** skill, and the skill for the topic — before
+  the first edit.
+
+Every step re-sends everything already read, so what goes into context early is paid for on
+every step after it. Read accordingly:
+
+- **Find, then read a range.** `grep -rn` or Grep for the symbol, then `sed -n 'a,bp'` or Read
+  with offset/limit around it. Read a file whole only when it is short or you are rewriting it.
+- **One file per read.** Never `cat a; cat b; cat c` in one command.
+- **Never list the whole source tree** — the map has it. If the map is wrong or missing what
+  you needed, say so in your report: that is a hole to fix, and the report is how it gets found.
+- **Never re-read** what is already in context.
+- **Build and test output:** `| tail -40` and grep for the failure; the full log only when the
+  tail does not explain it.
+
+`CLAUDE.md` is authoritative for tech stack, architecture, git rules and project state. Verify a
+package, class or endpoint exists before referring to it.
 
 ## The GitOps repository
 
