@@ -10,7 +10,7 @@ import jakarta.validation.constraints.Size;
 /**
  * What an operator may change about an account.
  *
- * <p>All three fields are required, because this replaces them: sending a partial body and having
+ * <p>The three account fields are required, because this replaces them: sending a partial body and having
  * the absent fields silently keep their old values is the kind of API that eventually wipes
  * somebody's display name by accident. The client shows the current values and sends them back.</p>
  *
@@ -26,6 +26,10 @@ import jakarta.validation.constraints.Size;
  * @param email       address identifying the user
  * @param displayName name shown in the user interface
  * @param status      lifecycle state to put the account in
+ * @param premium     {@code true} to give pro through an operator grant, {@code false} to take
+ *                    such a grant back, {@code null} or absent to leave pro as it is - so a
+ *                    client that predates this field cannot revoke anything by omitting it.
+ *                    Revoking pro that was paid for is refused.
  * @since 0.0.6
  */
 @Schema(description = "The fields an operator may change on an account")
@@ -38,5 +42,10 @@ public record AdminUserUpdateRequestDto(
         @NotBlank @Size(max = 120) String displayName,
 
         @Schema(description = "Lifecycle state to put the account in")
-        @NotNull UserAccountStatus status) {
+        @NotNull UserAccountStatus status,
+
+        @Schema(description = "true grants pro, false revokes an operator grant (a paid "
+                + "entitlement is refused with 409), null or absent leaves pro unchanged",
+                example = "true", nullable = true)
+        Boolean premium) {
 }

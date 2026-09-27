@@ -297,11 +297,14 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; it is read only for display -
   `premium` on the account DTO (so also `owner.premium` in the sync snapshot) and
   `GET /api/v1/payments/subscription`. No limit is enforced, account deletion is not blocked by a
-  live subscription, there is no admin GRANT endpoint, and no cancel or refund endpoint - which is
+  live subscription, and there is no cancel or refund endpoint - which is
   why that endpoint's `cancellable`/`refundable` are always false. The rules the webhook code must keep
   are in the Javadoc of `CreemWebhookController`, `PaymentWebhookClaimStore` and
   `EntitlementTransitionPolicy`: body bound as `byte[]`, explicit security exemption, claim in
   its own `REQUIRES_NEW` transaction, older events refused, past-due marks and never revokes.
+  **The operator grants pro through the admin user endpoints** (`premium` on create/update,
+  `EntitlementGrantService`): a GRANT row only where nothing grants, only a GRANT can be revoked
+  (a paid one answers 409), and a later payment takes a GRANT over through the ordinary policy.
   **Do not add a filter that reads the request body** - none does today, which is why no
   `ContentCachingRequestWrapper` is needed. `payment_webhook_event` is never pruned; Creem stops
   retrying after 24 hours, so rows older than that could go.

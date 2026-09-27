@@ -115,7 +115,8 @@ public class AdminUserController {
     @Operation(summary = "Create an account without going through registration",
             description = "No activation mail is sent and no uniform answer is given, so an "
                     + "account created ACTIVE can be signed into immediately. The password is "
-                    + "optional; without one the account can only sign in through a provider.")
+                    + "optional; without one the account can only sign in through a provider. "
+                    + "premium true gives the account pro through an operator grant.")
     @ApiResponse(responseCode = "201", description = "The account was created")
     @ApiResponse(responseCode = "400", description = "The request body failed validation",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
@@ -136,16 +137,20 @@ public class AdminUserController {
      * @return the updated account
      */
     @PutMapping("/{userId}")
-    @Operation(summary = "Change an account's email, display name and status",
-            description = "All three are required: this replaces them rather than patching, so a "
-                    + "partial body cannot quietly blank a field. The email address is "
-                    + "changeable here and nowhere else - users may not change their own.")
+    @Operation(summary = "Change an account's email, display name, status and granted pro",
+            description = "Email, display name and status are required: this replaces them "
+                    + "rather than patching, so a partial body cannot quietly blank a field. The "
+                    + "email address is changeable here and nowhere else - users may not change "
+                    + "their own. premium true grants pro unless the account already has it; "
+                    + "false takes back an operator grant; null or absent leaves pro alone. "
+                    + "Pro that was paid for cannot be revoked here.")
     @ApiResponse(responseCode = "200", description = "The updated account")
     @ApiResponse(responseCode = "400", description = "The request body failed validation",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No account has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "That email belongs to another account",
+    @ApiResponse(responseCode = "409", description = "That email belongs to another account, "
+            + "or premium false was sent for an account that paid for pro",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public AdminUserDto updateAccount(
             @PathVariable final UUID userId,

@@ -1,7 +1,12 @@
 package com.kovospace.newtablinks.user.services;
 
+import com.kovospace.newtablinks.common.exceptions.PaidEntitlementRevocationException;
 import com.kovospace.newtablinks.common.exceptions.RegistrationConflictException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.entitlement.models.OperatorProDecisionOutcome;
+import com.kovospace.newtablinks.entitlement.models.ProStanding;
+import com.kovospace.newtablinks.entitlement.services.EntitlementGrantService;
+import com.kovospace.newtablinks.entitlement.services.EntitlementStandingService;
 import com.kovospace.newtablinks.user.dtos.AdminUserCreateRequestDto;
 import com.kovospace.newtablinks.user.dtos.AdminUserDto;
 import com.kovospace.newtablinks.user.dtos.AdminUserPageDto;
@@ -9,6 +14,8 @@ import com.kovospace.newtablinks.user.dtos.AdminUserUpdateRequestDto;
 import com.kovospace.newtablinks.user.mappers.AdminUserMapper;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
  * inside the module that owns it - the admin module owns the operator's identity, not the data
  * they repair.</p>
  *
+ * <p>Pro given by the operator goes through {@link EntitlementGrantService} in the same
+ * transaction as the rest of the change, so a refused revocation leaves the account untouched.</p>
+ *
  * <p><strong>Every method here writes a log line naming the account.</strong> These operations
  * have no owner to notice them and no undo, so the log is the only record that they happened.</p>
  *
@@ -48,9 +58,17 @@ public class UserAdministrationService {
     /** Newest accounts first: the one somebody is looking for is usually a recent one. */
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "createdAt");
 
+    /** Names the operator action creating an account, in the premium log line. */
+    private static final String CREATE_ACTION = "create";
+
+    /** Names the operator action updating an account, in the premium log line. */
+    private static final String UPDATE_ACTION = "update";
+
     private final UserRepository userRepository;
     private final AdminUserMapper adminUserMapper;
     private final PasswordEncoder passwordEncoder;
+    private final EntitlementStandingService entitlementStandingService;
+    private final EntitlementGrantService entitlementGrantService;
 
     /**
      * Creates the service.
@@ -58,19 +76,27 @@ public class UserAdministrationService {
      * @param userRepository  persistence for accounts
      * @param adminUserMapper renders an account in the operator's shape
      * @param passwordEncoder hashes a password the operator sets
+     * @param entitlementStandingService tells whether an account is pro, and through what
+     * @param entitlementGrantService    gives and takes back pro the operator grants
      */
     public UserAdministrationService(
             final UserRepository userRepository,
             final AdminUserMapper adminUserMapper,
-            final PasswordEncoder passwordEncoder) {
+            final PasswordEncoder passwordEncoder,
+            final EntitlementStandingService entitlementStandingService,
+            final EntitlementGrantService entitlementGrantService) {
 
         this.userRepository = userRepository;
         this.adminUserMapper = adminUserMapper;
         this.passwordEncoder = passwordEncoder;
+        this.entitlementStandingService = entitlementStandingService;
+        this.entitlementGrantService = entitlementGrantService;
     }
 
     /**
      * Lists accounts, newest first, optionally narrowed by a search.
+     *
+     * <p>The pro standing of the whole page is read in one query, not one per account.</p>
      *
      * @param searchText text to match against username, email and display name; blank matches all
      * @param page       zero-based page index
@@ -83,8 +109,13 @@ public class UserAdministrationService {
                 searchText == null ? "" : searchText.trim(),
                 PageRequest.of(page, size, NEWEST_FIRST));
 
+        final List<UserEntity> accountsOnPage = matchingAccounts.getContent();
+        final Map<UUID, ProStanding> proStandingByOwner =
+                entitlementStandingService.describeProStandingNowOfEach(
+                        accountsOnPage.stream().map(UserEntity::getId).toList());
+
         return new AdminUserPageDto(
-                adminUserMapper.toDtoList(matchingAccounts.getContent()),
+                adminUserMapper.toDtoList(accountsOnPage, proStandingByOwner),
                 matchingAccounts.getNumber(),
                 matchingAccounts.getSize(),
                 matchingAccounts.getTotalElements(),
@@ -100,11 +131,14 @@ public class UserAdministrationService {
      */
     @Transactional(readOnly = true)
     public AdminUserDto findAccount(final UUID userId) {
-        return adminUserMapper.toDto(getRequiredAccount(userId));
+        return toAdminUserDto(getRequiredAccount(userId));
     }
 
     /**
      * Creates an account without going through registration.
+     *
+     * <p>When the request asks for premium, the account is given an operator grant in the same
+     * transaction.</p>
      *
      * @param createRequest the account to create
      * @return the created account
@@ -135,17 +169,25 @@ public class UserAdministrationService {
         LOGGER.info("Operator created account {} ({}) with status {}",
                 createdAccount.getId(), createdAccount.getUsername(), createdAccount.getStatus());
 
-        return adminUserMapper.toDto(createdAccount);
+        if (createRequest.premium()) {
+            applyPremiumDecision(createdAccount, true, CREATE_ACTION);
+        }
+        return toAdminUserDto(createdAccount);
     }
 
     /**
-     * Replaces the fields an operator may change.
+     * Replaces the fields an operator may change, and grants or revokes operator-given pro.
+     *
+     * <p>A {@code premium} of {@code null} leaves pro as it is. The premium decision is taken
+     * before anything else changes, and in the same transaction, so a refusal changes nothing.</p>
      *
      * @param userId        identifier of the account
      * @param updateRequest the new values
      * @return the updated account
-     * @throws ResourceNotFoundException     when no account has that identifier
-     * @throws RegistrationConflictException when the email address belongs to another account
+     * @throws ResourceNotFoundException          when no account has that identifier
+     * @throws RegistrationConflictException      when the email address belongs to another
+     *                                            account
+     * @throws PaidEntitlementRevocationException when asked to revoke pro that was paid for
      */
     @Transactional
     public AdminUserDto updateAccount(
@@ -160,6 +202,9 @@ public class UserAdministrationService {
 
             throw new RegistrationConflictException("That email address is already registered");
         }
+        if (updateRequest.premium() != null) {
+            applyPremiumDecision(account, updateRequest.premium(), UPDATE_ACTION);
+        }
 
         account.setEmail(updateRequest.email());
         account.setDisplayName(updateRequest.displayName());
@@ -172,7 +217,7 @@ public class UserAdministrationService {
         }
         LOGGER.info("Operator updated account {} to status {}", userId, updateRequest.status());
 
-        return adminUserMapper.toDto(account);
+        return toAdminUserDto(account);
     }
 
     /**
@@ -188,7 +233,7 @@ public class UserAdministrationService {
         account.resetFailedLoginAttempts();
 
         LOGGER.info("Operator cleared the failed sign-in counter of account {}", userId);
-        return adminUserMapper.toDto(account);
+        return toAdminUserDto(account);
     }
 
     /**
@@ -208,7 +253,7 @@ public class UserAdministrationService {
                         : passwordEncoder.encode(newPassword));
 
         LOGGER.warn("Operator set the password of account {}", userId);
-        return adminUserMapper.toDto(account);
+        return toAdminUserDto(account);
     }
 
     /**
@@ -230,6 +275,43 @@ public class UserAdministrationService {
 
         userRepository.delete(account);
         LOGGER.warn("Operator deleted account {} ({}) and everything it owned", userId, username);
+    }
+
+    /**
+     * Grants or revokes operator-given pro, and logs it when anything changed.
+     *
+     * @param account          the account, already persisted
+     * @param shouldBePremium  {@code true} to grant, {@code false} to revoke
+     * @param operatorAction   the admin action this is part of, for the log line
+     * @throws PaidEntitlementRevocationException when asked to revoke pro that was paid for
+     */
+    private void applyPremiumDecision(
+            final UserEntity account,
+            final boolean shouldBePremium,
+            final String operatorAction) {
+
+        final OperatorProDecisionOutcome outcome = shouldBePremium
+                ? entitlementGrantService.grantProUnlessAlreadyPro(account)
+                : entitlementGrantService.revokeGrantedPro(account);
+
+        if (outcome.changedStanding()) {
+            LOGGER.info("Operator {} of account {}: premium {}",
+                    operatorAction, account.getId(), outcome);
+        } else {
+            LOGGER.debug("Operator {} of account {}: premium unchanged ({})",
+                    operatorAction, account.getId(), outcome);
+        }
+    }
+
+    /**
+     * Renders an account in the operator's shape, with its current pro standing.
+     *
+     * @param account the account
+     * @return the account as the operator sees it
+     */
+    private AdminUserDto toAdminUserDto(final UserEntity account) {
+        return adminUserMapper.toDto(
+                account, entitlementStandingService.describeProStandingNow(account.getId()));
     }
 
     /**

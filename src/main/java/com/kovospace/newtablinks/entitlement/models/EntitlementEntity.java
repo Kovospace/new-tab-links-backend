@@ -18,7 +18,7 @@ import java.util.Optional;
  * What makes one account pro, and until when.
  *
  * <p>At most one per account ({@code uk_user_entitlement_user}). It is written only by payment
- * signals and, later, by the operator; it is the single answer to "is this account pro", so
+ * signals and by the operator's grant; it is the single answer to "is this account pro", so
  * nothing ever asks the payment provider that question on a request.</p>
  *
  * <p>The schema is {@code V10__pro_entitlement.sql} in {@code new-tab-links-migrations}. Its CHECK
@@ -216,6 +216,70 @@ public class EntitlementEntity extends AbstractAuditableEntity {
             this.providerOrderId = references.orderId();
         }
         adoptCustomerAndProduct(references);
+    }
+
+    /**
+     * Makes this an operator grant: pro given without any payment, and without an end.
+     *
+     * <p>Replaces whatever the row rested on before - only ever a purchase that no longer grants,
+     * which the caller checks. Every payment column is cleared, because the migrated schema's
+     * {@code ck_user_entitlement_grant_unpaid} forbids a grant to carry a provider or an amount,
+     * and because a subscription or order identifier left behind would let a late event about
+     * that old purchase be taken as concerning this grant.</p>
+     *
+     * <p>Two things are deliberately kept. {@link #lastProviderEventAt}, so that a delayed event
+     * older than what was already applied is still refused as stale; and a pending superseded
+     * subscription cancellation, which must still be carried out at the provider.</p>
+     */
+    public void becomeOperatorGrant() {
+        this.source = EntitlementSource.GRANT;
+        this.status = EntitlementStatus.ACTIVE;
+        this.paidUntil = null;
+        this.chargedAmountInMinorUnits = null;
+        this.chargedCurrency = null;
+        this.paymentProvider = null;
+        this.providerCustomerId = null;
+        this.providerSubscriptionId = null;
+        this.providerProductId = null;
+        this.providerOrderId = null;
+    }
+
+    /**
+     * Ends an operator grant while keeping the row, so that it stops granting pro.
+     *
+     * <p>Used instead of deleting the row only when the row still carries provider history that
+     * must survive - see {@link #carriesProviderHistory()}.</p>
+     *
+     * @throws IllegalStateException when this is not an operator grant
+     */
+    public void endOperatorGrant() {
+        if (!isOperatorGrant()) {
+            throw new IllegalStateException("Only an operator grant can be ended by the operator");
+        }
+        this.status = EntitlementStatus.EXPIRED;
+    }
+
+    /**
+     * Tells whether the operator, rather than a payment, is where this entitlement came from.
+     *
+     * @return {@code true} for a grant, whatever its status
+     */
+    public boolean isOperatorGrant() {
+        return source == EntitlementSource.GRANT;
+    }
+
+    /**
+     * Tells whether the row remembers something about the payment provider that deleting it
+     * would lose.
+     *
+     * <p>Two things qualify: the timestamp of the newest provider event applied, which is what
+     * refuses a delayed older event, and a superseded subscription still waiting to be cancelled
+     * at the provider.</p>
+     *
+     * @return {@code true} when a provider event was ever applied or a cancellation is pending
+     */
+    public boolean carriesProviderHistory() {
+        return lastProviderEventAt != null || pendingSupersededSubscriptionId().isPresent();
     }
 
     /**

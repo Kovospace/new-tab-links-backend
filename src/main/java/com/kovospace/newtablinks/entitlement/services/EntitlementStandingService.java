@@ -1,8 +1,12 @@
 package com.kovospace.newtablinks.entitlement.services;
 
 import com.kovospace.newtablinks.entitlement.models.EntitlementEntity;
+import com.kovospace.newtablinks.entitlement.models.ProStanding;
 import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -54,6 +58,41 @@ public class EntitlementStandingService {
         return entitlementRepository.findByOwnerId(ownerId)
                 .map(entitlement -> entitlement.grantsProAt(moment))
                 .orElse(false);
+    }
+
+    /**
+     * Tells whether each of several accounts is pro right now, and through what - in one query.
+     *
+     * @param ownerIds identifiers of the accounts
+     * @return a standing for every identifier given, {@link ProStanding#NOT_PRO} for an account
+     *         without an entitlement; empty when no identifier was given
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, ProStanding> describeProStandingNowOfEach(final Collection<UUID> ownerIds) {
+        if (ownerIds.isEmpty()) {
+            return Map.of();
+        }
+        final Instant now = Instant.now();
+        final Map<UUID, ProStanding> standingByOwnerId = new HashMap<>();
+        ownerIds.forEach(ownerId -> standingByOwnerId.put(ownerId, ProStanding.NOT_PRO));
+        entitlementRepository.findAllByOwnerIdIn(ownerIds).forEach(entitlement ->
+                standingByOwnerId.put(
+                        entitlement.getOwner().getId(), ProStanding.of(entitlement, now)));
+        return Map.copyOf(standingByOwnerId);
+    }
+
+    /**
+     * Tells whether an account is pro right now, and through what.
+     *
+     * @param ownerId identifier of the account
+     * @return its standing; {@link ProStanding#NOT_PRO} when it has no entitlement
+     */
+    @Transactional(readOnly = true)
+    public ProStanding describeProStandingNow(final UUID ownerId) {
+        final Instant now = Instant.now();
+        return entitlementRepository.findByOwnerId(ownerId)
+                .map(entitlement -> ProStanding.of(entitlement, now))
+                .orElse(ProStanding.NOT_PRO);
     }
 
     /**

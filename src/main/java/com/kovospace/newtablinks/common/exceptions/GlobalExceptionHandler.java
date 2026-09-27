@@ -207,6 +207,20 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Renders an attempt to revoke a paid entitlement from the operator's screen as HTTP 409.
+     *
+     * @param exception the exception that was thrown
+     * @return a 409 response carrying the uniform error body
+     * @since 0.0.10
+     */
+    @ExceptionHandler(PaidEntitlementRevocationException.class)
+    public ResponseEntity<ApiErrorResponseDto> handlePaidEntitlementRevocation(
+            final PaidEntitlementRevocationException exception) {
+
+        return buildErrorResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    /**
      * Renders a payment feature this deployment has not been given credentials for as HTTP 503.
      *
      * @param exception the exception that was thrown
