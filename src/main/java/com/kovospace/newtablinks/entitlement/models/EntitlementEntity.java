@@ -12,6 +12,7 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * What makes one account pro, and until when.
@@ -94,6 +95,22 @@ public class EntitlementEntity extends AbstractAuditableEntity {
     private Instant lastProviderEventAt;
 
     /**
+     * A subscription a lifetime purchase replaced, which still has to be cancelled at the
+     * provider; {@code null} when there is none.
+     *
+     * <p>Kept after the cancellation succeeded, as the record of what was cancelled.</p>
+     */
+    @Column(name = "superseded_subscription_id", length = PROVIDER_IDENTIFIER_LENGTH)
+    private String supersededSubscriptionId;
+
+    /**
+     * When the provider confirmed {@link #supersededSubscriptionId} cancelled; {@code null} while
+     * the cancellation is still pending.
+     */
+    @Column(name = "superseded_subscription_cancelled_at")
+    private Instant supersededSubscriptionCancelledAt;
+
+    /**
      * Required by JPA.
      */
     protected EntitlementEntity() {
@@ -136,6 +153,41 @@ public class EntitlementEntity extends AbstractAuditableEntity {
         this.providerOrderId = references.orderId();
         adoptCustomerAndProduct(references);
         replaceChargedAmountWhenReported(chargedAmount);
+    }
+
+    /**
+     * Remembers that the subscription this row rests on must be cancelled at the provider,
+     * because a lifetime purchase is about to replace it.
+     *
+     * <p>Must be called <em>before</em> {@link #recordLifetimePurchase}, which clears the
+     * subscription identifier. Does nothing when the row rests on no subscription. A still
+     * pending cancellation of another subscription is overwritten - the caller logs that.</p>
+     *
+     * @return the identifier of a different subscription whose pending cancellation was dropped
+     *         to make room, or {@code null} when none was
+     */
+    public String scheduleCancellationOfCurrentSubscription() {
+        if (source != EntitlementSource.SUBSCRIPTION || providerSubscriptionId == null) {
+            return null;
+        }
+        final String droppedPendingSubscriptionId =
+                pendingSupersededSubscriptionId()
+                        .filter(pending -> !pending.equals(providerSubscriptionId))
+                        .orElse(null);
+        this.supersededSubscriptionId = providerSubscriptionId;
+        this.supersededSubscriptionCancelledAt = null;
+        return droppedPendingSubscriptionId;
+    }
+
+    /**
+     * Returns the superseded subscription still waiting to be cancelled at the provider.
+     *
+     * @return its identifier, or empty when nothing is pending
+     */
+    public Optional<String> pendingSupersededSubscriptionId() {
+        return supersededSubscriptionCancelledAt == null
+                ? Optional.ofNullable(supersededSubscriptionId)
+                : Optional.empty();
     }
 
     /**
@@ -199,12 +251,17 @@ public class EntitlementEntity extends AbstractAuditableEntity {
     }
 
     /**
-     * Remembers the provider timestamp of the event just applied.
+     * Remembers the provider timestamp of the event just applied, never moving it backwards.
+     *
+     * <p>A lifetime purchase is applied even when it is older than the newest event on the row;
+     * the guard against out-of-order subscription events must keep judging by that newest one.</p>
      *
      * @param providerEventOccurredAt the event's own timestamp
      */
     public void markProviderEventApplied(final Instant providerEventOccurredAt) {
-        this.lastProviderEventAt = providerEventOccurredAt;
+        if (lastProviderEventAt == null || providerEventOccurredAt.isAfter(lastProviderEventAt)) {
+            this.lastProviderEventAt = providerEventOccurredAt;
+        }
     }
 
     /**
@@ -343,5 +400,15 @@ public class EntitlementEntity extends AbstractAuditableEntity {
     /** @return the provider timestamp of the newest applied event, or {@code null} */
     public Instant getLastProviderEventAt() {
         return lastProviderEventAt;
+    }
+
+    /** @return the subscription a lifetime purchase replaced, or {@code null} */
+    public String getSupersededSubscriptionId() {
+        return supersededSubscriptionId;
+    }
+
+    /** @return when that subscription was confirmed cancelled, or {@code null} while pending */
+    public Instant getSupersededSubscriptionCancelledAt() {
+        return supersededSubscriptionCancelledAt;
     }
 }

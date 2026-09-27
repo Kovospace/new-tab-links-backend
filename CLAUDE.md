@@ -299,6 +299,12 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   **Do not add a filter that reads the request body** - none does today, which is why no
   `ContentCachingRequestWrapper` is needed. `payment_webhook_event` is never pruned; Creem stops
   retrying after 24 hours, so rows older than that could go.
+  **The one outbound call besides checkout: a lifetime purchase cancels the subscription it
+  replaced**, immediately and without refund. **Never call Creem inside the webhook
+  transaction.** The policy leaves the subscription pending on the row
+  (`superseded_subscription_*`); an `AFTER_COMMIT` listener makes the first attempt and
+  `SupersededSubscriptionCancellationScheduler` retries until Creem confirms. The rules are in
+  the Javadoc of `SupersededSubscriptionCancellationService` and `CreemSubscriptionCanceller`.
 - **`ddl-auto=update`** is a local-development convenience only, and not a faithful one — it
   builds a schema with no foreign key delete rules, where the migrated schema cascades. Deployed
   environments must set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`. See *The schema is owned by

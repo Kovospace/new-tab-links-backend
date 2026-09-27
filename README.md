@@ -190,6 +190,7 @@ webhook **refuses** every delivery with 503 rather than accepting one it cannot 
 | `CREEM_SUBSCRIPTION_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the yearly product |
 | `CREEM_CHECKOUT_SUCCESS_PATH` | `/account` | | Where Creem returns the customer, relative to `NEWTABLINKS_WEB_BASE_URL`; blank uses the product's own default |
 | `CREEM_API_TIMEOUT` | `PT10S` | | Connect and read timeout for calls to Creem |
+| `PAYMENT_SUBSCRIPTION_CANCELLATION_RETRY_INTERVAL` | `PT15M` | | How often a subscription replaced by a lifetime purchase, and not yet confirmed cancelled at Creem, is retried |
 
 The webhook URL to register in the Creem dashboard is
 **`<public API base>/api/v1/payments/webhooks/creem`**. Details, and how to exercise it
@@ -416,7 +417,27 @@ How each Creem event lands on the entitlement:
 | `refund.created`, full refund of the held order/subscription | `REFUNDED`; grants nothing from that moment |
 | anything else, and partial refunds | acknowledged, recorded as `IGNORED_UNHANDLED_TYPE`, nothing changed |
 
-A standing lifetime purchase ignores every subscription event. Every delivery is claimed in
+A standing lifetime purchase ignores every subscription event. The out-of-order guard does not
+apply to a lifetime purchase: one delivered after newer subscription events is still applied
+(without moving `last_provider_event_at` back), unless the row already holds that same order -
+refunded, since a refund always wins over its own purchase, or as a newer copy of it.
+
+**Buying lifetime on top of a subscription cancels the subscription at Creem**, so it never
+charges again. The webhook never calls Creem: it commits the lifetime entitlement and leaves the
+replaced subscription pending on the row (`superseded_subscription_id`, with
+`superseded_subscription_cancelled_at` still null). Right after the commit the backend sends
+`POST /v1/subscriptions/{id}/cancel` `{"mode":"immediate"}` — immediate and without a refund,
+because lifetime already covers the account — and a timer retries every row still pending
+(`PAYMENT_SUBSCRIPTION_CANCELLATION_RETRY_INTERVAL`). A failed attempt is logged at `WARN` with
+the subscription id and stays pending. When Creem refuses the cancellation, the subscription is
+read back: `canceled`, `expired` or `scheduled_cancel` all mean it will not charge again and
+count as done; anything else is retried. A subscription already `SCHEDULED_CANCEL` here is
+still cancelled outright, and one already `CANCELED` is not touched. The `subscription.canceled`
+and `subscription.expired` events the cancellation triggers hit the rule above and are recorded
+as `IGNORED_UNRELATED`. With no `CREEM_API_KEY` nothing is attempted, the job says so once in
+the log, and the rows stay pending until a key is configured.
+
+Every delivery is claimed in
 `payment_webhook_event` first; its unique index is the replay protection, and the row's `outcome`
 (`APPLIED`, `IGNORED_STALE`, `IGNORED_UNRELATED`, `IGNORED_UNHANDLED_TYPE`, `UNATTRIBUTED`) is
 where to look when a payment did not arrive. `UNATTRIBUTED` is also logged at `ERROR`.

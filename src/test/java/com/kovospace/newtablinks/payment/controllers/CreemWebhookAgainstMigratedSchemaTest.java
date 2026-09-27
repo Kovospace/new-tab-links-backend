@@ -3,17 +3,24 @@ package com.kovospace.newtablinks.payment.controllers;
 import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.WEBHOOK_SECRET;
 import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.lifetimeCheckoutCompleted;
 import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.sign;
+import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.subscriptionCheckoutCompleted;
 import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.subscriptionEvent;
 import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.utf8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.kovospace.newtablinks.common.config.ApiEndpointPaths;
+import com.kovospace.newtablinks.common.exceptions.PaymentProviderRequestFailedException;
+import com.kovospace.newtablinks.payment.models.SubscriptionCancellationResult;
+import com.kovospace.newtablinks.payment.services.PaymentSubscriptionCanceller;
+import com.kovospace.newtablinks.payment.services.SupersededSubscriptionCancellationService;
 import com.kovospace.newtablinks.payment.services.CreemWebhookInterpreter;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserEntity;
@@ -40,11 +47,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.DockerClientFactory;
@@ -98,6 +107,13 @@ class CreemWebhookAgainstMigratedSchemaTest {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private SupersededSubscriptionCancellationService supersededSubscriptionCancellationService;
+
+    /** Stands in for Creem's cancel endpoint; disabled unless a test says otherwise. */
+    @MockitoBean
+    private PaymentSubscriptionCanceller paymentSubscriptionCanceller;
 
     /**
      * Starts PostgreSQL and runs the migration image against it, before the application starts.
@@ -238,6 +254,104 @@ class CreemWebhookAgainstMigratedSchemaTest {
         final Map<String, Object> entitlement = entitlementOf(accountId);
         assertThat(entitlement.get("status")).isEqualTo("PAST_DUE");
         assertThat(((Timestamp) entitlement.get("paid_until")).toInstant()).isEqualTo(FIRST_PERIOD_END);
+    }
+
+    @Test
+    @DisplayName("a lifetime purchase over a subscription commits, then cancels the subscription, "
+            + "and that subscription's late canceled event leaves lifetime intact")
+    void shouldCancelTheSupersededSubscriptionAfterCommit() throws Exception {
+        final UUID accountId = newAccount();
+        final String subscriptionId = "sub_" + accountId;
+        when(paymentSubscriptionCanceller.isEnabled()).thenReturn(true);
+        when(paymentSubscriptionCanceller.cancelImmediately(subscriptionId))
+                .thenReturn(SubscriptionCancellationResult.CANCELLED);
+        deliverSigned(subscriptionCheckoutCompleted("evt_sub_" + accountId, T0, accountId,
+                subscriptionId, FIRST_PERIOD_END));
+
+        deliverSigned(lifetimeCheckoutCompleted("evt_life_" + accountId, T0.plusSeconds(60),
+                accountId));
+
+        verify(paymentSubscriptionCanceller).cancelImmediately(subscriptionId);
+        final Map<String, Object> afterLifetime = entitlementOf(accountId);
+        assertThat(afterLifetime.get("source")).isEqualTo("LIFETIME");
+        assertThat(afterLifetime.get("provider_subscription_id")).isNull();
+        assertThat(afterLifetime.get("superseded_subscription_id")).isEqualTo(subscriptionId);
+        assertThat(afterLifetime.get("superseded_subscription_cancelled_at")).isNotNull();
+
+        final byte[] lateCancel = utf8(subscriptionEvent("subscription.canceled",
+                "evt_cancel_" + accountId, T0.plusSeconds(120), accountId, subscriptionId,
+                FIRST_PERIOD_END));
+        deliver(lateCancel, sign(lateCancel))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("IGNORED_UNRELATED"));
+        assertThat(entitlementOf(accountId).get("source")).isEqualTo("LIFETIME");
+        assertThat(entitlementOf(accountId).get("status")).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    @DisplayName("a failed cancellation still stores the lifetime purchase, stays pending, and the "
+            + "retry job completes it")
+    void shouldKeepAFailedCancellationPendingForTheRetryJob() throws Exception {
+        final UUID accountId = newAccount();
+        final String subscriptionId = "sub_" + accountId;
+        when(paymentSubscriptionCanceller.isEnabled()).thenReturn(true);
+        when(paymentSubscriptionCanceller.cancelImmediately(subscriptionId))
+                .thenThrow(new PaymentProviderRequestFailedException("Creem is down", null))
+                .thenReturn(SubscriptionCancellationResult.CANCELLED);
+        deliverSigned(subscriptionCheckoutCompleted("evt_sub_" + accountId, T0, accountId,
+                subscriptionId, FIRST_PERIOD_END));
+
+        final byte[] lifetime = utf8(lifetimeCheckoutCompleted("evt_life_" + accountId,
+                T0.plusSeconds(60), accountId));
+        deliver(lifetime, sign(lifetime))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("APPLIED"));
+
+        assertThat(entitlementOf(accountId).get("source")).isEqualTo("LIFETIME");
+        assertThat(entitlementOf(accountId).get("superseded_subscription_cancelled_at")).isNull();
+
+        supersededSubscriptionCancellationService.retryPendingCancellations();
+
+        assertThat(entitlementOf(accountId).get("superseded_subscription_id"))
+                .isEqualTo(subscriptionId);
+        assertThat(entitlementOf(accountId).get("superseded_subscription_cancelled_at"))
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("a lifetime purchase delivered after a newer subscription.paid is applied, not "
+            + "refused as stale")
+    void shouldApplyALifetimePurchaseDeliveredAfterANewerSubscriptionEvent() throws Exception {
+        final UUID accountId = newAccount();
+        final String subscriptionId = "sub_" + accountId;
+        final Instant paidAt = T0.plus(Duration.ofDays(1));
+        deliverSigned(subscriptionEvent("subscription.paid", "evt_paid_" + accountId, paidAt,
+                accountId, subscriptionId, FIRST_PERIOD_END));
+
+        final byte[] lateLifetime = utf8(lifetimeCheckoutCompleted("evt_life_" + accountId, T0,
+                accountId));
+        deliver(lateLifetime, sign(lateLifetime))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("APPLIED"));
+
+        final Map<String, Object> entitlement = entitlementOf(accountId);
+        assertThat(entitlement.get("source")).isEqualTo("LIFETIME");
+        assertThat(entitlement.get("status")).isEqualTo("ACTIVE");
+        assertThat(entitlement.get("superseded_subscription_id")).isEqualTo(subscriptionId);
+        assertThat(((Timestamp) entitlement.get("last_provider_event_at")).toInstant())
+                .isEqualTo(paidAt);
+    }
+
+    @Test
+    @DisplayName("the schema refuses a cancellation time without the subscription it belongs to")
+    void shouldRefuseACancellationTimeWithoutItsSubscription() throws Exception {
+        final UUID accountId = newAccount();
+        deliverSigned(lifetimeCheckoutCompleted("evt_" + accountId, T0, accountId));
+
+        assertThatThrownBy(() -> jdbcTemplate.update("update user_entitlement set "
+                + "superseded_subscription_cancelled_at = now() where user_id = ?", accountId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_user_entitlement_superseded_pair");
     }
 
     @Test
