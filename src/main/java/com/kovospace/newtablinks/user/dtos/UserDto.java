@@ -16,6 +16,9 @@ import java.util.UUID;
  * @param hasPassword whether the account can be signed into with a password; {@code false} for an
  *                    account that only ever authenticates through an external provider, which is
  *                    what tells a website to offer "set a password" rather than "change password"
+ * @param premium     whether the account is pro right now, judged by the server from its
+ *                    entitlement at the moment of the response; {@code false} when it has none.
+ *                    A client displays it and never derives it
  * @param createdAt   when the user was created
  * @param updatedAt   when the user was last changed
  * @since 0.0.1
@@ -28,6 +31,11 @@ public record UserDto(
         @Schema(description = "Name shown in the user interface", example = "Matej") String displayName,
         @Schema(description = "Lifecycle state of the account") UserAccountStatus status,
         @Schema(description = "Whether the account has a password", example = "true") boolean hasPassword,
+        @Schema(description = "Whether the account is pro right now. Decided by the server from "
+                + "the account's entitlement when the response is built - a cancelled or past-due "
+                + "subscription stays pro until the end of what was paid for, a refunded or expired "
+                + "one does not. False when the account never bought anything. Never derive it on "
+                + "the client.", example = "false") boolean premium,
         @Schema(description = "When the user was created") Instant createdAt,
         @Schema(description = "When the user was last changed") Instant updatedAt) {
 }

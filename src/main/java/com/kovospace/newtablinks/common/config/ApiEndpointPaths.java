@@ -109,6 +109,17 @@ public final class ApiEndpointPaths {
     public static final String CREEM_WEBHOOK_PATH = "/api/v1/payments/webhooks/creem";
 
     /**
+     * Absolute path of the signed-in account's plan and where it stands.
+     *
+     * <p>Authenticated. It shares the {@code /api/v1/payments} prefix with the webhook, which is
+     * why the webhook's security exemption names that exact path and method rather than a
+     * pattern: a pattern over the prefix would open this one too.</p>
+     *
+     * @since 0.0.9
+     */
+    public static final String PAYMENT_SUBSCRIPTION_PATH = "/api/v1/payments/subscription";
+
+    /**
      * Prevents instantiation of this constant holder.
      */
     private ApiEndpointPaths() {

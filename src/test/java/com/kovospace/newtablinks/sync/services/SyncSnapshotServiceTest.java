@@ -16,7 +16,6 @@ import com.kovospace.newtablinks.profile.services.ProfileService;
 import com.kovospace.newtablinks.subgroup.mappers.SubgroupMapper;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.sync.dtos.SyncSnapshotDto;
-import com.kovospace.newtablinks.user.mappers.UserMapper;
 import com.kovospace.newtablinks.user.services.UserService;
 import java.time.Instant;
 import java.util.List;
@@ -46,7 +45,6 @@ class SyncSnapshotServiceTest {
 
     private final SyncSnapshotService syncSnapshotService = new SyncSnapshotService(
             mock(UserService.class),
-            mock(UserMapper.class),
             mock(GroupRepository.class),
             mock(GroupMapper.class),
             mock(SubgroupRepository.class),

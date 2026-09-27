@@ -294,9 +294,11 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   methods still leave `position` alone deliberately, and the sync push is what sets it. A
   reorder made on the website would still need one.
 - **Payments are Creem, behind one port, and in test mode only so far.** The webhook
-  (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; nothing reads it yet - no limit
-  is enforced, the sync snapshot carries no entitlement, account deletion is not blocked by a
-  live subscription, and there is no admin GRANT endpoint. The rules the webhook code must keep
+  (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; it is read only for display -
+  `premium` on the account DTO (so also `owner.premium` in the sync snapshot) and
+  `GET /api/v1/payments/subscription`. No limit is enforced, account deletion is not blocked by a
+  live subscription, there is no admin GRANT endpoint, and no cancel or refund endpoint - which is
+  why that endpoint's `cancellable`/`refundable` are always false. The rules the webhook code must keep
   are in the Javadoc of `CreemWebhookController`, `PaymentWebhookClaimStore` and
   `EntitlementTransitionPolicy`: body bound as `byte[]`, explicit security exemption, claim in
   its own `REQUIRES_NEW` transaction, older events refused, past-due marks and never revokes.

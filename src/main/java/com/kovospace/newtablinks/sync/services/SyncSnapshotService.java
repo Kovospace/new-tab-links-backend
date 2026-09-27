@@ -8,7 +8,6 @@ import com.kovospace.newtablinks.profile.services.ProfileService;
 import com.kovospace.newtablinks.subgroup.mappers.SubgroupMapper;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.sync.dtos.SyncSnapshotDto;
-import com.kovospace.newtablinks.user.mappers.UserMapper;
 import com.kovospace.newtablinks.user.services.UserService;
 import java.time.Instant;
 import java.util.UUID;
@@ -33,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class SyncSnapshotService {
 
     private final UserService userService;
-    private final UserMapper userMapper;
     private final GroupRepository groupRepository;
     private final GroupMapper groupMapper;
     private final SubgroupRepository subgroupRepository;
@@ -47,8 +45,7 @@ public class SyncSnapshotService {
     /**
      * Creates the service.
      *
-     * @param userService               resolves and reads the owner
-     * @param userMapper                converts the owner
+     * @param userService               reads the owner, with whether it is pro
      * @param groupRepository           reads every group of the owner
      * @param groupMapper               converts groups
      * @param subgroupRepository        reads every subgroup of the owner
@@ -61,7 +58,6 @@ public class SyncSnapshotService {
      */
     public SyncSnapshotService(
             final UserService userService,
-            final UserMapper userMapper,
             final GroupRepository groupRepository,
             final GroupMapper groupMapper,
             final SubgroupRepository subgroupRepository,
@@ -73,7 +69,6 @@ public class SyncSnapshotService {
             final ProfileService profileService) {
 
         this.userService = userService;
-        this.userMapper = userMapper;
         this.groupRepository = groupRepository;
         this.groupMapper = groupMapper;
         this.subgroupRepository = subgroupRepository;
@@ -96,7 +91,7 @@ public class SyncSnapshotService {
     @Transactional(readOnly = true)
     public SyncSnapshotDto captureSnapshotForUser(final UUID ownerId) {
         return new SyncSnapshotDto(
-                userMapper.toDto(userService.getRequiredUserEntity(ownerId)),
+                userService.findUserById(ownerId),
                 profileService.findProfilesByOwner(ownerId),
                 environmentSnapshotReader.readEnvironmentsOfOwner(ownerId),
                 groupMapper.toDtoList(groupRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),

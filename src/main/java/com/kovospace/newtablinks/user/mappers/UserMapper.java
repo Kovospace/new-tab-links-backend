@@ -2,7 +2,6 @@ package com.kovospace.newtablinks.user.mappers;
 
 import com.kovospace.newtablinks.user.dtos.UserDto;
 import com.kovospace.newtablinks.user.models.UserEntity;
-import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -21,17 +20,14 @@ public interface UserMapper {
     /**
      * Converts a single user.
      *
+     * <p>Whether the account is pro is not a property of the user row - it is judged from the
+     * entitlement at a given moment - so the caller decides it and passes it in.</p>
+     *
      * @param userEntity entity to convert
+     * @param premium    whether the account is pro right now
      * @return the converted user
      */
     @Mapping(target = "hasPassword", expression = "java(userEntity.hasPassword())")
-    UserDto toDto(UserEntity userEntity);
-
-    /**
-     * Converts a list of users, preserving order.
-     *
-     * @param userEntities entities to convert
-     * @return the converted users, empty when the input is empty
-     */
-    List<UserDto> toDtoList(List<UserEntity> userEntities);
+    @Mapping(target = "premium", source = "premium")
+    UserDto toDto(UserEntity userEntity, boolean premium);
 }

@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.user.services;
 
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.common.services.AccountDeletionService;
+import com.kovospace.newtablinks.entitlement.services.EntitlementStandingService;
 import com.kovospace.newtablinks.user.dtos.UserDto;
 import com.kovospace.newtablinks.user.dtos.UserProfileUpdateRequestDto;
 import com.kovospace.newtablinks.user.mappers.UserMapper;
@@ -31,26 +32,30 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final AccountDeletionService accountDeletionService;
+    private final EntitlementStandingService entitlementStandingService;
 
     /**
      * Creates the service.
      *
      * @param userRepository         persistence access for users
      * @param userMapper             converter to the client facing shape
-     * @param accountDeletionService removes an account and everything it owns
+     * @param accountDeletionService     removes an account and everything it owns
+     * @param entitlementStandingService tells whether the account is pro
      */
     public UserService(
             final UserRepository userRepository,
             final UserMapper userMapper,
-            final AccountDeletionService accountDeletionService) {
+            final AccountDeletionService accountDeletionService,
+            final EntitlementStandingService entitlementStandingService) {
 
         this.userRepository = userRepository;
         this.userMapper = userMapper;
         this.accountDeletionService = accountDeletionService;
+        this.entitlementStandingService = entitlementStandingService;
     }
 
     /**
-     * Returns a single user.
+     * Returns a single user, with whether the account is pro right now.
      *
      * @param userId identifier of the user
      * @return the user
@@ -58,7 +63,7 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public UserDto findUserById(final UUID userId) {
-        return userMapper.toDto(getRequiredUserEntity(userId));
+        return toUserDtoWithCurrentStanding(getRequiredUserEntity(userId));
     }
 
     /**
@@ -76,7 +81,18 @@ public class UserService {
 
         final UserEntity existingUser = getRequiredUserEntity(userId);
         existingUser.setDisplayName(updateRequest.displayName());
-        return userMapper.toDto(existingUser);
+        return toUserDtoWithCurrentStanding(existingUser);
+    }
+
+    /**
+     * Converts an account for a client, judging whether it is pro at this moment.
+     *
+     * @param userEntity the account
+     * @return the account as returned to a client
+     */
+    private UserDto toUserDtoWithCurrentStanding(final UserEntity userEntity) {
+        return userMapper.toDto(
+                userEntity, entitlementStandingService.isAccountProNow(userEntity.getId()));
     }
 
     /**
