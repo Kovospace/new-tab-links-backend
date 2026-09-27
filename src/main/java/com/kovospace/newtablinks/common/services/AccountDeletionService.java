@@ -3,6 +3,7 @@ package com.kovospace.newtablinks.common.services;
 import com.kovospace.newtablinks.auth.repositories.EmailedTokenRepository;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
 import com.kovospace.newtablinks.auth.repositories.SingleUseCodeRepository;
+import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.environment.repositories.EnvironmentRepository;
 import com.kovospace.newtablinks.profile.repositories.ProfileRepository;
 import com.kovospace.newtablinks.user.models.UserEntity;
@@ -16,8 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Removes an account and every row anywhere in the application that names it.
  *
- * <p>Seven tables carry a non-null foreign key to a user - profiles, environments, refresh
- * tokens, devices, emailed tokens, single use codes and linked identities - and none of them is
+ * <p>Eight tables carry a non-null foreign key to a user - profiles, environments, refresh
+ * tokens, devices, emailed tokens, single use codes, linked identities and the pro entitlement -
+ * and none of them is
  * mapped from the user's side. Deleting the user row on its own therefore relied entirely on the
  * migrated schema's {@code ON DELETE CASCADE}, for the same reason and with the same risk set out
  * on {@link HierarchyDeletionService}: the rule lives in another repository, {@code validate}
@@ -47,6 +49,7 @@ public class AccountDeletionService {
     private final EmailedTokenRepository emailedTokenRepository;
     private final SingleUseCodeRepository singleUseCodeRepository;
     private final UserIdentityRepository userIdentityRepository;
+    private final EntitlementRepository entitlementRepository;
     private final UserRepository userRepository;
 
     /**
@@ -60,6 +63,7 @@ public class AccountDeletionService {
      * @param emailedTokenRepository   persistence access for activation and reset tokens
      * @param singleUseCodeRepository  persistence access for single use codes
      * @param userIdentityRepository   persistence access for linked external identities
+     * @param entitlementRepository    persistence access for the pro entitlement
      * @param userRepository           persistence access for users
      */
     public AccountDeletionService(
@@ -71,6 +75,7 @@ public class AccountDeletionService {
             final EmailedTokenRepository emailedTokenRepository,
             final SingleUseCodeRepository singleUseCodeRepository,
             final UserIdentityRepository userIdentityRepository,
+            final EntitlementRepository entitlementRepository,
             final UserRepository userRepository) {
 
         this.hierarchyDeletionService = hierarchyDeletionService;
@@ -81,6 +86,7 @@ public class AccountDeletionService {
         this.emailedTokenRepository = emailedTokenRepository;
         this.singleUseCodeRepository = singleUseCodeRepository;
         this.userIdentityRepository = userIdentityRepository;
+        this.entitlementRepository = entitlementRepository;
         this.userRepository = userRepository;
     }
 
@@ -100,6 +106,10 @@ public class AccountDeletionService {
 
         deleteEverythingTheUserHasStored(userId);
         deleteEverythingTheUserSignsInWith(userId);
+        // Whether the account MAY be deleted while a subscription is still billing is a
+        // separate, later decision (TODOS: "account deletion is blocked while billing is live").
+        // This only keeps the delete from failing on the foreign key.
+        entitlementRepository.findByOwnerId(userId).ifPresent(entitlementRepository::delete);
 
         userRepository.delete(user);
     }

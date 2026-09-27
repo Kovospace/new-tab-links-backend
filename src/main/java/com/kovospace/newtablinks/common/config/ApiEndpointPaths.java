@@ -97,6 +97,18 @@ public final class ApiEndpointPaths {
             ADMINISTRATION_BASE_PATH + ADMINISTRATION_SIGN_IN_SUBPATH;
 
     /**
+     * Absolute path Creem delivers webhooks to - the URL to register in Creem's dashboard, after
+     * this service's public base address.
+     *
+     * <p>A constant because the security configuration has to exempt exactly this path from
+     * authentication, and a typo on either side would not fail anything: the endpoint would
+     * simply answer every delivery with 401 until Creem stopped trying.</p>
+     *
+     * @since 0.0.9
+     */
+    public static final String CREEM_WEBHOOK_PATH = "/api/v1/payments/webhooks/creem";
+
+    /**
      * Prevents instantiation of this constant holder.
      */
     private ApiEndpointPaths() {

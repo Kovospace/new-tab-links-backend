@@ -7,6 +7,7 @@ import com.kovospace.newtablinks.user.dtos.UserProfileUpdateRequestDto;
 import com.kovospace.newtablinks.user.mappers.UserMapper;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,5 +110,23 @@ public class UserService {
     public UserEntity getRequiredUserEntity(final UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(RESOURCE_NAME, userId));
+    }
+
+    /**
+     * Loads a user entity for another service, when it exists.
+     *
+     * <p>The counterpart of {@link #getRequiredUserEntity(UUID)} for callers to whom a missing
+     * account is an expected answer rather than a failure - a payment webhook naming an account
+     * that has since been deleted. It matters inside a caller's transaction: an exception thrown
+     * through this transactional method would mark that transaction rollback-only even if the
+     * caller caught it.</p>
+     *
+     * @param userId identifier of the user
+     * @return the managed entity, or empty when no user has that identifier
+     * @since 0.0.9
+     */
+    @Transactional(readOnly = true)
+    public Optional<UserEntity> findUserEntity(final UUID userId) {
+        return userRepository.findById(userId);
     }
 }

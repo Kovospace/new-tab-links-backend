@@ -176,6 +176,25 @@ discloses whether an account exists, so it is not offered to the open internet.
 | `SPRING_MAIL_SMTP_AUTH` | `true` | | |
 | `SPRING_MAIL_SMTP_STARTTLS` | `true` | | |
 
+### Payments — Creem (optional)
+
+All blank means payments are off and the application still starts: checkout answers 503, and the
+webhook **refuses** every delivery with 503 rather than accepting one it cannot verify.
+
+| Variable | Default | Required | Notes |
+|---|---|:--:|---|
+| `CREEM_API_KEY` | *(empty)* | for payments | **Secret.** `creem_test_…` is test mode, any other `creem_…` is live. The API host is derived from it |
+| `CREEM_WEBHOOK_SECRET` | *(empty)* | for payments | **Secret.** Signing secret of the endpoint registered in Creem → Developers → Webhooks. Different per endpoint and per mode |
+| `CREEM_API_BASE_URL` | *(derived from the key)* | | Leave unset. If set, it must be the key's own host, or **startup fails** |
+| `CREEM_LIFETIME_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the one-time product. Blank means the plan is not on sale |
+| `CREEM_SUBSCRIPTION_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the yearly product |
+| `CREEM_CHECKOUT_SUCCESS_PATH` | `/account` | | Where Creem returns the customer, relative to `NEWTABLINKS_WEB_BASE_URL`; blank uses the product's own default |
+| `CREEM_API_TIMEOUT` | `PT10S` | | Connect and read timeout for calls to Creem |
+
+The webhook URL to register in the Creem dashboard is
+**`<public API base>/api/v1/payments/webhooks/creem`**. Details, and how to exercise it
+locally, under *Payments* below.
+
 ### HTTP, docs, websocket, operations
 
 | Variable | Default | Notes |
@@ -291,6 +310,8 @@ Create the folder `/new-tab-links-backend` and put in it:
 - `NEWTABLINKS_AUTH_JWT_SIGNING_SECRET`
 - `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`
 - `SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID` / `..._CLIENT_SECRET`
+- `CREEM_API_KEY`, `CREEM_WEBHOOK_SECRET` (the product ids are not secret and can live in
+  `values.yaml`, but may sit here too)
 
 Non-secret values belong in the GitOps `values.yaml` instead.
 
@@ -366,6 +387,75 @@ fails.
 
   Plus, for a signed-in user: `POST /api/v1/auth/extension-connect-codes` to show the connect
   code, and `GET /api/v1/users/me/devices` to list where the account has been used.
+
+---
+
+## Payments
+
+Creem is the merchant of record and **a dumb signal**: its signed webhook says "this account paid,
+until X", and the backend writes that into `user_entitlement`. Nothing asks Creem on a request
+whether somebody is pro. The schema is `V10__pro_entitlement.sql` in `new-tab-links-migrations`
+(schema version `0.0.9`).
+
+| Endpoint | Auth | |
+|---|---|---|
+| `POST /api/v1/payments/checkouts` `{"plan":"LIFETIME"\|"SUBSCRIPTION"}` | bearer | Opens a Creem checkout, returns `{"checkoutUrl"}`. The account travels in checkout `metadata.newtablinks_account_id`, which Creem copies onto the subscription and echoes on every later webhook |
+| `POST /api/v1/payments/webhooks/creem` | `creem-signature` | Creem's deliveries. HMAC-SHA256 of the raw body, hex. Idempotent; out-of-order events are refused |
+
+How each Creem event lands on the entitlement:
+
+| Creem event | Entitlement |
+|---|---|
+| `checkout.completed`, order `onetime` | `LIFETIME` / `ACTIVE`, no end; amount + currency from `order.amount_paid` |
+| `checkout.completed`, order `recurring` | `SUBSCRIPTION` / `ACTIVE`, paid until the subscription's period end |
+| `subscription.paid`, `subscription.active` | `ACTIVE`, paid-until moves to `current_period_end_date` |
+| `subscription.past_due`, `subscription.unpaid` | `PAST_DUE` — **marks, never revokes**; paid-until unchanged |
+| `subscription.scheduled_cancel` | `SCHEDULED_CANCEL`, runs out at the period end |
+| `subscription.canceled` | `CANCELED`; the period already paid for still counts |
+| `subscription.expired` | `EXPIRED`; grants nothing |
+| `refund.created`, full refund of the held order/subscription | `REFUNDED`; grants nothing from that moment |
+| anything else, and partial refunds | acknowledged, recorded as `IGNORED_UNHANDLED_TYPE`, nothing changed |
+
+A standing lifetime purchase ignores every subscription event. Every delivery is claimed in
+`payment_webhook_event` first; its unique index is the replay protection, and the row's `outcome`
+(`APPLIED`, `IGNORED_STALE`, `IGNORED_UNRELATED`, `IGNORED_UNHANDLED_TYPE`, `UNATTRIBUTED`) is
+where to look when a payment did not arrive. `UNATTRIBUTED` is also logged at `ERROR`.
+
+### Exercising the webhook locally
+
+Creem cannot reach `localhost`. Three ways around that:
+
+1. **A locally signed `curl`** — no Creem involved at all. Run with a known secret:
+
+   ```bash
+   CREEM_WEBHOOK_SECRET=whsec_local JAVA_HOME=$HOME/.jdks/openjdk-26.0.2 ./mvnw spring-boot:run
+   ```
+
+   then sign and send a body (`<account-uuid>` must be an existing account):
+
+   ```bash
+   body='{"id":"evt_local_1","eventType":"checkout.completed","created_at":'$(date +%s000)',
+     "object":{"order":{"id":"ord_1","customer":"cust_1","product":"prod_1","amount_paid":1499,
+     "currency":"EUR","type":"onetime"},"metadata":{"newtablinks_account_id":"<account-uuid>"}}}'
+   sig=$(printf '%s' "$body" | openssl dgst -sha256 -hmac 'whsec_local' -hex | sed 's/^.* //')
+   curl -i -X POST http://localhost:8080/api/v1/payments/webhooks/creem \
+     -H 'Content-Type: application/json' -H "creem-signature: $sig" --data-binary "$body"
+   ```
+
+   Send it twice to see the replay answered with `"duplicate":true`.
+2. **The Creem CLI** — `creem listen --forward-to http://localhost:8080/api/v1/payments/webhooks/creem`
+   registers a temporary test-mode endpoint, forwards real events with the real signature, and
+   prints the signing secret to put in `CREEM_WEBHOOK_SECRET`. Trigger events with a test
+   checkout or *Send test event* in the dashboard.
+3. **A tunnel** (ngrok, cloudflared) whose URL is registered as the endpoint in the Creem test
+   dashboard, or **mirrord** steal mode against the deployed Pod (see `.mirrord/README.md` — that
+   is production data).
+
+Test cards: `4111 1111 1111 1111` succeeds; `4507 9900 0000 0028` is declined.
+
+`CreemWebhookAgainstMigratedSchemaTest` runs all of this against a PostgreSQL built by the
+migration image (built from `../new-tab-links-migrations`, or `-Dnewtablinks.migrations.image=…`).
+It needs Docker and is skipped, with the reason, without it.
 
 ---
 
