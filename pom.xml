@@ -37,7 +37,7 @@
 
           Bump it in the same commit that starts depending on a new migration.
         -->
-        <flyway.migrations.schema.version>0.0.8</flyway.migrations.schema.version>
+        <flyway.migrations.schema.version>0.0.9</flyway.migrations.schema.version>
     </properties>
 
     <dependencies>
@@ -145,6 +145,16 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- A real PostgreSQL for the tests that must run against the schema the migration
+             image builds. ddl-auto=validate checks none of the unique indexes, CHECK constraints
+             or ON DELETE rules the payment webhook depends on - its replay protection is a
+             unique index - so those tests are worthless against a Hibernate-generated schema.
+             Version managed by the Spring Boot BOM. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

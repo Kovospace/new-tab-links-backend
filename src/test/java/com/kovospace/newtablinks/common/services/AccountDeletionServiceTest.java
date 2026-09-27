@@ -13,6 +13,8 @@ import com.kovospace.newtablinks.auth.models.SingleUseCodeEntity;
 import com.kovospace.newtablinks.auth.repositories.EmailedTokenRepository;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
 import com.kovospace.newtablinks.auth.repositories.SingleUseCodeRepository;
+import com.kovospace.newtablinks.entitlement.models.EntitlementEntity;
+import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.environment.repositories.EnvironmentRepository;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
@@ -24,6 +26,7 @@ import com.kovospace.newtablinks.user.repositories.UserDeviceRepository;
 import com.kovospace.newtablinks.user.repositories.UserIdentityRepository;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -57,12 +60,14 @@ class AccountDeletionServiceTest {
             mock(SingleUseCodeRepository.class);
     private final UserIdentityRepository userIdentityRepository =
             mock(UserIdentityRepository.class);
+    private final EntitlementRepository entitlementRepository = mock(EntitlementRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
 
     private final AccountDeletionService accountDeletionService = new AccountDeletionService(
             hierarchyDeletionService, profileRepository, environmentRepository,
             refreshTokenRepository, userDeviceRepository, emailedTokenRepository,
-            singleUseCodeRepository, userIdentityRepository, userRepository);
+            singleUseCodeRepository, userIdentityRepository, entitlementRepository,
+            userRepository);
 
     private final UserEntity user = mock(UserEntity.class);
 
@@ -90,6 +95,8 @@ class AccountDeletionServiceTest {
         when(emailedTokenRepository.findAllByUserId(USER_ID)).thenReturn(List.of(emailedToken));
         when(singleUseCodeRepository.findAllByUserId(USER_ID)).thenReturn(List.of(singleUseCode));
         when(userIdentityRepository.findAllByUserId(USER_ID)).thenReturn(List.of(identity));
+        final EntitlementEntity entitlement = mock(EntitlementEntity.class);
+        when(entitlementRepository.findByOwnerId(USER_ID)).thenReturn(Optional.of(entitlement));
 
         accountDeletionService.deleteAccountWithEverythingItOwns(user);
 
@@ -99,6 +106,7 @@ class AccountDeletionServiceTest {
         verify(emailedTokenRepository).deleteAll(List.of(emailedToken));
         verify(singleUseCodeRepository).deleteAll(List.of(singleUseCode));
         verify(userIdentityRepository).deleteAll(List.of(identity));
+        verify(entitlementRepository).delete(entitlement);
         verify(userRepository).delete(user);
     }
 

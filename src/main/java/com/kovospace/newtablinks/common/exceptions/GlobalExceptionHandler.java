@@ -207,6 +207,82 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Renders a payment feature this deployment has not been given credentials for as HTTP 503.
+     *
+     * @param exception the exception that was thrown
+     * @return a 503 response carrying the uniform error body
+     * @since 0.0.9
+     */
+    @ExceptionHandler(PaymentProviderNotConfiguredException.class)
+    public ResponseEntity<ApiErrorResponseDto> handlePaymentProviderNotConfigured(
+            final PaymentProviderNotConfiguredException exception) {
+
+        LOGGER.warn("Refused a payment operation: {}", exception.getMessage());
+        return buildErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), List.of());
+    }
+
+    /**
+     * Renders a failed call to the payment provider as HTTP 502.
+     *
+     * @param exception the exception that was thrown
+     * @return a 502 response carrying the uniform error body
+     * @since 0.0.9
+     */
+    @ExceptionHandler(PaymentProviderRequestFailedException.class)
+    public ResponseEntity<ApiErrorResponseDto> handlePaymentProviderRequestFailed(
+            final PaymentProviderRequestFailedException exception) {
+
+        LOGGER.error("A call to the payment provider failed", exception);
+        return buildErrorResponse(HttpStatus.BAD_GATEWAY, exception.getMessage(), List.of());
+    }
+
+    /**
+     * Renders a webhook delivery that is not signed with this service's secret as HTTP 401.
+     *
+     * @param exception the exception that was thrown
+     * @return a 401 response carrying the uniform error body
+     * @since 0.0.9
+     */
+    @ExceptionHandler(WebhookSignatureRejectedException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleWebhookSignatureRejected(
+            final WebhookSignatureRejectedException exception) {
+
+        LOGGER.warn("Refused a webhook delivery: {}", exception.getMessage());
+        return buildErrorResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
+    /**
+     * Renders a signed webhook delivery that cannot be read as HTTP 400.
+     *
+     * @param exception the exception that was thrown
+     * @return a 400 response carrying the uniform error body
+     * @since 0.0.9
+     */
+    @ExceptionHandler(MalformedWebhookPayloadException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleMalformedWebhookPayload(
+            final MalformedWebhookPayloadException exception) {
+
+        LOGGER.error("A correctly signed webhook delivery could not be read: {}",
+                exception.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), List.of());
+    }
+
+    /**
+     * Renders a redelivery of a webhook event still being processed as HTTP 409.
+     *
+     * @param exception the exception that was thrown
+     * @return a 409 response carrying the uniform error body
+     * @since 0.0.9
+     */
+    @ExceptionHandler(WebhookEventInFlightException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleWebhookEventInFlight(
+            final WebhookEventInFlightException exception) {
+
+        LOGGER.info("Deferred a webhook redelivery: {}", exception.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    /**
      * Renders anything not handled above as HTTP 500, without leaking internals to the caller.
      *
      * @param exception the unexpected exception

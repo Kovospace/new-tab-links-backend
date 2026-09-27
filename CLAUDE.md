@@ -103,8 +103,13 @@ com.kovospace.newtablinks
 ├── link/          the bookmarks themselves
 ├── closedtab/     recently closed browser tabs, a capped log hanging off a profile
 ├── profile/       named sets of environments, the top of the hierarchy and the extension's own
-└── sync/          whole-account snapshot, the pushed change batch, and the change event that
-                   drives websocket pushes
+├── sync/          whole-account snapshot, the pushed change batch, and the change event that
+│                  drives websocket pushes
+├── entitlement/   what makes an account pro, and until when - provider-neutral; applies an
+│                  EntitlementSignal and knows nothing about webhooks
+└── payment/       the port to the payment provider (PaymentWebhookInterpreter,
+                   PaymentCheckoutGateway) and its Creem adapter, the webhook and checkout
+                   endpoints, and the replay-protection claim table
 
 each feature module: controllers/ services/ repositories/ models/ dtos/ mappers/ utils/
 ```
@@ -284,6 +289,16 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 - **Reordering has no endpoint of its own**, but is no longer unreachable: the CRUD update
   methods still leave `position` alone deliberately, and the sync push is what sets it. A
   reorder made on the website would still need one.
+- **Payments are Creem, behind one port, and in test mode only so far.** The webhook
+  (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; nothing reads it yet - no limit
+  is enforced, the sync snapshot carries no entitlement, account deletion is not blocked by a
+  live subscription, and there is no admin GRANT endpoint. The rules the webhook code must keep
+  are in the Javadoc of `CreemWebhookController`, `PaymentWebhookClaimStore` and
+  `EntitlementTransitionPolicy`: body bound as `byte[]`, explicit security exemption, claim in
+  its own `REQUIRES_NEW` transaction, older events refused, past-due marks and never revokes.
+  **Do not add a filter that reads the request body** - none does today, which is why no
+  `ContentCachingRequestWrapper` is needed. `payment_webhook_event` is never pruned; Creem stops
+  retrying after 24 hours, so rows older than that could go.
 - **`ddl-auto=update`** is a local-development convenience only, and not a faithful one — it
   builds a schema with no foreign key delete rules, where the migrated schema cascades. Deployed
   environments must set `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`. See *The schema is owned by

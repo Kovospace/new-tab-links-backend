@@ -214,6 +214,13 @@ public class SecurityConfiguration {
                         // CONNECT frame instead and is checked by StompAuthenticationInterceptor.
                         // A socket that never connects successfully can do nothing.
                         .requestMatchers("/ws/**").permitAll()
+                        // The payment provider's webhook. It has no token of ours; the HMAC of
+                        // its body is the authentication, checked by the provider adapter before
+                        // anything is read. Without this line the catch-all below answers every
+                        // delivery with 401, the provider gives up after five attempts, and the
+                        // first sign is a customer who paid and got nothing.
+                        .requestMatchers(HttpMethod.POST, ApiEndpointPaths.CREEM_WEBHOOK_PATH)
+                        .permitAll()
                         .anyRequest().authenticated())
                 // Bearer flow: every API call from the website and the extension.
                 .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
