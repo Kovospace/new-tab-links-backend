@@ -135,6 +135,10 @@ Controller (@RestController, DTOs only)
 - Cross-cutting helpers go in `common/utils`; if a service grows past one clear responsibility,
   split it into a second service rather than letting it sprawl.
 
+Which file holds which concern, and which endpoint lives in which controller:
+
+@.claude/CODEMAP.md
+
 ### Domain notes
 
 - Every entity extends `common/models/AbstractAuditableEntity` — UUID id, `createdAt`,
