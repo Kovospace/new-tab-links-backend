@@ -4,6 +4,7 @@ import com.kovospace.newtablinks.entitlement.models.EntitlementEntity;
 import com.kovospace.newtablinks.entitlement.models.SupersededSubscriptionCancellation;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,6 +46,19 @@ public interface EntitlementRepository extends JpaRepository<EntitlementEntity, 
      * @return the entitlement, or empty when the account has none
      */
     Optional<EntitlementEntity> findByOwnerId(UUID ownerId);
+
+    /**
+     * Loads the entitlements of several accounts in one query, without locking them.
+     *
+     * <p>What keeps a page of the operator's account list from asking once per account.</p>
+     *
+     * @param ownerIds identifiers of the accounts; an account without an entitlement is simply
+     *                 absent from the result
+     * @return the entitlements found, in no particular order
+     */
+    @Query("select entitlement from EntitlementEntity entitlement "
+            + "where entitlement.owner.id in :ownerIds")
+    List<EntitlementEntity> findAllByOwnerIdIn(@Param("ownerIds") Collection<UUID> ownerIds);
 
     /**
      * Finds the entitlement resting on a provider subscription.

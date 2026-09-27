@@ -26,6 +26,8 @@ import jakarta.validation.constraints.Size;
  * @param displayName name shown in the user interface
  * @param password    password to set, or absent for an account without one
  * @param status      lifecycle state to create the account in
+ * @param premium     whether to give the account pro through an operator grant; absent means
+ *                    {@code false}
  * @since 0.0.6
  */
 @Schema(description = "An account created by the operator")
@@ -48,5 +50,9 @@ public record AdminUserCreateRequestDto(
         @Size(min = 10, max = 200) String password,
 
         @Schema(description = "Lifecycle state to create the account in")
-        @NotNull UserAccountStatus status) {
+        @NotNull UserAccountStatus status,
+
+        @Schema(description = "Whether to give the account pro through an operator grant; "
+                + "absent means false", example = "false")
+        boolean premium) {
 }

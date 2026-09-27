@@ -20,6 +20,7 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Mail | `auth/services/SmtpAccountEmailSender.java` |
 | Devices, installation id, take-over | `user/services/UserDeviceService.java` |
 | Account read/update | `user/services/UserService.java` |
+| Operator-granted pro (admin `premium` checkbox) | `entitlement/services/EntitlementGrantService.java`, called from `user/services/UserAdministrationService.java` |
 | Account deletion (user and admin paths) | `common/services/AccountDeletionService.java`, `user/services/UserAdministrationService.java` |
 | Deleting a subtree of the hierarchy | `common/services/HierarchyDeletionService.java` |
 | Operator sign-in and lockout | `admin/services/AdminSignInService.java`, `admin/services/AdminSignInAttemptTracker.java` |

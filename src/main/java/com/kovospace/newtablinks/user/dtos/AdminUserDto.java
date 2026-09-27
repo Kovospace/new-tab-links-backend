@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.user.dtos;
 
+import com.kovospace.newtablinks.entitlement.models.EntitlementSource;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
@@ -13,6 +14,10 @@ import java.util.UUID;
  * A user has no business being told either about themselves, which is why this is a second shape
  * rather than more fields on the first.</p>
  *
+ * <p>It also says whether the account is pro and, while it is, through what - so the operator
+ * can tell an account that paid from one they gave pro to, and knows which of the two the
+ * premium checkbox can take back.</p>
+ *
  * <p>What is <strong>not</strong> here is the password hash. An operator can give an account a
  * new password; nobody needs to see the old one, and a hash on a screen is a hash in a log.</p>
  *
@@ -25,6 +30,10 @@ import java.util.UUID;
  * @param failedLoginAttempts consecutive failed sign-ins since the last success
  * @param createdAt           when the user was created
  * @param updatedAt           when the user was last changed
+ * @param premium             whether the account is pro right now; the same judgement as
+ *                            {@code premium} on {@link UserDto}
+ * @param premiumSource       where the pro entitlement came from while {@code premium} is true;
+ *                            {@code null} whenever it is false
  * @since 0.0.6
  */
 @Schema(description = "A user account, as the operator sees it")
@@ -37,5 +46,11 @@ public record AdminUserDto(
         @Schema(description = "Whether the account has a password", example = "true") boolean hasPassword,
         @Schema(description = "Consecutive failed sign-ins", example = "0") int failedLoginAttempts,
         @Schema(description = "When the user was created") Instant createdAt,
-        @Schema(description = "When the user was last changed") Instant updatedAt) {
+        @Schema(description = "When the user was last changed") Instant updatedAt,
+        @Schema(description = "Whether the account is pro right now", example = "true")
+        boolean premium,
+        @Schema(description = "Where the pro entitlement came from - paid (LIFETIME, "
+                + "SUBSCRIPTION) or given by the operator (GRANT); null when not pro",
+                example = "GRANT", nullable = true)
+        EntitlementSource premiumSource) {
 }

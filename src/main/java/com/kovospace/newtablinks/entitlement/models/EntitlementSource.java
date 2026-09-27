@@ -17,6 +17,8 @@ public enum EntitlementSource {
     /** A recurring payment, good until the end of the period paid for. */
     SUBSCRIPTION,
 
-    /** Given by the operator without any payment. Nothing writes it yet. */
+    /**
+     * Given by the operator without any payment; written only by {@code EntitlementGrantService}.
+     */
     GRANT
 }
