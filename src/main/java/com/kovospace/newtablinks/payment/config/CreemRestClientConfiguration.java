@@ -29,7 +29,7 @@ public class CreemRestClientConfiguration {
      * Builds the client, pointed at the host the configured key belongs to.
      *
      * <p>With no key configured the client has no host and no key; nothing calls it then,
-     * because the gateway refuses first.</p>
+     * because the checkout gateway and the subscription canceller both refuse first.</p>
      *
      * @param creemProperties the Creem configuration
      * @return the client
@@ -45,11 +45,13 @@ public class CreemRestClientConfiguration {
                 mode -> {
                     builder.baseUrl(mode.apiBaseUrl())
                             .defaultHeader(API_KEY_HEADER, creemProperties.apiKey());
-                    LOGGER.info("Creem checkout is enabled in {} mode against {}",
+                    LOGGER.info("Creem checkout and subscription cancellation are enabled in {} mode "
+                            + "against {}",
                             mode, mode.apiBaseUrl());
                 },
                 () -> LOGGER.warn("No Creem API key is configured, so checkouts cannot be "
-                        + "started. Set CREEM_API_KEY to enable them."));
+                        + "started and replaced subscriptions cannot be cancelled. Set "
+                        + "CREEM_API_KEY to enable them."));
         if (!creemProperties.isWebhookConfigured()) {
             LOGGER.warn("No Creem webhook secret is configured, so every webhook delivery will "
                     + "be refused. Set CREEM_WEBHOOK_SECRET to accept them.");

@@ -15,6 +15,7 @@ import com.kovospace.newtablinks.entitlement.models.EntitlementSignalOutcome;
 import com.kovospace.newtablinks.entitlement.models.EntitlementSource;
 import com.kovospace.newtablinks.entitlement.models.PaymentProvider;
 import com.kovospace.newtablinks.entitlement.models.ProviderPurchaseReferences;
+import com.kovospace.newtablinks.entitlement.models.SupersededSubscriptionCancellation;
 import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserEntity;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * Tests how a payment signal is attributed to an account.
@@ -38,8 +40,11 @@ class EntitlementSignalServiceTest {
 
     private final EntitlementRepository entitlementRepository = mock(EntitlementRepository.class);
     private final UserService userService = mock(UserService.class);
+    private final ApplicationEventPublisher applicationEventPublisher =
+            mock(ApplicationEventPublisher.class);
     private final EntitlementSignalService service = new EntitlementSignalService(
-            entitlementRepository, new EntitlementTransitionPolicy(), userService);
+            entitlementRepository, new EntitlementTransitionPolicy(), userService,
+            applicationEventPublisher);
 
     @Test
     @DisplayName("a payment naming an account in its metadata starts that account's entitlement")
@@ -72,6 +77,36 @@ class EntitlementSignalServiceTest {
 
         assertThat(outcome).isEqualTo(EntitlementSignalOutcome.APPLIED);
         assertThat(onFile.getProviderSubscriptionId()).isEqualTo("sub_1");
+    }
+
+    @Test
+    @DisplayName("a lifetime purchase replacing a subscription announces its cancellation")
+    void shouldAnnounceTheCancellationOfASupersededSubscription() {
+        final UUID entitlementId = UUID.randomUUID();
+        final EntitlementEntity onFile = new EntitlementEntity(accountWithId(ACCOUNT_ID));
+        onFile.setId(entitlementId);
+        onFile.attachToSubscription(PaymentProvider.CREEM,
+                new ProviderPurchaseReferences("cust_1", "sub_1", "prod_yearly", null));
+        when(userService.findUserEntity(ACCOUNT_ID))
+                .thenReturn(Optional.of(accountWithId(ACCOUNT_ID)));
+        when(entitlementRepository.findByOwnerIdForUpdate(ACCOUNT_ID))
+                .thenReturn(Optional.of(onFile));
+
+        service.applySignal(lifetimePurchase(ACCOUNT_ID));
+
+        verify(applicationEventPublisher).publishEvent(
+                new SupersededSubscriptionCancellation(entitlementId, "sub_1"));
+    }
+
+    @Test
+    @DisplayName("a first lifetime purchase announces nothing")
+    void shouldAnnounceNothingWithoutASupersededSubscription() {
+        when(userService.findUserEntity(ACCOUNT_ID))
+                .thenReturn(Optional.of(accountWithId(ACCOUNT_ID)));
+
+        service.applySignal(lifetimePurchase(ACCOUNT_ID));
+
+        verify(applicationEventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test

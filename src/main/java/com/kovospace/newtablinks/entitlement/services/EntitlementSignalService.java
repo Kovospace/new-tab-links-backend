@@ -2,8 +2,10 @@ package com.kovospace.newtablinks.entitlement.services;
 
 import com.kovospace.newtablinks.entitlement.models.EntitlementEntity;
 import com.kovospace.newtablinks.entitlement.models.EntitlementSignal;
+import com.kovospace.newtablinks.entitlement.models.EntitlementSignalKind;
 import com.kovospace.newtablinks.entitlement.models.EntitlementSignalOutcome;
 import com.kovospace.newtablinks.entitlement.models.ProviderPurchaseReferences;
+import com.kovospace.newtablinks.entitlement.models.SupersededSubscriptionCancellation;
 import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.services.UserService;
@@ -11,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link EntitlementTransitionPolicy} decide what changes. It knows nothing about webhooks,
  * signatures or event names.</p>
  *
+ * <p>When a lifetime purchase replaces a live subscription, it publishes a
+ * {@link SupersededSubscriptionCancellation} event. Whoever cancels the subscription at the
+ * provider listens for it after commit; this service never calls the provider itself.</p>
+ *
  * @since 0.0.9
  */
 @Service
@@ -32,6 +39,7 @@ public class EntitlementSignalService {
     private final EntitlementRepository entitlementRepository;
     private final EntitlementTransitionPolicy entitlementTransitionPolicy;
     private final UserService userService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     /**
      * Creates the service.
@@ -39,15 +47,18 @@ public class EntitlementSignalService {
      * @param entitlementRepository       persistence access for entitlements
      * @param entitlementTransitionPolicy decides what a signal does to an entitlement
      * @param userService                 resolves the account a payment was made for
+     * @param applicationEventPublisher   announces a subscription that must be cancelled
      */
     public EntitlementSignalService(
             final EntitlementRepository entitlementRepository,
             final EntitlementTransitionPolicy entitlementTransitionPolicy,
-            final UserService userService) {
+            final UserService userService,
+            final ApplicationEventPublisher applicationEventPublisher) {
 
         this.entitlementRepository = entitlementRepository;
         this.entitlementTransitionPolicy = entitlementTransitionPolicy;
         this.userService = userService;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     /**
@@ -75,11 +86,42 @@ public class EntitlementSignalService {
 
         final EntitlementSignalOutcome outcome = entitlementRepository
                 .findByOwnerIdForUpdate(accountId.get())
-                .map(existing -> entitlementTransitionPolicy.apply(existing, false, signal))
+                .map(existing -> applyToExisting(existing, signal))
                 .orElseGet(() -> startEntitlement(accountId.get(), signal));
 
         LOGGER.info("{} signal from {} for account {}: {}",
                 signal.kind(), signal.provider(), accountId.get(), outcome);
+        return outcome;
+    }
+
+    /**
+     * Applies a signal to an entitlement already on file, and announces the cancellation a
+     * lifetime purchase left pending.
+     *
+     * <p>The announcement is an ordinary application event, published inside the caller's
+     * transaction; a listener bound to the commit acts on it only once the entitlement is
+     * stored. A newly created row never needs one - it rested on no subscription.</p>
+     *
+     * @param entitlement the locked entitlement
+     * @param signal      what the provider reported
+     * @return what applying it did
+     */
+    private EntitlementSignalOutcome applyToExisting(
+            final EntitlementEntity entitlement,
+            final EntitlementSignal signal) {
+
+        final EntitlementSignalOutcome outcome =
+                entitlementTransitionPolicy.apply(entitlement, false, signal);
+        if (outcome == EntitlementSignalOutcome.APPLIED
+                && signal.kind() == EntitlementSignalKind.LIFETIME_PURCHASED) {
+            entitlement.pendingSupersededSubscriptionId().ifPresent(subscriptionId -> {
+                LOGGER.info("Lifetime purchase for account {} replaced subscription {}; it will "
+                        + "be cancelled at {} once this commits",
+                        entitlement.getOwner().getId(), subscriptionId, signal.provider());
+                applicationEventPublisher.publishEvent(new SupersededSubscriptionCancellation(
+                        entitlement.getId(), subscriptionId));
+            });
+        }
         return outcome;
     }
 

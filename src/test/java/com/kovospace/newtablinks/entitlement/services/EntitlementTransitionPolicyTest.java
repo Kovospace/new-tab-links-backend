@@ -150,6 +150,127 @@ class EntitlementTransitionPolicyTest {
     }
 
     @Test
+    @DisplayName("buying lifetime on top of a live subscription leaves that subscription pending "
+            + "cancellation")
+    void shouldCaptureTheSupersededSubscriptionForCancellation() {
+        final EntitlementEntity entitlement = subscriptionPaidUntil(FIRST_PERIOD_END, T0);
+
+        policy.apply(entitlement, false, lifetimeSignal(T0.plusSeconds(1)));
+
+        assertThat(entitlement.getSupersededSubscriptionId()).isEqualTo("sub_1");
+        assertThat(entitlement.getSupersededSubscriptionCancelledAt()).isNull();
+        assertThat(entitlement.pendingSupersededSubscriptionId()).contains("sub_1");
+    }
+
+    @Test
+    @DisplayName("a subscription already scheduled to cancel is still cancelled outright")
+    void shouldCaptureASubscriptionAlreadyScheduledToCancel() {
+        final EntitlementEntity entitlement = subscriptionPaidUntil(FIRST_PERIOD_END, T0);
+        policy.apply(entitlement, false, subscriptionSignal(
+                EntitlementSignalKind.SUBSCRIPTION_CANCELLATION_SCHEDULED, T0.plusSeconds(1),
+                FIRST_PERIOD_END));
+
+        policy.apply(entitlement, false, lifetimeSignal(T0.plusSeconds(2)));
+
+        assertThat(entitlement.pendingSupersededSubscriptionId()).contains("sub_1");
+    }
+
+    @Test
+    @DisplayName("a subscription already cancelled outright is not scheduled for cancellation")
+    void shouldNotCaptureAnAlreadyCancelledSubscription() {
+        final EntitlementEntity entitlement = subscriptionPaidUntil(FIRST_PERIOD_END, T0);
+        policy.apply(entitlement, false, subscriptionSignal(
+                EntitlementSignalKind.SUBSCRIPTION_CANCELED, T0.plusSeconds(1), null));
+
+        policy.apply(entitlement, false, lifetimeSignal(T0.plusSeconds(2)));
+
+        assertThat(entitlement.getSource()).isEqualTo(EntitlementSource.LIFETIME);
+        assertThat(entitlement.pendingSupersededSubscriptionId()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a lifetime purchase on a fresh account has no subscription to cancel")
+    void shouldNotCaptureAnythingForAFirstLifetimePurchase() {
+        final EntitlementEntity entitlement = newEntitlement();
+
+        policy.apply(entitlement, true, lifetimeSignal(T0));
+
+        assertThat(entitlement.getSupersededSubscriptionId()).isNull();
+    }
+
+    @Test
+    @DisplayName("the canceled and expired events the cancellation triggers leave lifetime intact")
+    void shouldIgnoreTheSupersededSubscriptionsLateCancellation() {
+        final EntitlementEntity entitlement = subscriptionPaidUntil(FIRST_PERIOD_END, T0);
+        policy.apply(entitlement, false, lifetimeSignal(T0.plusSeconds(1)));
+
+        final EntitlementSignalOutcome cancelled = policy.apply(entitlement, false,
+                subscriptionSignal(EntitlementSignalKind.SUBSCRIPTION_CANCELED,
+                        T0.plusSeconds(2), null));
+        final EntitlementSignalOutcome expired = policy.apply(entitlement, false,
+                subscriptionSignal(EntitlementSignalKind.SUBSCRIPTION_EXPIRED,
+                        T0.plusSeconds(3), null));
+
+        assertThat(cancelled).isEqualTo(EntitlementSignalOutcome.IGNORED_UNRELATED);
+        assertThat(expired).isEqualTo(EntitlementSignalOutcome.IGNORED_UNRELATED);
+        assertThat(entitlement.getSource()).isEqualTo(EntitlementSource.LIFETIME);
+        assertThat(entitlement.getStatus()).isEqualTo(EntitlementStatus.ACTIVE);
+        assertThat(entitlement.getProviderSubscriptionId()).isNull();
+        assertThat(entitlement.grantsProAt(T0.plus(Duration.ofDays(10_000)))).isTrue();
+        assertThat(entitlement.pendingSupersededSubscriptionId()).contains("sub_1");
+    }
+
+    @Test
+    @DisplayName("a lifetime purchase older than newer subscription events is still applied, "
+            + "captures the subscription, and does not move the newest-event time back")
+    void shouldApplyALateLifetimePurchaseOverNewerSubscriptionEvents() {
+        final EntitlementEntity entitlement = subscriptionPaidUntil(FIRST_PERIOD_END, T0);
+        policy.apply(entitlement, false, subscriptionSignal(
+                EntitlementSignalKind.SUBSCRIPTION_PAID, T0.plusSeconds(100), SECOND_PERIOD_END));
+
+        final EntitlementSignalOutcome outcome =
+                policy.apply(entitlement, false, lifetimeSignal(T0.plusSeconds(50)));
+
+        assertThat(outcome).isEqualTo(EntitlementSignalOutcome.APPLIED);
+        assertThat(entitlement.getSource()).isEqualTo(EntitlementSource.LIFETIME);
+        assertThat(entitlement.getStatus()).isEqualTo(EntitlementStatus.ACTIVE);
+        assertThat(entitlement.getProviderOrderId()).isEqualTo("ord_1");
+        assertThat(entitlement.pendingSupersededSubscriptionId()).contains("sub_1");
+        assertThat(entitlement.getLastProviderEventAt()).isEqualTo(T0.plusSeconds(100));
+    }
+
+    @Test
+    @DisplayName("a lifetime purchase delivered after its own refund does not reactivate it, "
+            + "whatever its timestamp")
+    void shouldLetARefundWinOverItsOwnLatePurchase() {
+        final EntitlementEntity entitlement = newEntitlement();
+        policy.apply(entitlement, true, lifetimeSignal(T0));
+        policy.apply(entitlement, false, refundOf(LIFETIME_ORDER, T0.plusSeconds(100)));
+
+        final EntitlementSignalOutcome older =
+                policy.apply(entitlement, false, lifetimeSignal(T0.plusSeconds(10)));
+        final EntitlementSignalOutcome newer =
+                policy.apply(entitlement, false, lifetimeSignal(T0.plusSeconds(200)));
+
+        assertThat(older).isEqualTo(EntitlementSignalOutcome.IGNORED_STALE);
+        assertThat(newer).isEqualTo(EntitlementSignalOutcome.IGNORED_STALE);
+        assertThat(entitlement.getStatus()).isEqualTo(EntitlementStatus.REFUNDED);
+        assertThat(entitlement.grantsProAt(T0.plusSeconds(300))).isFalse();
+        assertThat(entitlement.getLastProviderEventAt()).isEqualTo(T0.plusSeconds(100));
+    }
+
+    @Test
+    @DisplayName("an older copy of the lifetime purchase already applied is refused as stale")
+    void shouldRefuseAnOlderCopyOfTheSameLifetimePurchase() {
+        final EntitlementEntity entitlement = newEntitlement();
+        policy.apply(entitlement, true, lifetimeSignal(T0.plusSeconds(100)));
+
+        assertThat(policy.apply(entitlement, false, lifetimeSignal(T0)))
+                .isEqualTo(EntitlementSignalOutcome.IGNORED_STALE);
+        assertThat(entitlement.getLastProviderEventAt()).isEqualTo(T0.plusSeconds(100));
+    }
+
+    @Test
     @DisplayName("a status change for a subscription the entitlement does not rest on is ignored")
     void shouldIgnoreAnotherSubscriptionsFailure() {
         final EntitlementEntity entitlement = subscriptionPaidUntil(FIRST_PERIOD_END, T0);
