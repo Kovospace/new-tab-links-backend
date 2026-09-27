@@ -82,14 +82,16 @@ public class SubscriptionStatusMapper {
      * Names the state the website shows for a stored lifecycle status.
      *
      * @param status where the entitlement stands in the provider's lifecycle
-     * @return the state; both kinds of cancellation read as {@code CANCELLED}
+     * @return the state. A scheduled cancellation reads as {@code CANCELLED}, which the website
+     *         shows as paid up until the period end; a subscription that has ended reads as
+     *         {@code EXPIRED}, the website's only state for one with nothing left to run
      */
     static SubscriptionState toState(final EntitlementStatus status) {
         return switch (status) {
             case ACTIVE -> SubscriptionState.ACTIVE;
             case PAST_DUE -> SubscriptionState.PAST_DUE;
-            case SCHEDULED_CANCEL, CANCELED -> SubscriptionState.CANCELLED;
-            case EXPIRED -> SubscriptionState.EXPIRED;
+            case SCHEDULED_CANCEL -> SubscriptionState.CANCELLED;
+            case CANCELED, EXPIRED -> SubscriptionState.EXPIRED;
             case REFUNDED -> SubscriptionState.REFUNDED;
         };
     }

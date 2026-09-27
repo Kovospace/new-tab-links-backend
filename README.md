@@ -412,7 +412,7 @@ How each Creem event lands on the entitlement:
 | `subscription.paid`, `subscription.active` | `ACTIVE`, paid-until moves to `current_period_end_date` |
 | `subscription.past_due`, `subscription.unpaid` | `PAST_DUE` — **marks, never revokes**; paid-until unchanged |
 | `subscription.scheduled_cancel` | `SCHEDULED_CANCEL`, runs out at the period end |
-| `subscription.canceled` | `CANCELED`; the period already paid for still counts |
+| `subscription.canceled` | `CANCELED`; the subscription has ended and grants nothing from then on (a cancellation that keeps the paid period is `subscription.scheduled_cancel`) |
 | `subscription.expired` | `EXPIRED`; grants nothing |
 | `refund.created`, full refund of the held order/subscription | `REFUNDED`; grants nothing from that moment |
 | anything else, and partial refunds | acknowledged, recorded as `IGNORED_UNHANDLED_TYPE`, nothing changed |

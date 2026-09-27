@@ -303,6 +303,36 @@ class EntitlementTransitionPolicyTest {
     }
 
     @Test
+    @DisplayName("an ended subscription grants nothing, even before its paid period would have run out")
+    void shouldEndAccessWhenTheSubscriptionIsCanceled() {
+        final EntitlementEntity entitlement = newEntitlement();
+        policy.apply(entitlement, true, subscriptionSignal(
+                EntitlementSignalKind.SUBSCRIPTION_PAID, T0, FIRST_PERIOD_END));
+
+        policy.apply(entitlement, false, subscriptionSignal(
+                EntitlementSignalKind.SUBSCRIPTION_CANCELED, T0.plusSeconds(60), FIRST_PERIOD_END));
+
+        assertThat(entitlement.getStatus()).isEqualTo(EntitlementStatus.CANCELED);
+        assertThat(entitlement.grantsProAt(T0.plusSeconds(120))).isFalse();
+    }
+
+    @Test
+    @DisplayName("a scheduled cancellation keeps access until the paid period ends, and not after")
+    void shouldKeepAccessUntilAScheduledCancellationRunsOut() {
+        final EntitlementEntity entitlement = newEntitlement();
+        policy.apply(entitlement, true, subscriptionSignal(
+                EntitlementSignalKind.SUBSCRIPTION_PAID, T0, FIRST_PERIOD_END));
+
+        policy.apply(entitlement, false, subscriptionSignal(
+                EntitlementSignalKind.SUBSCRIPTION_CANCELLATION_SCHEDULED, T0.plusSeconds(60),
+                FIRST_PERIOD_END));
+
+        assertThat(entitlement.getStatus()).isEqualTo(EntitlementStatus.SCHEDULED_CANCEL);
+        assertThat(entitlement.grantsProAt(FIRST_PERIOD_END.minusSeconds(1))).isTrue();
+        assertThat(entitlement.grantsProAt(FIRST_PERIOD_END.plusSeconds(1))).isFalse();
+    }
+
+    @Test
     @DisplayName("a failure arriving first starts the row, so the older purchase is then stale")
     void shouldStartFromAFailureThatArrivedBeforeItsPurchase() {
         final EntitlementEntity entitlement = newEntitlement();

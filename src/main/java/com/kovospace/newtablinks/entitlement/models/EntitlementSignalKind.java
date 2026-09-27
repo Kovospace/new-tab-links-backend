@@ -25,7 +25,7 @@ public enum EntitlementSignalKind {
     /** The subscription will end with the current period. */
     SUBSCRIPTION_CANCELLATION_SCHEDULED(false, EntitlementStatus.SCHEDULED_CANCEL),
 
-    /** The subscription was cancelled. */
+    /** The subscription has ended, whether cancelled outright or at a scheduled period end. */
     SUBSCRIPTION_CANCELED(false, EntitlementStatus.CANCELED),
 
     /** The subscription's period ended without a new payment. */
