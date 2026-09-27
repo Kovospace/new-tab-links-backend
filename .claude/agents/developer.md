@@ -41,20 +41,37 @@ every step after it. Read accordingly:
 `CLAUDE.md` is authoritative for tech stack, architecture, git rules and project state. Verify a
 package, class or endpoint exists before referring to it.
 
-## The GitOps repository
+## Changing what the cluster runs — the `devops-engineer` agent
 
-Deployment state for this backend lives outside this repo, in the GitOps repository:
+Tabilinks is deployed from the GitOps repository `/home/kovo/IdeaProjects/kovostack-infra-gitops`
+(`Kovospace/kovostack-infra-gitops`). **Read it freely; never write to it.** Argo CD reconciles its
+`main` continuously with `prune` and `selfHeal`, so a push there is a production deployment with
+no approval gate. Every change to it goes through the user-level agent **`devops-engineer`**
+(`~/.claude/agents/devops-engineer.md`, which follows that repo's own
+`.claude/agents/devops-engineer.md`). It asks the user before every push to `main`.
 
-- **Remote:** `git@github.com:Kovospace/kovostack-infra-gitops.git`
-- **Local checkout:** `/home/kovo/IdeaProjects/kovostack-infra-gitops`
-- Work with it through `git -C /home/kovo/IdeaProjects/kovostack-infra-gitops <cmd>` rather
-  than `cd`. Reading it is allowed via `permissions.additionalDirectories`.
+Where a deployment value belongs decides whether it needs that agent at all:
 
-You may read it freely — to see what image tag is deployed, what values the Helm release uses,
-what the Flyway init container expects. **Hand the changes to its `devops-engineer` agent**
-(`.claude/agents/devops-engineer.md` there) instead of editing cluster resources yourself:
-ArgoCD Applications, app values, namespaces and umbrella charts are its call, not yours. ArgoCD
-reconciles that repo's `main`, so a change there is a deployment, not a proposal.
+| The value is… | It lives in | Changed by |
+|---|---|---|
+| a non-secret setting that differs from the code's default (a path, a URL, an interval) | `applications/<app>/values.yaml`, the `env:` block | `devops-engineer` |
+| a secret (API key, signing secret, password) | Infisical, pulled into the Pod through `envFrom` — no manifest change | **the user**, in Infisical. Never in git, never in an agent brief |
+| the image tag | `versions/<app>.yaml` | CI, never by hand |
+| the migrations init-container version | `versions/new-tab-links-backend-init.yaml` | the backend pipeline; `devops-engineer` only if it cannot |
+| equal to the code's default | nowhere — leave it unset | — |
+
+`<app>` is `new-tab-links-backend` or `new-tab-links-frontend`. For the frontend, `env:` becomes
+`config.json` at container start, so it is only ever public configuration.
+
+**What to hand it.** It knows Kubernetes, not this application, so a brief names: the app, the
+exact variable name, the exact value, **why** that value, and any ordering against a release
+("before the backend image with X deploys"). Label it implementation, as with any agent. For
+example: *new-tab-links-backend, set `CREEM_CHECKOUT_SUCCESS_PATH=/account?purchase=complete` in
+`env:` — where Creem sends a buyer after paying; must land with or after the frontend release
+that reads that parameter.*
+
+A new variable in code with a working default needs nothing in the cluster. Say so in the report
+rather than asking for a no-op change.
 
 Load the **`deployment-pipeline`** skill before anything that reaches the cluster.
 
