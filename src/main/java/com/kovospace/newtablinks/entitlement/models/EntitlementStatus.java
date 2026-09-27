@@ -24,8 +24,16 @@ public enum EntitlementStatus {
     /** Cancelled at the end of the period; runs out at the paid-until instant. */
     SCHEDULED_CANCEL(true),
 
-    /** Cancelled outright. Nothing more is charged; the period already paid for still counts. */
-    CANCELED(true),
+    /**
+     * The subscription has ended. Grants nothing from that moment on.
+     *
+     * <p>Not "cancelled but paid up": that is {@link #SCHEDULED_CANCEL}. The provider sends
+     * {@code subscription.canceled} when the subscription is over - cancelled immediately, or a
+     * scheduled cancellation reaching its period end - and its own reference handling revokes
+     * access on it. Honouring a paid period here once kept a cancelled buyer premium for up to a
+     * year after they had left.</p>
+     */
+    CANCELED(false),
 
     /** The period ended without a new payment. */
     EXPIRED(false),

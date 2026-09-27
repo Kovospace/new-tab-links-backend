@@ -172,18 +172,18 @@ class EntitlementGrantServiceTest {
         }
 
         @Test
-        @DisplayName("a subscription still in its paid period cannot be revoked, even if cancelled")
+        @DisplayName("a subscription still in its paid period cannot be revoked, even with its cancellation scheduled")
         void shouldRefuseToRevokeASubscriptionThatStillGrants() {
             final EntitlementEntity cancelledButPaid = activeSubscription();
             POLICY.apply(cancelledButPaid, false, subscriptionSignal(
-                    EntitlementSignalKind.SUBSCRIPTION_CANCELED, OLD_SUBSCRIPTION,
+                    EntitlementSignalKind.SUBSCRIPTION_CANCELLATION_SCHEDULED, OLD_SUBSCRIPTION,
                     Instant.now().minus(Duration.ofDays(1)), null));
             storedEntitlement(cancelledButPaid);
 
             assertThatThrownBy(() -> grantService.revokeGrantedPro(account))
                     .isInstanceOf(PaidEntitlementRevocationException.class);
 
-            assertThat(cancelledButPaid.getStatus()).isEqualTo(EntitlementStatus.CANCELED);
+            assertThat(cancelledButPaid.getStatus()).isEqualTo(EntitlementStatus.SCHEDULED_CANCEL);
             verify(entitlementRepository, never()).delete(any());
         }
 
