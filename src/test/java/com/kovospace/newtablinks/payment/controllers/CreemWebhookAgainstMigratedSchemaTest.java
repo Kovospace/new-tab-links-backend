@@ -8,7 +8,6 @@ import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.subscriptio
 import static com.kovospace.newtablinks.payment.CreemWebhookPayloads.utf8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -16,6 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.kovospace.newtablinks.common.MigratedPostgresDatabase;
 import com.kovospace.newtablinks.common.config.ApiEndpointPaths;
 import com.kovospace.newtablinks.common.exceptions.PaymentProviderRequestFailedException;
 import com.kovospace.newtablinks.payment.models.SubscriptionCancellationResult;
@@ -26,8 +26,6 @@ import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
 import com.kovospace.newtablinks.user.services.UserService;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -56,12 +54,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.testcontainers.DockerClientFactory;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
-import org.testcontainers.containers.startupcheck.OneShotStartupCheckStrategy;
-import org.testcontainers.images.builder.ImageFromDockerfile;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Exercises the Creem webhook end to end against a PostgreSQL schema built by the migration
@@ -86,15 +78,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @AutoConfigureMockMvc
 class CreemWebhookAgainstMigratedSchemaTest {
 
-    /** Must track the real database's major version, like the migrations repository's CI. */
-    private static final String POSTGRES_IMAGE = "postgres:17-alpine";
-    private static final String DATABASE_ALIAS = "postgres";
     private static final Instant T0 = Instant.parse("2026-09-27T10:00:00Z");
     private static final Instant FIRST_PERIOD_END = Instant.parse("2027-09-27T10:00:00Z");
     private static final Instant SECOND_PERIOD_END = Instant.parse("2028-09-27T10:00:00Z");
 
-    private static Network network;
-    private static PostgreSQLContainer postgres;
+    private static MigratedPostgresDatabase database;
 
     @Autowired
     private MockMvc mockMvc;
@@ -120,16 +108,7 @@ class CreemWebhookAgainstMigratedSchemaTest {
      */
     @BeforeAll
     static void startDatabaseBuiltByTheMigrationImage() {
-        assumeTrue(DockerClientFactory.instance().isDockerAvailable(),
-                "Docker is not available, so the schema cannot be built by the migration image");
-        final Object migrationImage = resolveMigrationImage();
-
-        network = Network.newNetwork();
-        postgres = new PostgreSQLContainer(POSTGRES_IMAGE)
-                .withNetwork(network)
-                .withNetworkAliases(DATABASE_ALIAS);
-        postgres.start();
-        runMigrations(migrationImage);
+        database = MigratedPostgresDatabase.startOrSkip();
     }
 
     /**
@@ -137,12 +116,7 @@ class CreemWebhookAgainstMigratedSchemaTest {
      */
     @AfterAll
     static void stopDatabase() {
-        if (postgres != null) {
-            postgres.stop();
-        }
-        if (network != null) {
-            network.close();
-        }
+        MigratedPostgresDatabase.stop(database);
     }
 
     /**
@@ -152,10 +126,7 @@ class CreemWebhookAgainstMigratedSchemaTest {
      */
     @DynamicPropertySource
     static void useTheMigratedDatabase(final DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> postgres.getJdbcUrl());
-        registry.add("spring.datasource.username", () -> postgres.getUsername());
-        registry.add("spring.datasource.password", () -> postgres.getPassword());
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        database.registerDataSource(registry);
         registry.add("newtablinks.payment.creem.webhook-secret", () -> WEBHOOK_SECRET);
         registry.add("newtablinks.payment.creem.api-key", () -> "");
     }
@@ -526,49 +497,6 @@ class CreemWebhookAgainstMigratedSchemaTest {
             return result.getResponse().getContentAsString();
         } catch (final java.io.UnsupportedEncodingException unreadable) {
             throw new IllegalStateException(unreadable);
-        }
-    }
-
-    /**
-     * Finds the migration image to run: a named one, or one built from the local checkout.
-     *
-     * @return an image name, or a future building one
-     */
-    private static Object resolveMigrationImage() {
-        final String namedImage = System.getProperty("newtablinks.migrations.image", "");
-        if (!namedImage.isBlank()) {
-            return namedImage;
-        }
-        final Path migrationsDirectory = Path.of(System.getProperty(
-                "newtablinks.migrations.directory", "../new-tab-links-migrations"));
-        assumeTrue(Files.isRegularFile(migrationsDirectory.resolve("Dockerfile")),
-                "No migrations checkout at " + migrationsDirectory.toAbsolutePath()
-                        + " and no -Dnewtablinks.migrations.image given, so the schema cannot "
-                        + "be built by the migration image");
-        return new ImageFromDockerfile("new-tab-links-migrations-under-test", true)
-                .withFileFromPath(".", migrationsDirectory);
-    }
-
-    /**
-     * Runs the migration image to completion against the database container.
-     *
-     * @param migrationImage an image name, or a future building one
-     */
-    @SuppressWarnings("unchecked")
-    private static void runMigrations(final Object migrationImage) {
-        final GenericContainer<?> migrations = migrationImage instanceof String imageName
-                ? new GenericContainer<>(imageName)
-                : new GenericContainer<>((java.util.concurrent.Future<String>) migrationImage);
-        try (migrations) {
-            migrations.withNetwork(network)
-                    .withEnv("FLYWAY_URL", "jdbc:postgresql://%s:5432/%s"
-                            .formatted(DATABASE_ALIAS, postgres.getDatabaseName()))
-                    .withEnv("FLYWAY_USER", postgres.getUsername())
-                    .withEnv("FLYWAY_PASSWORD", postgres.getPassword())
-                    .withEnv("FLYWAY_CONNECT_RETRIES", "10")
-                    .withStartupCheckStrategy(
-                            new OneShotStartupCheckStrategy().withTimeout(Duration.ofMinutes(3)))
-                    .start();
         }
     }
 }

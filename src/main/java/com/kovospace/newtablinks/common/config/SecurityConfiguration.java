@@ -31,7 +31,12 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -78,6 +83,17 @@ public class SecurityConfiguration {
             // the visitor token filter both stand in front of it. Registration above is metered
             // by the second of those too, because its 409 answers the same question.
             ApiEndpointPaths.USERNAME_EXISTENCE_PATH
+    };
+
+    /**
+     * Endpoints that take anonymous usage counts, open to {@code POST} without a token.
+     *
+     * <p>Also the endpoints on which a bearer token is not even read - see
+     * {@link #buildBearerTokenResolver()}.</p>
+     */
+    private static final String[] ANONYMOUS_STATISTICS_ENDPOINTS = {
+            ApiEndpointPaths.NEW_TAB_STATISTICS_PATH,
+            ApiEndpointPaths.WEBSITE_VISIT_STATISTICS_PATH
     };
 
     /**
@@ -221,9 +237,15 @@ public class SecurityConfiguration {
                         // first sign is a customer who paid and got nothing.
                         .requestMatchers(HttpMethod.POST, ApiEndpointPaths.CREEM_WEBHOOK_PATH)
                         .permitAll()
+                        // Anonymous usage counts from the extension and the website. Rate
+                        // limited per address in the controller, and never tied to an account.
+                        .requestMatchers(HttpMethod.POST, ANONYMOUS_STATISTICS_ENDPOINTS)
+                        .permitAll()
                         .anyRequest().authenticated())
                 // Bearer flow: every API call from the website and the extension.
-                .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()))
+                .oauth2ResourceServer(server -> server
+                        .bearerTokenResolver(buildBearerTokenResolver())
+                        .jwt(Customizer.withDefaults()))
                 // Guards the handful of endpoints reserved for the website. Placed after the
                 // CORS filter so its 403 still carries the CORS headers a browser needs before
                 // it will let the site read the status - otherwise every rejection would reach
@@ -248,6 +270,29 @@ public class SecurityConfiguration {
         }
 
         return httpSecurity.build();
+    }
+
+    /**
+     * Builds the resolver that finds the bearer token on a request, except where none may count.
+     *
+     * <p>On {@link #ANONYMOUS_STATISTICS_ENDPOINTS} it finds nothing, even when an
+     * {@code Authorization} header is there. The resource server rejects an expired or invalid
+     * token with 401 even on a {@code permitAll} path, so a stale token would otherwise lose a
+     * report that needs no token at all - and ignoring it outright is also the guarantee that a
+     * count is never tied to an account.</p>
+     *
+     * @return the resolver
+     */
+    private static BearerTokenResolver buildBearerTokenResolver() {
+        final BearerTokenResolver defaultResolver = new DefaultBearerTokenResolver();
+        final RequestMatcher anonymousStatisticsEndpoints = new OrRequestMatcher(
+                Arrays.stream(ANONYMOUS_STATISTICS_ENDPOINTS)
+                        .map(path -> (RequestMatcher) PathPatternRequestMatcher.withDefaults()
+                                .matcher(HttpMethod.POST, path))
+                        .toList());
+        return request -> anonymousStatisticsEndpoints.matches(request)
+                ? null
+                : defaultResolver.resolve(request);
     }
 
     /**
