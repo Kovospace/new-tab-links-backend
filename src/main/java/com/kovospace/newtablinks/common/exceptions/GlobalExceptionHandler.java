@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.method.MethodValidationException;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * Translates exceptions thrown anywhere below the controller layer into {@link ApiErrorResponseDto}.
@@ -140,6 +142,63 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Renders a request body that cannot be read - not JSON, or JSON of the wrong shape - as
+     * HTTP 400.
+     *
+     * <p>Without this the body would fall through to {@link #handleUnexpectedFailure} and be
+     * answered as the server's fault. The parser's message is not echoed: it quotes the class
+     * names the body was being read into.</p>
+     *
+     * @param exception the exception raised while reading the body
+     * @return a 400 response carrying the uniform error body
+     * @since 0.0.11
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleUnreadableRequestBody(
+            final HttpMessageNotReadableException exception) {
+
+        LOGGER.debug("Unreadable request body: {}", exception.getMessage());
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST, "The request body could not be read", List.of());
+    }
+
+    /**
+     * Renders a request parameter that cannot be converted to its declared type as HTTP 400.
+     *
+     * @param exception the exception raised when the value does not convert
+     * @return a 400 response naming the rejected parameter
+     * @since 0.0.11
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleRequestParameterTypeMismatch(
+            final MethodArgumentTypeMismatchException exception) {
+
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                "Request validation failed",
+                List.of("%s: has an invalid value".formatted(exception.getName())));
+    }
+
+    /**
+     * Renders an anonymous caller that has sent too much as HTTP 429, quietly.
+     *
+     * <p>Separate from {@link #handleTooManyAttempts} only in how loudly it logs: a lockout of a
+     * sign-in is worth a warning each time, but a public counting endpoint refusing a busy
+     * address is routine, and a warning per refusal would let any caller flood the log.</p>
+     *
+     * @param exception the exception that was thrown
+     * @return a 429 response carrying the uniform error body and a {@code Retry-After} header
+     * @since 0.0.11
+     */
+    @ExceptionHandler(RequestRateLimitExceededException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleRequestRateLimitExceeded(
+            final RequestRateLimitExceededException exception) {
+
+        LOGGER.debug("Refusing a rate-limited request for another {}", exception.getRetryAfter());
+        return buildTooManyRequestsResponse(exception);
+    }
+
+    /**
      * Renders a refused credential as HTTP 401, with the same wording whatever the real cause.
      *
      * @param exception the exception that was thrown
@@ -187,6 +246,18 @@ public class GlobalExceptionHandler {
 
         LOGGER.warn("Refusing an attempt that is locked out for another {}",
                 exception.getRetryAfter());
+
+        return buildTooManyRequestsResponse(exception);
+    }
+
+    /**
+     * Builds the 429 response shared by every kind of refusal to listen for a while.
+     *
+     * @param exception the refusal, carrying how long it lasts
+     * @return a 429 response carrying the uniform error body and a {@code Retry-After} header
+     */
+    private static ResponseEntity<ApiErrorResponseDto> buildTooManyRequestsResponse(
+            final TooManyAttemptsException exception) {
 
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(org.springframework.http.HttpHeaders.RETRY_AFTER,

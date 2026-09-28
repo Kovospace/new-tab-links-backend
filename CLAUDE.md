@@ -107,6 +107,8 @@ com.kovospace.newtablinks
 │                  drives websocket pushes
 ├── entitlement/   what makes an account pro, and until when - provider-neutral; applies an
 │                  EntitlementSignal and knows nothing about webhooks
+├── statistics/    anonymous daily usage counts (new tabs, website visitors) and the admin
+│                  read of them; tied to no account, stores no IP
 └── payment/       the port to the payment provider (PaymentWebhookInterpreter,
                    PaymentCheckoutGateway) and its Creem adapter, the webhook and checkout
                    endpoints, and the replay-protection claim table
@@ -142,7 +144,9 @@ Which file holds which concern, and which endpoint lives in which controller:
 ### Domain notes
 
 - Every entity extends `common/models/AbstractAuditableEntity` — UUID id, `createdAt`,
-  `updatedAt`, maintained by JPA lifecycle callbacks.
+  `updatedAt`, maintained by JPA lifecycle callbacks. **Except the two `statistics/` entities**,
+  whose tables are keyed by day and have none of those columns; they are written only by native
+  upserts and exist so `validate` checks the tables.
 - `updatedAt` exists **specifically for sync**: it is what a client compares against to find what
   changed. The extension has no such field, which is the gap noted above.
 - Ordering is a plain `position` int, appended via `common/utils/DisplayPositionCalculator`.
@@ -279,6 +283,8 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   Deliberately **not** per IP address: carrier-grade NAT puts whole neighbourhoods behind one
   address, so counting by address would punish real users far more than anyone it aimed at. Any
   proposal to add IP-based limiting has to answer that first.
+  **The one answered exception is `/api/v1/stats/*`** (`UsageStatisticsRateLimiter`, in memory
+  per pod): a refused report costs a real user nothing, since the extension keeps unsent counts.
 - **Spent tokens are never pruned.** `emailed_token`, `single_use_code` and revoked
   `refresh_token` rows accumulate forever; a cleanup job is still owed. `visitor_token` is the
   exception and the template — `VisitorTokenCleanupScheduler` sweeps it on a timer.

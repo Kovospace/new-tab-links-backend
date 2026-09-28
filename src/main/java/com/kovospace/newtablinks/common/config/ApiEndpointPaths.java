@@ -120,6 +120,34 @@ public final class ApiEndpointPaths {
     public static final String PAYMENT_SUBSCRIPTION_PATH = "/api/v1/payments/subscription";
 
     /**
+     * Absolute path the extension reports its new-tab counts to.
+     *
+     * <p>A constant because the security configuration opens exactly this path to anonymous
+     * callers and also stops reading bearer tokens on it - a count is never tied to an account,
+     * and a stale token must not turn a report into a 401.</p>
+     *
+     * @since 0.0.11
+     */
+    public static final String NEW_TAB_STATISTICS_PATH = "/api/v1/stats/new-tabs";
+
+    /**
+     * Absolute path the website reports a page visit to.
+     *
+     * <p>A constant for the same reason as {@link #NEW_TAB_STATISTICS_PATH}.</p>
+     *
+     * @since 0.0.11
+     */
+    public static final String WEBSITE_VISIT_STATISTICS_PATH = "/api/v1/stats/website-visit";
+
+    /**
+     * Path, relative to {@link #ADMINISTRATION_BASE_PATH}, of the usage metrics read by the admin
+     * page. Guarded by {@link #ADMINISTRATION_PATH_PATTERN} like everything else below it.
+     *
+     * @since 0.0.11
+     */
+    public static final String ADMINISTRATION_METRICS_SUBPATH = "/metrics";
+
+    /**
      * Prevents instantiation of this constant holder.
      */
     private ApiEndpointPaths() {

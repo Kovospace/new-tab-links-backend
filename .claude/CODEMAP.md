@@ -30,6 +30,8 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Pushing a refresh to other devices | `sync/events/UserDataChangePublisher.java`, `sync/services/UserRefreshNotifier.java`, `common/config/WebSocketConfiguration.java`, `common/security/StompAuthenticationInterceptor.java` |
 | Client-assigned ids | `common/utils/ClientAssignedIdentifierPolicy.java`, `common/models/AssignedOrGeneratedUuid.java` |
 | Ordering | `common/utils/DisplayPositionCalculator.java` |
+| Usage statistics (new tabs, website visitors) | `statistics/services/NewTabReportService.java`, `statistics/services/WebsiteVisitService.java`, `statistics/services/WebsiteVisitorHasher.java` |
+| Per-address rate limit (statistics only) | `statistics/services/UsageStatisticsRateLimiter.java` |
 | Base entity (`id`, `createdAt`, `updatedAt`) | `common/models/AbstractAuditableEntity.java` |
 | Every configuration parameter | `src/main/resources/application.properties` (each one `${ENV:default}`) |
 | The schema | **not here** — `/home/kovo/IdeaProjects/new-tab-links-migrations`, whose `CLAUDE.md` indexes every table |
@@ -44,6 +46,8 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | `/api/v1/users/me/devices` | `user/controllers/UserDeviceController.java` |
 | `/api/v1/admin` | `admin/controllers/AdminAuthenticationController.java` |
 | `/api/v1/admin/users` | `user/controllers/AdminUserController.java` |
+| `/api/v1/admin/metrics` | `statistics/controllers/AdminUsageMetricsController.java` |
+| `/api/v1/stats` (`/new-tabs`, `/website-visit`) — public | `statistics/controllers/UsageStatisticsController.java` |
 | `/api/v1/sync` (`/snapshot`, `/push`) | `sync/controllers/SyncController.java` |
 | `/api/v1/profiles`, `/environments`, `/groups`, `/subgroups`, `/links` | `<module>/controllers/<Module>Controller.java` |
 
