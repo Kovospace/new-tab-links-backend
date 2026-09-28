@@ -37,11 +37,7 @@
 
           Bump it in the same commit that starts depending on a new migration.
         -->
-        <!-- TODO(usage statistics): bump to the new-tab-links-migrations image that carries
-             V12__usage_statistics.sql (daily_metric, website_visitor_hash) once that image is
-             built - expected 0.0.12, but confirm the tag the workflow actually produces. This
-             branch already depends on V12; it must not be deployed against 0.0.11. -->
-        <flyway.migrations.schema.version>0.0.11</flyway.migrations.schema.version>
+        <flyway.migrations.schema.version>0.0.12</flyway.migrations.schema.version>
     </properties>
 
     <dependencies>
