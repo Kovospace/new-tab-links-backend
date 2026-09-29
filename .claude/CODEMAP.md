@@ -24,7 +24,7 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Operator-granted pro (admin `premium` checkbox) | `entitlement/services/EntitlementGrantService.java`, called from `user/services/UserAdministrationService.java` |
 | Account deletion (user and admin paths) | `common/services/AccountDeletionService.java`, `user/services/UserAdministrationService.java` |
 | Deleting a subtree of the hierarchy | `common/services/HierarchyDeletionService.java` |
-| Operator sign-in and lockout | `admin/services/AdminSignInService.java`, `admin/services/AdminSignInAttemptTracker.java` |
+| Operator sign-in and lockout (shared by every replica) | `admin/services/AdminSignInService.java`, `admin/services/AdminSignInAttemptTracker.java`, `admin/repositories/AdminSignInLockRepository.java` (the atomic SQL) |
 | Sync snapshot (GET) | `sync/services/SyncSnapshotService.java`, `sync/services/EnvironmentSnapshotReader.java` |
 | Sync push (POST) | `sync/services/SyncPushService.java` → one `*SyncOperationApplier.java` per entity kind |
 | Why a pushed operation was refused | `sync/dtos/SyncRejectionReason.java` |
