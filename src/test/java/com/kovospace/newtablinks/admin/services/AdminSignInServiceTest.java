@@ -2,6 +2,11 @@ package com.kovospace.newtablinks.admin.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.kovospace.newtablinks.admin.config.AdminAccessProperties;
 import com.kovospace.newtablinks.admin.dtos.AdminSignInRequestDto;
@@ -30,6 +35,10 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
  * token that comes out carries the scope the endpoints demand and a subject that is not a user
  * identifier, which is what stops an operator from acting as somebody.</p>
  *
+ * <p>The tracker is a mock here: what the service decides is when to consult it and what to
+ * tell it. How it counts - across replicas, in the database - is proved against the migrated
+ * schema by {@link AdminSignInAttemptTrackerAgainstMigratedSchemaTest}.</p>
+ *
  * @since 0.0.6
  */
 class AdminSignInServiceTest {
@@ -45,8 +54,12 @@ class AdminSignInServiceTest {
 
     private JwtDecoder jwtDecoder;
 
+    private AdminSignInAttemptTracker signInAttemptTracker;
+
     @BeforeEach
-    void buildDecoder() {
+    void buildDecoderAndUnlockedTracker() {
+        signInAttemptTracker = mock(AdminSignInAttemptTracker.class);
+        when(signInAttemptTracker.remainingLock()).thenReturn(Duration.ZERO);
         jwtDecoder = NimbusJwtDecoder.withSecretKey(signingKey())
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
@@ -94,54 +107,42 @@ class AdminSignInServiceTest {
     }
 
     @Test
-    @DisplayName("sign-in locks after the configured number of failures")
-    void shouldLockAfterTooManyFailures() {
-        final AdminSignInService signInService = serviceWith(CONFIGURED_USERNAME, CONFIGURED_PASSWORD);
-        final var wrongCredentials = new AdminSignInRequestDto(CONFIGURED_USERNAME, "wrong");
-
-        for (int attempt = 0; attempt < MAXIMUM_ATTEMPTS; attempt++) {
-            assertThatThrownBy(() -> signInService.signIn(wrongCredentials))
-                    .isInstanceOf(AuthenticationFailedException.class);
-        }
-
-        assertThatThrownBy(() -> signInService.signIn(wrongCredentials))
-                .isInstanceOf(TooManyAttemptsException.class);
-    }
-
-    @Test
-    @DisplayName("once locked, even the right credentials are refused without being looked at")
+    @DisplayName("while locked, even the right credentials are refused without being looked at")
     void shouldRefuseTheRightCredentialsWhileLocked() {
+        when(signInAttemptTracker.remainingLock()).thenReturn(Duration.ofMinutes(3));
         final AdminSignInService signInService = serviceWith(CONFIGURED_USERNAME, CONFIGURED_PASSWORD);
-        final var wrongCredentials = new AdminSignInRequestDto(CONFIGURED_USERNAME, "wrong");
-
-        for (int attempt = 0; attempt < MAXIMUM_ATTEMPTS; attempt++) {
-            assertThatThrownBy(() -> signInService.signIn(wrongCredentials))
-                    .isInstanceOf(AuthenticationFailedException.class);
-        }
 
         // The whole point of checking the lock first: a locked-out caller must not be able to
         // tell a right guess from a wrong one by which refusal comes back.
         assertThatThrownBy(() -> signInService.signIn(
                 new AdminSignInRequestDto(CONFIGURED_USERNAME, CONFIGURED_PASSWORD)))
                 .isInstanceOf(TooManyAttemptsException.class);
+        verify(signInAttemptTracker, never()).recordSuccess();
+        verify(signInAttemptTracker, never()).recordFailure();
     }
 
     @Test
-    @DisplayName("a success in time clears the failures behind it")
-    void shouldForgetFailuresAfterASuccess() {
-        final AdminSignInService signInService = serviceWith(CONFIGURED_USERNAME, CONFIGURED_PASSWORD);
-        final var wrongCredentials = new AdminSignInRequestDto(CONFIGURED_USERNAME, "wrong");
-
-        for (int attempt = 0; attempt < MAXIMUM_ATTEMPTS - 1; attempt++) {
-            assertThatThrownBy(() -> signInService.signIn(wrongCredentials))
-                    .isInstanceOf(AuthenticationFailedException.class);
-        }
-        signInService.signIn(new AdminSignInRequestDto(CONFIGURED_USERNAME, CONFIGURED_PASSWORD));
-
-        // The counter is back to zero, so this failure is the first one again rather than the
-        // fifth, and does not lock.
-        assertThatThrownBy(() -> signInService.signIn(wrongCredentials))
+    @DisplayName("a wrong password, and a sign-in with nobody configured, both count as failures")
+    void shouldCountEveryRefusalAsAFailure() {
+        assertThatThrownBy(() -> serviceWith(CONFIGURED_USERNAME, CONFIGURED_PASSWORD)
+                .signIn(new AdminSignInRequestDto(CONFIGURED_USERNAME, "wrong")))
                 .isInstanceOf(AuthenticationFailedException.class);
+        assertThatThrownBy(() -> serviceWith("", "")
+                .signIn(new AdminSignInRequestDto("anything", "anything")))
+                .isInstanceOf(AuthenticationFailedException.class);
+
+        verify(signInAttemptTracker, times(2)).recordFailure();
+        verify(signInAttemptTracker, never()).recordSuccess();
+    }
+
+    @Test
+    @DisplayName("a success is recorded, which is what clears the failures behind it")
+    void shouldRecordASuccess() {
+        serviceWith(CONFIGURED_USERNAME, CONFIGURED_PASSWORD)
+                .signIn(new AdminSignInRequestDto(CONFIGURED_USERNAME, CONFIGURED_PASSWORD));
+
+        verify(signInAttemptTracker).recordSuccess();
+        verify(signInAttemptTracker, never()).recordFailure();
     }
 
     /**
@@ -157,7 +158,7 @@ class AdminSignInServiceTest {
 
         return new AdminSignInService(
                 adminProperties,
-                new AdminSignInAttemptTracker(adminProperties),
+                signInAttemptTracker,
                 new AdminAccessTokenIssuer(jwtEncoder(), adminProperties, authenticationProperties()));
     }
 

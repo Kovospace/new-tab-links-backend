@@ -146,8 +146,9 @@ Which file holds which concern, and which endpoint lives in which controller:
 
 - Every entity extends `common/models/AbstractAuditableEntity` — UUID id, `createdAt`,
   `updatedAt`, maintained by JPA lifecycle callbacks. **Except the two `statistics/` entities**,
-  whose tables are keyed by day and have none of those columns; they are written only by native
-  upserts and exist so `validate` checks the tables.
+  whose tables are keyed by day and have none of those columns, and **`AdminSignInLockEntity`**,
+  a single-row counter. All three are written only by native statements and exist so `validate`
+  checks the tables.
 - `updatedAt` exists **specifically for sync**: it is what a client compares against to find what
   changed. The extension has no such field, which is the gap noted above.
 - Ordering is a plain `position` int, appended via `common/utils/DisplayPositionCalculator`.
@@ -272,8 +273,10 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 - **The admin surface is guarded by one shared password.** `/api/v1/admin/**` can read, change
   and delete any account; `ADMIN_USERNAME` / `ADMIN_PASSWORD` are the entire wall in front of it,
   and both blank disables it. Its sign-in locks after `ADMIN_USER_MAX_CONSECUTIVE_ATTEMPTS`
-  failures for `ADMIN_USER_BAD_ATTEMPTS_LOCK_TIME`, but **that counter is in memory, so it is per
-  replica** — scaling out multiplies the guesses. Move it to the database before scaling out.
+  failures for `ADMIN_USER_BAD_ATTEMPTS_LOCK_TIME`. The count lives in the one-row
+  `admin_sign_in_lock` table (`V13`), shared by every replica and changed only by single atomic
+  statements timed by the database's `now()`; it used to be in memory, which gave an attacker one
+  set of guesses per pod.
 - **Admin tokens and user tokens are different kinds.** An admin token carries `scope=ADMIN` and a
   username as its subject; a user token carries neither. `AuthenticatedUserProvider` refuses a
   subject that is not a UUID, which is what stops an operator from acting *as* a user. Do not
@@ -300,8 +303,7 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   or *guaranteed delivery* must not be built on the PostgreSQL transport meanwhile.
 - **The websocket broker is still in-memory, per pod** - which is now fine: every replica hears
   every change through the messaging port (`UserRefreshNotifier` publishes, `UserRefreshRelay`
-  in each pod delivers to its own sessions). What remains per replica is the admin lockout
-  counter above, not the websocket.
+  in each pod delivers to its own sessions).
 - **Conflicts are resolved by arrival order**, and nothing detects them. Two devices editing the
   same link means the later push wins and the earlier device is told to re-read. There is no
   merge, no version check and no report that it happened; that is a deliberate trade, not an
