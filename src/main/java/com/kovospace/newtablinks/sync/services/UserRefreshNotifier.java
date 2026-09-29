@@ -1,20 +1,26 @@
 package com.kovospace.newtablinks.sync.services;
 
-import com.kovospace.newtablinks.sync.dtos.DataChangedNotificationDto;
+import com.kovospace.newtablinks.common.messaging.MessagePublisher;
 import com.kovospace.newtablinks.sync.events.UserDataChangedEvent;
+import com.kovospace.newtablinks.sync.events.UserDataChangedMessage;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Tells a user's connected browsers that their data changed, so they can pull a fresh snapshot.
+ * Announces a committed change to every replica, so that the user's connected browsers - on
+ * whichever pods they are connected to - can pull a fresh snapshot.
  *
  * <p>This is the point of the websocket: without it a second browser shows stale links until
  * something makes it re-read.</p>
+ *
+ * <p>It does not send to the websocket itself. It used to, and the simple broker only knows the
+ * sessions of the pod it runs in: with two replicas, a change committed on one pod never reached
+ * a browser connected to the other. It now publishes {@link UserDataChangedMessage} to every
+ * replica, and {@link UserRefreshRelay} in each of them delivers to its own sessions.</p>
  *
  * @since 0.0.3
  */
@@ -23,24 +29,19 @@ public class UserRefreshNotifier {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserRefreshNotifier.class);
 
-    /**
-     * Destination each client subscribes to, resolved per user by the broker.
-     */
-    static final String REFRESH_DESTINATION = "/queue/refresh";
-
-    private final SimpMessagingTemplate messagingTemplate;
+    private final MessagePublisher messagePublisher;
 
     /**
      * Creates the notifier.
      *
-     * @param messagingTemplate sends to per-user destinations
+     * @param messagePublisher reaches every replica
      */
-    public UserRefreshNotifier(final SimpMessagingTemplate messagingTemplate) {
-        this.messagingTemplate = messagingTemplate;
+    public UserRefreshNotifier(final MessagePublisher messagePublisher) {
+        this.messagePublisher = messagePublisher;
     }
 
     /**
-     * Sends the refresh signal once the change is actually durable.
+     * Announces the change once it is actually durable.
      *
      * <p>Bound to {@link TransactionPhase#AFTER_COMMIT} deliberately. Notifying inside the
      * transaction would race the commit: a browser told to re-read could fetch a snapshot taken
@@ -48,24 +49,22 @@ public class UserRefreshNotifier {
      * coming. Waiting also means a rolled back transaction sends nothing at all, which is
      * correct - nothing changed.</p>
      *
-     * <p>A failure to deliver is logged and swallowed. The write has already succeeded and been
-     * acknowledged; a broker problem must not surface as a failed request, and the client
-     * recovers on its next poll or reconnect.</p>
+     * <p>A failure to publish is logged and swallowed. The write has already succeeded and been
+     * acknowledged; a messaging problem must not surface as a failed request, and the client
+     * recovers on its next pull.</p>
      *
      * @param event the change that was committed
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void notifyUserOfCommittedChange(final UserDataChangedEvent event) {
         try {
-            messagingTemplate.convertAndSendToUser(
-                    event.ownerId().toString(),
-                    REFRESH_DESTINATION,
-                    new DataChangedNotificationDto(Instant.now(), event.originDeviceId()));
+            messagePublisher.publish(UserDataChangedMessage.TOPIC,
+                    new UserDataChangedMessage(event.ownerId(), event.originDeviceId(), Instant.now()));
 
-            LOGGER.debug("Sent a refresh signal to account {}", event.ownerId());
-        } catch (final RuntimeException deliveryFailed) {
-            LOGGER.warn("Could not send a refresh signal to account {}", event.ownerId(),
-                    deliveryFailed);
+            LOGGER.debug("Announced a change to account {} to every replica", event.ownerId());
+        } catch (final RuntimeException publishingFailed) {
+            LOGGER.warn("Could not announce a change to account {}", event.ownerId(),
+                    publishingFailed);
         }
     }
 }

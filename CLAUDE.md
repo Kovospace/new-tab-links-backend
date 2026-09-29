@@ -93,7 +93,8 @@ Caveats to keep in mind:
 
 ```
 com.kovospace.newtablinks
-├── common/        config (OpenAPI, WebSocket, security), exceptions, models, security, utils
+├── common/        config (OpenAPI, WebSocket, security), exceptions, messaging, models,
+│                  security, utils
 ├── admin/         the operator's identity: sign-in, lockout, the admin-scoped token
 ├── auth/          registration, activation, sign-in, passwords, tokens, provider sign-in
 ├── user/          the account itself, its provider identities, and its devices
@@ -288,8 +289,19 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 - **Spent tokens are never pruned.** `emailed_token`, `single_use_code` and revoked
   `refresh_token` rows accumulate forever; a cleanup job is still owed. `visitor_token` is the
   exception and the template — `VisitorTokenCleanupScheduler` sweeps it on a timer.
-- **The websocket broker is in-memory, so single-replica only.** Scaling out silently stops
-  delivering to clients on the other pod.
+- **HIGH PRIORITY - messaging infrastructure (a broker) is still to be built.** Replicas talk to
+  each other through the messaging port in `common/messaging` (`MessagePublisher`,
+  `MessageSubscriber`, `MessageTopic`), carried today by PostgreSQL `NOTIFY`/`LISTEN`. That is
+  enough for fan-out hints and nothing more: no durability, no acknowledgement, no work queues,
+  8000-byte payloads. It will be needed for more than the websocket refresh, so a broker
+  (RabbitMQ, in its own namespace, run by its operator) is planned. Moving to it is a new
+  `MessageTransport` value, a publisher, a listener feeding `MessageHandlerRegistry`, and their
+  beans in `MessagingConfiguration` - no caller changes. Anything needing *competing consumers*
+  or *guaranteed delivery* must not be built on the PostgreSQL transport meanwhile.
+- **The websocket broker is still in-memory, per pod** - which is now fine: every replica hears
+  every change through the messaging port (`UserRefreshNotifier` publishes, `UserRefreshRelay`
+  in each pod delivers to its own sessions). What remains per replica is the admin lockout
+  counter above, not the websocket.
 - **Conflicts are resolved by arrival order**, and nothing detects them. Two devices editing the
   same link means the later push wins and the earlier device is told to re-read. There is no
   merge, no version check and no report that it happened; that is a deliberate trade, not an
