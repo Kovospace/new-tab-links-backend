@@ -17,6 +17,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param webSessionHandoffLifetime   how long the code handed to the website after a provider
  *                                    sign-in stays valid
  * @param extensionConnectLifetime    how long a connect code shown to the user stays valid
+ * @param providerSignInLifetime      how long a Google sign-in may take between leaving for the
+ *                                    provider and coming back, which is how long the cookie
+ *                                    carrying its authorization request is honoured
  * @param maximumFailedLoginAttempts  consecutive failures after which an account is locked
  * @param jwtSigningSecret            secret the access tokens are signed with
  * @param jwtIssuer                   value placed in the {@code iss} claim
@@ -30,6 +33,7 @@ public record AuthenticationProperties(
         Duration passwordResetTokenLifetime,
         Duration webSessionHandoffLifetime,
         Duration extensionConnectLifetime,
+        Duration providerSignInLifetime,
         int maximumFailedLoginAttempts,
         String jwtSigningSecret,
         String jwtIssuer) {

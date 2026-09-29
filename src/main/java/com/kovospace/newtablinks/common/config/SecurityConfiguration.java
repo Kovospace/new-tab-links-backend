@@ -5,9 +5,13 @@ import com.kovospace.newtablinks.auth.config.AuthenticationProperties;
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import com.kovospace.newtablinks.auth.services.ProviderSignInSuccessHandler;
 import com.kovospace.newtablinks.auth.services.VisitorTokenService;
+import com.kovospace.newtablinks.auth.utils.AuthorizationRequestCookieCipher;
+import com.kovospace.newtablinks.auth.utils.AuthorizationRequestCookieCodec;
+import com.kovospace.newtablinks.common.security.CookieOAuth2AuthorizationRequestRepository;
 import com.kovospace.newtablinks.common.security.FrontendApiKeyAuthenticationFilter;
 import com.kovospace.newtablinks.common.security.VisitorTokenAuthenticationFilter;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.Arrays;
 import java.util.List;
 import javax.crypto.spec.SecretKeySpec;
@@ -261,7 +265,12 @@ public class SecurityConfiguration {
 
         // Browser flow: the website sends the user here to sign in with a provider.
         if (clientRegistrations.getIfAvailable() != null) {
-            httpSecurity.oauth2Login(login -> login.successHandler(providerSignInSuccessHandler));
+            // The authorization request rides in a sealed cookie rather than the HTTP session,
+            // so Google's callback can land on any replica - see the repository for why.
+            httpSecurity.oauth2Login(login -> login
+                    .authorizationEndpoint(endpoint -> endpoint
+                            .authorizationRequestRepository(buildAuthorizationRequestRepository()))
+                    .successHandler(providerSignInSuccessHandler));
             LOGGER.info("Provider sign-in is enabled");
         } else {
             LOGGER.warn("No OAuth2 client is configured, so provider sign-in is disabled. "
@@ -270,6 +279,22 @@ public class SecurityConfiguration {
         }
 
         return httpSecurity.build();
+    }
+
+    /**
+     * Builds the store for a provider sign-in's authorization request.
+     *
+     * <p>Keyed from the JWT signing secret, which every replica shares; a pod keyed differently
+     * would be unable to open the cookie another pod wrote.</p>
+     *
+     * @return the cookie-backed repository
+     */
+    private CookieOAuth2AuthorizationRequestRepository buildAuthorizationRequestRepository() {
+        return new CookieOAuth2AuthorizationRequestRepository(
+                new AuthorizationRequestCookieCipher(authenticationProperties.jwtSigningSecret()),
+                new AuthorizationRequestCookieCodec(objectMapper),
+                authenticationProperties.providerSignInLifetime(),
+                Clock.systemUTC());
     }
 
     /**

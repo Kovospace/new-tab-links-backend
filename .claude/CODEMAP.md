@@ -16,6 +16,7 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Error → status code and body | `common/exceptions/GlobalExceptionHandler.java` |
 | Password sign-in, refresh, logout | `auth/services/AuthenticationService.java`, `auth/services/TokenPairFactory.java`, `auth/services/AccessTokenIssuer.java` |
 | Google sign-in and the handoff code | `auth/services/ProviderSignInService.java`, `auth/services/ProviderSignInSuccessHandler.java`, `auth/services/SingleUseCodeService.java` |
+| Google sign-in state across replicas (sealed cookie, no session) | `common/security/CookieOAuth2AuthorizationRequestRepository.java`, `auth/utils/AuthorizationRequestCookieCipher.java`, `auth/utils/AuthorizationRequestCookieCodec.java` |
 | Registration, activation, password reset | `auth/services/RegistrationService.java`, `auth/services/PasswordService.java` |
 | Mail | `auth/services/SmtpAccountEmailSender.java` |
 | Devices, installation id, take-over | `user/services/UserDeviceService.java` |

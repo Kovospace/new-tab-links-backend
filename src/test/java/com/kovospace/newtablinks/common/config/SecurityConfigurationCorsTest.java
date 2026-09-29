@@ -237,6 +237,7 @@ class SecurityConfigurationCorsTest {
                 Duration.ofHours(1),
                 Duration.ofMinutes(2),
                 Duration.ofMinutes(10),
+                Duration.ofMinutes(10),
                 5,
                 "a-signing-secret-long-enough-for-hmac-sha256",
                 "newtablinks-test");
