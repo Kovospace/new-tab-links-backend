@@ -125,9 +125,13 @@ The notification deliberately **carries no data**. Sending the change itself wou
 format, ordering guarantees, and handling a client that missed one - all of which the snapshot
 endpoint already solves.
 
-**Single replica only.** The simple broker keeps subscriptions in the pod's heap. Scaling out
-needs sticky sessions or an external broker, and nothing warns you: messages simply never arrive
-at clients connected to the other pod.
+**Every replica delivers, not just the one that committed.** The simple broker keeps
+subscriptions in the pod's heap, so a browser is reachable only from the pod it connected to.
+`UserRefreshNotifier` therefore does not send to the websocket: it publishes
+`UserDataChangedMessage` through the messaging port (`common/messaging`, PostgreSQL
+`NOTIFY`/`LISTEN` today), and `UserRefreshRelay` in every pod passes it to that pod's sessions.
+Sticky sessions would not have helped: the browser that pushes and the browser that must hear
+about it are different clients, pinned to different pods.
 
 ## Rules that must not be quietly undone
 

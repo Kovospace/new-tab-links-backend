@@ -96,7 +96,8 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
+            <!-- Compile scope, not runtime: the cross-pod message listener uses the driver's
+                 PGConnection.getNotifications(), which has no JDBC-standard equivalent. -->
         </dependency>
 
         <!-- ===== operations ===== -->

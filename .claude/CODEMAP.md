@@ -28,7 +28,9 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Sync snapshot (GET) | `sync/services/SyncSnapshotService.java`, `sync/services/EnvironmentSnapshotReader.java` |
 | Sync push (POST) | `sync/services/SyncPushService.java` → one `*SyncOperationApplier.java` per entity kind |
 | Why a pushed operation was refused | `sync/dtos/SyncRejectionReason.java` |
-| Pushing a refresh to other devices | `sync/events/UserDataChangePublisher.java`, `sync/services/UserRefreshNotifier.java`, `common/config/WebSocketConfiguration.java`, `common/security/StompAuthenticationInterceptor.java` |
+| Pushing a refresh to other devices | `sync/events/UserDataChangePublisher.java`, `sync/services/UserRefreshNotifier.java` (publishes), `sync/services/UserRefreshRelay.java` (delivers, in every pod), `sync/events/UserDataChangedMessage.java`, `common/config/WebSocketConfiguration.java`, `common/security/StompAuthenticationInterceptor.java` |
+| Messaging between replicas - the port, and which transport carries it | `common/messaging/MessagePublisher.java`, `MessageSubscriber.java`, `MessageTopic.java`, `MessageHandlerRegistry.java`, `MessagingConfiguration.java` (the switch) |
+| Messaging over PostgreSQL `NOTIFY`/`LISTEN` | `common/messaging/postgres/PostgresNotifyMessagePublisher.java`, `PostgresNotificationListener.java` |
 | Client-assigned ids | `common/utils/ClientAssignedIdentifierPolicy.java`, `common/models/AssignedOrGeneratedUuid.java` |
 | Ordering | `common/utils/DisplayPositionCalculator.java` |
 | Usage statistics (new tabs, website visitors) | `statistics/services/NewTabReportService.java`, `statistics/services/WebsiteVisitService.java`, `statistics/services/WebsiteVisitorHasher.java` |
