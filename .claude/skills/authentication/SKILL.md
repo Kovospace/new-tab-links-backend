@@ -179,6 +179,7 @@ All of it under `newtablinks.auth.*`, bound to `AuthenticationProperties`.
 | activation link | 24 h | single use |
 | web handoff code | 2 min | exchanged immediately |
 | extension connect code | 10 min | long enough to retype |
+| provider sign-in | 10 min | redirect to Google and back; how long the sign-in cookie is honoured |
 | password reset link | 1 h | single use; shorter than activation on purpose |
 | max failed logins | 10 | per-account lockout; **not** a device limit |
 
@@ -211,6 +212,26 @@ grep -oP 'activate\?token=\K[^\s]+' app.log | tail -1
 
 Sending failures never fail the request: registration has already succeeded, and rolling it back
 because a relay blinked would lose the account and leak that the address exists.
+
+## Google sign-in keeps no session
+
+The authorization request Spring saves before sending the browser to Google - state, PKCE
+verifier, nonce - lives in a cookie, not the `HttpSession`
+(`common/security/CookieOAuth2AuthorizationRequestRepository`). The session version tied the
+sign-in to the pod that started it: with two replicas, Google's callback reached the other one
+about half the time and failed with `authorization_request_not_found`.
+
+- **Sealed with AES-GCM**, so the browser can neither read the verifier nor forge a request. The
+  key is derived from `jwt-signing-secret` under a fixed label - every replica already shares
+  that secret, and the label keeps the derived key useless for minting tokens. Rotating the
+  signing secret therefore also fails any sign-in in flight at that moment, which is harmless.
+- **JSON of named fields, never Java serialization**, although `OAuth2AuthorizationRequest`
+  offers it: the cookie comes back from a client, and deserialising a client's bytes into
+  arbitrary objects is a code-execution hazard however they are sealed.
+- `HttpOnly`, `Secure`, `Path=/login/oauth2`, and **`SameSite=Lax`** - the callback is a
+  top-level navigation from Google, which `Strict` would strip the cookie from.
+- `Secure` is unconditional, so developing sign-in needs `https`, or `http://localhost`, which
+  browsers treat as secure.
 
 ## Setting Google up
 

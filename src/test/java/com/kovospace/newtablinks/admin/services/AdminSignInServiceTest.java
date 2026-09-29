@@ -186,6 +186,7 @@ class AdminSignInServiceTest {
                 Duration.ofHours(1),
                 Duration.ofMinutes(2),
                 Duration.ofMinutes(10),
+                Duration.ofMinutes(10),
                 5,
                 SIGNING_SECRET,
                 "newtablinks-test");
