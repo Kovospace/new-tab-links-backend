@@ -22,12 +22,13 @@ import org.junit.jupiter.api.Test;
 class UsageStatisticsRateLimiterTest {
 
     private static final int LIMIT = 3;
+    private static final int WEBSITE_VISIT_LIMIT = 5;
     private static final Duration WINDOW = Duration.ofHours(1);
     private static final String ADDRESS = "203.0.113.7";
 
     private final AdjustableClock clock = new AdjustableClock(Instant.parse("2026-09-28T10:00:00Z"));
     private final UsageStatisticsRateLimiter rateLimiter = new UsageStatisticsRateLimiter(
-            new UsageStatisticsProperties(900, "", LIMIT, WINDOW, "0 5 0 * * *"), clock);
+            new UsageStatisticsProperties(900, LIMIT, WEBSITE_VISIT_LIMIT, WINDOW), clock);
 
     @Test
     @DisplayName("lets the limit through and refuses the next request, saying when to retry")
@@ -60,6 +61,17 @@ class UsageStatisticsRateLimiterTest {
                 .doesNotThrowAnyException();
         assertThatCode(() -> rateLimiter.acquirePermit(UsageMetric.NEW_TABS, "198.51.100.1"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("gives website visits their own, higher limit")
+    void shouldApplyTheWebsiteVisitLimitToWebsiteVisits() {
+        for (int request = 0; request < WEBSITE_VISIT_LIMIT; request++) {
+            rateLimiter.acquirePermit(UsageMetric.WEBSITE_VISITORS, ADDRESS);
+        }
+
+        assertThatThrownBy(() -> rateLimiter.acquirePermit(UsageMetric.WEBSITE_VISITORS, ADDRESS))
+                .isInstanceOf(RequestRateLimitExceededException.class);
     }
 
     @Test

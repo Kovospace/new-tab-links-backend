@@ -33,7 +33,7 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Messaging over PostgreSQL `NOTIFY`/`LISTEN` | `common/messaging/postgres/PostgresNotifyMessagePublisher.java`, `PostgresNotificationListener.java` |
 | Client-assigned ids | `common/utils/ClientAssignedIdentifierPolicy.java`, `common/models/AssignedOrGeneratedUuid.java` |
 | Ordering | `common/utils/DisplayPositionCalculator.java` |
-| Usage statistics (new tabs, website visitors) | `statistics/services/NewTabReportService.java`, `statistics/services/WebsiteVisitService.java`, `statistics/services/WebsiteVisitorHasher.java` |
+| Usage statistics (new tabs, website visitors) | `statistics/services/NewTabReportService.java`, `statistics/services/WebsiteVisitService.java` (counts every report; the website dedupes per day) |
 | Per-address rate limit (statistics only) | `statistics/services/UsageStatisticsRateLimiter.java` |
 | Base entity (`id`, `createdAt`, `updatedAt`) | `common/models/AbstractAuditableEntity.java` |
 | Every configuration parameter | `src/main/resources/application.properties` (each one `${ENV:default}`) |

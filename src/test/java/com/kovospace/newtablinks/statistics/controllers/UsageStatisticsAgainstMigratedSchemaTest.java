@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.kovospace.newtablinks.admin.services.AdminAccessTokenIssuer;
 import com.kovospace.newtablinks.common.MigratedPostgresDatabase;
 import com.kovospace.newtablinks.common.config.ApiEndpointPaths;
-import com.kovospace.newtablinks.statistics.services.WebsiteVisitService;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.AfterAll;
@@ -33,7 +32,7 @@ import org.springframework.test.web.servlet.ResultActions;
 /**
  * Exercises the usage statistics end to end against the schema the migration image builds.
  *
- * <p>The subject is native SQL - two {@code ON CONFLICT} upserts - and a {@code CHECK} constraint
+ * <p>The subject is native SQL - an {@code ON CONFLICT} upsert - and a {@code CHECK} constraint
  * on the metric names, none of which a Hibernate-generated schema would have. Starting with
  * {@code ddl-auto=validate} also proves the entities match {@code V12}.</p>
  *
@@ -47,8 +46,6 @@ class UsageStatisticsAgainstMigratedSchemaTest {
     private static final int CONFIGURED_RATE_LIMIT = 5;
     private static final String BROWSER =
             "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0";
-    private static final String OTHER_BROWSER =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/129.0.0.0 Safari/537.36";
 
     private static MigratedPostgresDatabase database;
 
@@ -57,9 +54,6 @@ class UsageStatisticsAgainstMigratedSchemaTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    private WebsiteVisitService websiteVisitService;
 
     /**
      * Starts PostgreSQL and runs the migration image against it, before the application starts.
@@ -98,7 +92,6 @@ class UsageStatisticsAgainstMigratedSchemaTest {
     @BeforeEach
     void emptyTheStatisticsTables() {
         jdbcTemplate.update("DELETE FROM daily_metric");
-        jdbcTemplate.update("DELETE FROM website_visitor_hash");
     }
 
     @Test
@@ -137,16 +130,13 @@ class UsageStatisticsAgainstMigratedSchemaTest {
     }
 
     @Test
-    @DisplayName("the same address and browser count once a day; another browser counts again")
-    void shouldCountSameVisitorOncePerDay() throws Exception {
+    @DisplayName("visitors behind one shared address with one browser each count separately")
+    void shouldCountEveryVisitBehindOneSharedAddress() throws Exception {
         visitWebsite("203.0.113.10", BROWSER).andExpect(status().isNoContent());
         visitWebsite("203.0.113.10", BROWSER).andExpect(status().isNoContent());
-        assertThat(storedTotal(today(), "website_visitors")).isEqualTo(1L);
+        visitWebsite("203.0.113.10", BROWSER).andExpect(status().isNoContent());
 
-        visitWebsite("203.0.113.10", OTHER_BROWSER).andExpect(status().isNoContent());
-        assertThat(storedTotal(today(), "website_visitors")).isEqualTo(2L);
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM website_visitor_hash", Long.class)).isEqualTo(2L);
+        assertThat(storedTotal(today(), "website_visitors")).isEqualTo(3L);
     }
 
     @Test
@@ -160,8 +150,6 @@ class UsageStatisticsAgainstMigratedSchemaTest {
 
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM daily_metric", Long.class)).isZero();
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM website_visitor_hash", Long.class)).isZero();
     }
 
     @Test
@@ -198,19 +186,6 @@ class UsageStatisticsAgainstMigratedSchemaTest {
                 .andExpect(jsonPath("$.days[2].value").value(5))
                 .andExpect(jsonPath("$.days[27].value").value(7))
                 .andExpect(jsonPath("$.total").value(12));
-    }
-
-    @Test
-    @DisplayName("the cleanup deletes the previous days' visitor hashes and keeps today's")
-    void shouldForgetPreviousDaysVisitorHashes() throws Exception {
-        visitWebsite("203.0.113.12", BROWSER).andExpect(status().isNoContent());
-        jdbcTemplate.update("INSERT INTO website_visitor_hash (day, visitor_hash) VALUES (?, ?)",
-                today().minusDays(1), new byte[] {1, 2, 3});
-
-        assertThat(websiteVisitService.forgetVisitorsBeforeToday()).isEqualTo(1);
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM website_visitor_hash WHERE day = ?", Long.class, today()))
-                .isEqualTo(1L);
     }
 
     /**

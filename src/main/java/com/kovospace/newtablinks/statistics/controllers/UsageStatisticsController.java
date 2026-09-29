@@ -28,9 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
  * Receives the anonymous usage counts: new tabs from the extension, visits from the website.
  *
  * <p>Both endpoints are public and never tied to an account - the security configuration does
- * not even read a bearer token here. The caller's address is used for two things only, the rate
- * limit and the visitor hash, and is taken from {@link HttpServletRequest#getRemoteAddr()},
- * which the forwarded-header support has already set to the client behind the ingress.</p>
+ * not even read a bearer token here. The caller's address is used for the rate limit only - never
+ * to tell visitors apart - and is taken from {@link HttpServletRequest#getRemoteAddr()}, which
+ * the forwarded-header support has already set to the client behind the ingress.</p>
  *
  * @since 0.0.11
  */
@@ -89,7 +89,7 @@ public class UsageStatisticsController {
     }
 
     /**
-     * Counts a website visit, once per visitor per day.
+     * Counts a website visit; the website itself reports at most once per visitor per day.
      *
      * @param userAgent the visitor's browser; a missing or automated one is not counted
      * @param request   the HTTP request, read only for the caller's address
@@ -98,9 +98,10 @@ public class UsageStatisticsController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @SecurityRequirements
     @Operation(summary = "Report a website visit",
-            description = "Anonymous and bodiless. Counted once per visitor per UTC day; crawlers, "
-                    + "previews and scripts are recognised by User-Agent and not counted. The "
-                    + "answer is the same whether or not the visit was counted.")
+            description = "Anonymous and bodiless. Every report is counted, so the caller reports "
+                    + "at most once per visitor per UTC day - the server does not deduplicate. "
+                    + "Crawlers, previews and scripts are recognised by User-Agent and not "
+                    + "counted. The answer is the same whether or not the visit was counted.")
     @ApiResponse(responseCode = "204", description = "Received")
     @ApiResponse(responseCode = "429", description = "Too many visits reported from this address",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
@@ -110,6 +111,6 @@ public class UsageStatisticsController {
 
         usageStatisticsRateLimiter.acquirePermit(
                 UsageMetric.WEBSITE_VISITORS, request.getRemoteAddr());
-        websiteVisitService.recordVisit(request.getRemoteAddr(), userAgent);
+        websiteVisitService.recordVisit(userAgent);
     }
 }
