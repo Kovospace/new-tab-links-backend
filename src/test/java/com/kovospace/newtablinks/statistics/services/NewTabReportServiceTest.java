@@ -35,7 +35,7 @@ class NewTabReportServiceTest {
     private final NewTabReportService newTabReportService = new NewTabReportService(
             dailyMetricRepository,
             new UsageStatisticsProperties(
-                    CONFIGURED_INTERVAL_SECONDS, "", 120, Duration.ofHours(1), "0 5 0 * * *"),
+                    CONFIGURED_INTERVAL_SECONDS, 120, 5000, Duration.ofHours(1)),
             Clock.fixed(Instant.parse("2026-09-28T23:30:00Z"), ZoneOffset.UTC));
 
     @Test

@@ -7,6 +7,8 @@ import com.kovospace.newtablinks.statistics.models.UsageMetric;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.springframework.stereotype.Component;
@@ -17,14 +19,15 @@ import org.springframework.stereotype.Component;
  * <p><strong>The one place this application limits by address</strong>, which it otherwise
  * refuses to do because carrier-grade NAT puts whole neighbourhoods behind one address. It is
  * acceptable here because being refused costs a real user nothing: the extension keeps unsent
- * counts and reports them later, and a website visit that goes uncounted is invisible to the
- * visitor. What it buys is that one script cannot inflate the totals at network speed. The
- * default of 120 an hour leaves room for about thirty installations reporting every fifteen
- * minutes from one address.</p>
+ * counts and reports them later, and a visit that goes uncounted is invisible to the visitor.
+ * What it buys is that one script cannot inflate the totals at network speed.</p>
  *
- * <p>Each endpoint - named by the metric it feeds - has its own count, so a busy office's
- * extensions do not use up its website visits. A fixed window per address: simple, and the burst
- * it allows at a window's edge is harmless for counting.</p>
+ * <p>Uncounted is still not free for the <em>count</em>, so each endpoint - named by the metric
+ * it feeds - has its own count and its own limit. New-tab reports default to 120 an hour, room
+ * for about thirty installations reporting every fifteen minutes from one address. Website
+ * visits default far higher: every visitor behind a carrier's shared address reports from it,
+ * and a tight limit there would silently drop real people. A fixed window per address: simple,
+ * and the burst it allows at a window's edge is harmless for counting.</p>
  *
  * <p><strong>Held in memory, so per replica</strong>, like the admin sign-in lockout. The
  * addresses live only here, for at most one window, and are never written or logged. The map is
@@ -42,7 +45,7 @@ public class UsageStatisticsRateLimiter {
 
     private final ConcurrentMap<String, RequestCountingWindow> windowsByCaller =
             new ConcurrentHashMap<>();
-    private final int maximumRequestsPerWindow;
+    private final Map<UsageMetric, Integer> maximumRequestsPerWindowByEndpoint;
     private final Duration windowLength;
     private final Clock clock;
 
@@ -59,14 +62,17 @@ public class UsageStatisticsRateLimiter {
             final UsageStatisticsProperties usageStatisticsProperties,
             final Clock usageStatisticsClock) {
 
-        this.maximumRequestsPerWindow = usageStatisticsProperties.rateLimitMaximumRequests();
+        this.maximumRequestsPerWindowByEndpoint = new EnumMap<>(Map.of(
+                UsageMetric.NEW_TABS, usageStatisticsProperties.rateLimitMaximumRequests(),
+                UsageMetric.WEBSITE_VISITORS,
+                usageStatisticsProperties.websiteVisitRateLimitMaximumRequests()));
         this.windowLength = usageStatisticsProperties.rateLimitWindow();
         this.clock = usageStatisticsClock;
         this.nextPruneAt = clock.instant().plus(windowLength);
     }
 
     /**
-     * Counts a request, refusing it when the address has used up its window.
+     * Counts a request, refusing it when the address has used up its window on that endpoint.
      *
      * @param endpoint      the endpoint called, named by the metric it feeds
      * @param clientAddress the caller's address as resolved behind the ingress
@@ -82,8 +88,9 @@ public class UsageStatisticsRateLimiter {
                 && windowsByCaller.size() >= MAXIMUM_TRACKED_CALLERS) {
             return;
         }
+        final int maximumRequestsPerWindow = maximumRequestsPerWindowByEndpoint.get(endpoint);
         final RequestCountingWindow window = windowsByCaller.compute(callerKey,
-                (key, current) -> countRequest(current, now));
+                (key, current) -> countRequest(current, now, maximumRequestsPerWindow));
         if (window.requestCount() > maximumRequestsPerWindow) {
             throw new RequestRateLimitExceededException(Duration.between(now, window.endsAt()));
         }
@@ -92,12 +99,15 @@ public class UsageStatisticsRateLimiter {
     /**
      * Adds a request to a caller's window, opening a fresh one when there is none or it closed.
      *
-     * @param current the caller's window, or {@code null} when it has none
-     * @param now     the moment of the request
+     * @param current                  the caller's window, or {@code null} when it has none
+     * @param now                      the moment of the request
+     * @param maximumRequestsPerWindow the endpoint's limit, past which the count stops growing
      * @return the window with the request counted
      */
     private RequestCountingWindow countRequest(
-            final RequestCountingWindow current, final Instant now) {
+            final RequestCountingWindow current,
+            final Instant now,
+            final int maximumRequestsPerWindow) {
 
         if (current == null || current.hasEndedBy(now)) {
             return RequestCountingWindow.openedAt(now, windowLength);

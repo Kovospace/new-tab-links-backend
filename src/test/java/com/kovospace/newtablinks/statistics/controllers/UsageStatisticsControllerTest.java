@@ -159,7 +159,7 @@ class UsageStatisticsControllerTest {
 
         verify(usageStatisticsRateLimiter)
                 .acquirePermit(UsageMetric.WEBSITE_VISITORS, "203.0.113.7");
-        verify(websiteVisitService).recordVisit("203.0.113.7", BROWSER);
+        verify(websiteVisitService).recordVisit(BROWSER);
     }
 
     @Test
