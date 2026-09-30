@@ -35,6 +35,10 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Ordering | `common/utils/DisplayPositionCalculator.java` |
 | Usage statistics (new tabs, website visitors) | `statistics/services/NewTabReportService.java`, `statistics/services/WebsiteVisitService.java` (counts every report; the website dedupes per day) |
 | Per-address rate limit (statistics only) | `statistics/services/UsageStatisticsRateLimiter.java` |
+| Checkout: plan + currency -> Creem product | `payment/services/PaymentCheckoutService.java` (default currency), `payment/services/CreemCheckoutGateway.java`; unsupported currency -> `common/exceptions/PlanNotOfferedInCurrencyException.java` (400, field `currency`) |
+| Product catalog per currency (`products.<ISO>.lifetime/subscription`) | `payment/config/CreemProperties.java` (`catalogProducts()`, `productIdFor(plan, currency)`) |
+| Public price list: offers, prices from Creem, cache, country -> currency | `payment/services/PaymentOfferService.java`, `ProductPriceCache.java` (the only thing that reads prices; once per hour per pod), `CreemProductCatalog.java` (`GET /v1/products/{id}`), `CurrencySuggestionPolicy.java`; rules in `payment/config/PaymentPricingProperties.java` |
+| Webhooks, entitlement signals, superseded-subscription cancel | `payment/controllers/CreemWebhookController.java`, `payment/services/CreemWebhookInterpreter.java`, `CreemEntitlementSignalTranslator.java`, `SupersededSubscriptionCancellation*.java` |
 | Base entity (`id`, `createdAt`, `updatedAt`) | `common/models/AbstractAuditableEntity.java` |
 | Every configuration parameter | `src/main/resources/application.properties` (each one `${ENV:default}`) |
 | The schema | **not here** — `/home/kovo/IdeaProjects/new-tab-links-migrations`, whose `CLAUDE.md` indexes every table |
@@ -51,6 +55,8 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | `/api/v1/admin/users` | `user/controllers/AdminUserController.java` |
 | `/api/v1/admin/metrics` | `statistics/controllers/AdminUsageMetricsController.java` |
 | `/api/v1/stats` (`/new-tabs`, `/website-visit`) — public | `statistics/controllers/UsageStatisticsController.java` |
+| `/api/v1/payments/offers` (GET) — public, bearer token ignored, reads `CF-IPCountry` | `payment/controllers/PaymentOfferController.java` |
+| `/api/v1/payments/checkouts`, `/subscription`, `/webhooks/creem` | `payment/controllers/PaymentCheckoutController.java`, `PaymentSubscriptionController.java`, `CreemWebhookController.java` |
 | `/api/v1/sync` (`/snapshot`, `/push`) | `sync/controllers/SyncController.java` |
 | `/api/v1/profiles`, `/environments`, `/groups`, `/subgroups`, `/links` | `<module>/controllers/<Module>Controller.java` |
 
@@ -61,9 +67,9 @@ The five domain modules (`profile`, `environment`, `group`, `subgroup`, `link`) 
 ## Files big enough to read by range
 
 `grep -n` for the method first, then `sed -n 'a,bp'` around it:
-`application.properties` (244 lines), `auth/controllers/AuthenticationController.java` (373),
-`common/config/SecurityConfiguration.java` (368), `user/services/UserDeviceService.java` (363),
-`common/exceptions/GlobalExceptionHandler.java` (301).
+`application.properties` (358 lines), `auth/controllers/AuthenticationController.java` (373),
+`common/config/SecurityConfiguration.java` (455), `user/services/UserDeviceService.java` (363),
+`common/exceptions/GlobalExceptionHandler.java` (481).
 
 ## CLAUDE.md, by section
 

@@ -1,8 +1,16 @@
 package com.kovospace.newtablinks.payment.config;
 
+import com.kovospace.newtablinks.payment.models.CatalogProduct;
 import com.kovospace.newtablinks.payment.models.ProPlan;
 import java.time.Duration;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -23,7 +31,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                        dashboard; blank refuses every delivery
  * @param apiBaseUrl      optional; must match the key's mode when set
  * @param apiTimeout      connect and read timeout for calls to Creem
- * @param products        which Creem product each plan sells
+ * @param products        which Creem product sells each plan, per ISO 4217 currency code; a
+ *                        currency with no product for a plan does not sell that plan, and one
+ *                        with neither is not offered at all. Keys are case-insensitive, so
+ *                        {@code products.EUR.lifetime} and the environment variable
+ *                        {@code NEWTABLINKS_PAYMENT_CREEM_PRODUCTS_EUR_LIFETIME} name the same
+ *                        entry
  * @param checkout        where the customer returns to after paying
  * @since 0.0.9
  */
@@ -33,20 +46,24 @@ public record CreemProperties(
         String webhookSecret,
         String apiBaseUrl,
         Duration apiTimeout,
-        Products products,
+        Map<String, Products> products,
         Checkout checkout) {
+
+    /** What a catalog key must look like once upper-cased: an ISO 4217 alphabetic code. */
+    private static final Pattern CURRENCY_CODE = Pattern.compile("[A-Z]{3}");
 
     /**
      * Rejects a configuration that could not work, at startup rather than per request.
      *
      * @throws IllegalArgumentException when the key is not a Creem key, the host does not match
-     *                                  it, or the timeout is not positive
+     *                                  it, the timeout is not positive, or a catalog key is not a
+     *                                  three-letter currency code
      */
     public CreemProperties {
         apiKey = blankToEmpty(apiKey);
         webhookSecret = blankToEmpty(webhookSecret);
         apiBaseUrl = withoutTrailingSlash(blankToEmpty(apiBaseUrl));
-        products = products == null ? new Products(null, null) : products;
+        products = normaliseCatalog(products);
         checkout = checkout == null ? new Checkout(null) : checkout;
 
         if (apiTimeout == null || apiTimeout.isZero() || apiTimeout.isNegative()) {
@@ -86,17 +103,34 @@ public record CreemProperties(
     }
 
     /**
-     * Returns the Creem product that sells a plan.
+     * Returns the Creem product that sells a plan in a currency.
      *
-     * @param plan the plan being bought
-     * @return the product identifier, or empty when none is configured for that plan
+     * @param plan         the plan being bought
+     * @param currencyCode an ISO 4217 code, in any case
+     * @return the product identifier, or empty when that currency does not sell that plan
+     * @since 0.0.14
      */
-    public Optional<String> productIdFor(final ProPlan plan) {
-        final String productId = switch (plan) {
-            case LIFETIME -> products.lifetime();
-            case SUBSCRIPTION -> products.subscription();
-        };
-        return Optional.ofNullable(productId).filter(value -> !value.isBlank());
+    public Optional<String> productIdFor(final ProPlan plan, final String currencyCode) {
+        if (currencyCode == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(products.get(currencyCode.strip().toUpperCase(Locale.ROOT)))
+                .flatMap(productsOfCurrency -> productsOfCurrency.productIdFor(plan));
+    }
+
+    /**
+     * Lists every configured product, the whole catalog flattened.
+     *
+     * @return one entry per currency and plan that has a product, ordered by currency and then
+     *         by plan; empty when nothing is on sale
+     * @since 0.0.14
+     */
+    public List<CatalogProduct> catalogProducts() {
+        return products.entrySet().stream()
+                .flatMap(entry -> catalogProductsOf(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparing(CatalogProduct::currency)
+                        .thenComparing(CatalogProduct::plan))
+                .toList();
     }
 
     /**
@@ -139,6 +173,66 @@ public record CreemProperties(
     }
 
     /**
+     * Flattens one currency's products into catalog entries.
+     *
+     * @param currencyCode      the upper-case currency code
+     * @param productsOfCurrency that currency's products
+     * @return one entry per plan that has a product
+     */
+    private static Stream<CatalogProduct> catalogProductsOf(
+            final String currencyCode, final Products productsOfCurrency) {
+
+        return Stream.of(ProPlan.values())
+                .flatMap(plan -> productsOfCurrency.productIdFor(plan).stream()
+                        .map(productId -> new CatalogProduct(currencyCode, plan, productId)));
+    }
+
+    /**
+     * Upper-cases the catalog's currency keys and drops currencies with no product at all.
+     *
+     * <p>Keys are upper-cased because relaxed binding lower-cases a key that arrives through an
+     * environment variable, while a properties file keeps whatever case it was written in.</p>
+     *
+     * @param configuredProducts the bound map, possibly {@code null}
+     * @return an unmodifiable map ordered by currency code
+     * @throws IllegalArgumentException when a key is not a three-letter code, or two keys differ
+     *                                  only in case
+     */
+    private static Map<String, Products> normaliseCatalog(
+            final Map<String, Products> configuredProducts) {
+
+        final Map<String, Products> catalog = new TreeMap<>();
+        if (configuredProducts == null) {
+            return Map.of();
+        }
+        configuredProducts.forEach((configuredCode, productsOfCurrency) -> {
+            final String currencyCode = requireCurrencyCode(configuredCode);
+            if (productsOfCurrency != null && productsOfCurrency.sellsAnything()
+                    && catalog.put(currencyCode, productsOfCurrency) != null) {
+                throw new IllegalArgumentException(
+                        "newtablinks.payment.creem.products lists " + currencyCode + " twice");
+            }
+        });
+        return Map.copyOf(catalog);
+    }
+
+    /**
+     * Upper-cases a catalog key and checks it is a currency code.
+     *
+     * @param configuredCode the key as bound
+     * @return the upper-case code
+     * @throws IllegalArgumentException when it is not three letters
+     */
+    private static String requireCurrencyCode(final String configuredCode) {
+        final String currencyCode = blankToEmpty(configuredCode).toUpperCase(Locale.ROOT);
+        if (!CURRENCY_CODE.matcher(currencyCode).matches()) {
+            throw new IllegalArgumentException("newtablinks.payment.creem.products." + configuredCode
+                    + " is not keyed by a three-letter ISO 4217 currency code");
+        }
+        return currencyCode;
+    }
+
+    /**
      * Normalises an absent value to the empty string.
      *
      * @param value a configured value, possibly {@code null} or blank
@@ -159,12 +253,35 @@ public record CreemProperties(
     }
 
     /**
-     * Which Creem product each plan sells.
+     * Which Creem product sells each plan, in one currency.
      *
-     * @param lifetime     the one-time product
-     * @param subscription the yearly subscription product
+     * @param lifetime     the one-time product, blank when the plan is not sold in this currency
+     * @param subscription the yearly subscription product, blank likewise
      */
     public record Products(String lifetime, String subscription) {
+
+        /**
+         * Returns the product selling a plan.
+         *
+         * @param plan the plan
+         * @return the product identifier, or empty when it is blank
+         */
+        public Optional<String> productIdFor(final ProPlan plan) {
+            final String productId = switch (plan) {
+                case LIFETIME -> lifetime;
+                case SUBSCRIPTION -> subscription;
+            };
+            return Optional.ofNullable(productId).map(String::strip).filter(value -> !value.isEmpty());
+        }
+
+        /**
+         * Tells whether this currency sells any plan at all.
+         *
+         * @return {@code true} when at least one product is configured
+         */
+        boolean sellsAnything() {
+            return Stream.of(ProPlan.values()).anyMatch(plan -> productIdFor(plan).isPresent());
+        }
     }
 
     /**

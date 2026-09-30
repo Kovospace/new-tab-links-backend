@@ -26,7 +26,8 @@ class CreemPropertiesTest {
         assertThat(properties.isApiConfigured()).isFalse();
         assertThat(properties.isWebhookConfigured()).isFalse();
         assertThat(properties.apiMode()).isEmpty();
-        assertThat(properties.productIdFor(ProPlan.LIFETIME)).isEmpty();
+        assertThat(properties.productIdFor(ProPlan.LIFETIME, "EUR")).isEmpty();
+        assertThat(properties.catalogProducts()).isEmpty();
     }
 
     @Test

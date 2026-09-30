@@ -186,8 +186,14 @@ webhook **refuses** every delivery with 503 rather than accepting one it cannot 
 | `CREEM_API_KEY` | *(empty)* | for payments | **Secret.** `creem_test_…` is test mode, any other `creem_…` is live. The API host is derived from it |
 | `CREEM_WEBHOOK_SECRET` | *(empty)* | for payments | **Secret.** Signing secret of the endpoint registered in Creem → Developers → Webhooks. Different per endpoint and per mode |
 | `CREEM_API_BASE_URL` | *(derived from the key)* | | Leave unset. If set, it must be the key's own host, or **startup fails** |
-| `CREEM_LIFETIME_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the one-time product. Blank means the plan is not on sale |
-| `CREEM_SUBSCRIPTION_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the yearly product |
+| `CREEM_LIFETIME_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the **EUR** one-time product. Blank means the plan is not sold in EUR |
+| `CREEM_SUBSCRIPTION_PRODUCT_ID` | *(empty)* | for payments | Creem `prod_…` of the **EUR** yearly product |
+| `CREEM_LIFETIME_PRODUCT_ID_USD` | *(empty)* | | Creem `prod_…` of the **USD** one-time product |
+| `CREEM_SUBSCRIPTION_PRODUCT_ID_USD` | *(empty)* | | Creem `prod_…` of the **USD** yearly product. Another currency needs no code: `NEWTABLINKS_PAYMENT_CREEM_PRODUCTS_<ISO>_LIFETIME` / `…_SUBSCRIPTION` |
+| `PAYMENT_DEFAULT_CURRENCY` | `USD` | | Suggested where no country rule applies, and used by a checkout that names no currency |
+| `PAYMENT_CURRENCY_COUNTRIES_EUR` | EU 27 + IS LI NO + AD MC SM VA ME XK + GB CH | | Countries (Cloudflare `CF-IPCountry`) suggested EUR. Another currency: `NEWTABLINKS_PAYMENT_PRICING_COUNTRIES_<ISO>`; a country may be under one currency only |
+| `PAYMENT_PRICE_CACHE_LIFETIME` | `PT1H` | | How long a price read from Creem is served before it is read again |
+| `PAYMENT_PRICE_REFRESH_RETRY_INTERVAL` | `PT5M` | | After a failed price read, how soon to try again; the last known price is served meanwhile |
 | `CREEM_CHECKOUT_SUCCESS_PATH` | `/thank-you` | | Where Creem returns the customer, relative to `NEWTABLINKS_WEB_BASE_URL`; blank uses the product's own default |
 | `CREEM_API_TIMEOUT` | `PT10S` | | Connect and read timeout for calls to Creem |
 | `PAYMENT_SUBSCRIPTION_CANCELLATION_RETRY_INTERVAL` | `PT15M` | | How often a subscription replaced by a lifetime purchase, and not yet confirmed cancelled at Creem, is retried |

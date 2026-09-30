@@ -120,6 +120,17 @@ public final class ApiEndpointPaths {
     public static final String PAYMENT_SUBSCRIPTION_PATH = "/api/v1/payments/subscription";
 
     /**
+     * Absolute path of the public price list: every plan on sale, per currency.
+     *
+     * <p>A constant because the security configuration opens exactly this path and method to
+     * anonymous callers and stops reading bearer tokens on it - the same prefix also holds the
+     * authenticated checkout and subscription endpoints, which a pattern would open too.</p>
+     *
+     * @since 0.0.14
+     */
+    public static final String PAYMENT_OFFERS_PATH = "/api/v1/payments/offers";
+
+    /**
      * Absolute path the extension reports its new-tab counts to.
      *
      * <p>A constant because the security configuration opens exactly this path to anonymous

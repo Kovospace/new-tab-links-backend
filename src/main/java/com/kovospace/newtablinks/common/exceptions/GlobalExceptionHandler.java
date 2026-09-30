@@ -307,6 +307,25 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Renders a checkout in a currency that does not sell the plan as HTTP 400, in the same shape
+     * as a rejected request field.
+     *
+     * @param exception the exception that was thrown
+     * @return a 400 response naming the {@code currency} field
+     * @since 0.0.14
+     */
+    @ExceptionHandler(PlanNotOfferedInCurrencyException.class)
+    public ResponseEntity<ApiErrorResponseDto> handlePlanNotOfferedInCurrency(
+            final PlanNotOfferedInCurrencyException exception) {
+
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                "Request validation failed",
+                List.of("%s: %s".formatted(
+                        PlanNotOfferedInCurrencyException.FIELD_NAME, exception.getMessage())));
+    }
+
+    /**
      * Renders a failed call to the payment provider as HTTP 502.
      *
      * @param exception the exception that was thrown

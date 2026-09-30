@@ -331,7 +331,11 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   **Do not add a filter that reads the request body** - none does today, which is why no
   `ContentCachingRequestWrapper` is needed. `payment_webhook_event` is never pruned; Creem stops
   retrying after 24 hours, so rows older than that could go.
-  **The one outbound call besides checkout: a lifetime purchase cancels the subscription it
+  **Prices are read from Creem, never configured** (`GET /v1/products/{id}`), only by
+  `ProductPriceCache`, at most once per `PAYMENT_PRICE_CACHE_LIFETIME` per pod - the public
+  `GET /api/v1/payments/offers` never reaches Creem per request. The product catalog is keyed by
+  currency (`products.<ISO 4217>.*`); adding a currency is configuration, not code.
+  **The other outbound call: a lifetime purchase cancels the subscription it
   replaced**, immediately and without refund. **Never call Creem inside the webhook
   transaction.** The policy leaves the subscription pending on the row
   (`superseded_subscription_*`); an `AFTER_COMMIT` listener makes the first attempt and
