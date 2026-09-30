@@ -5,6 +5,7 @@ import static com.kovospace.newtablinks.payment.utils.WebhookPayloadFields.textO
 import com.kovospace.newtablinks.auth.config.WebApplicationProperties;
 import com.kovospace.newtablinks.common.exceptions.PaymentProviderNotConfiguredException;
 import com.kovospace.newtablinks.common.exceptions.PaymentProviderRequestFailedException;
+import com.kovospace.newtablinks.common.exceptions.PlanNotOfferedInCurrencyException;
 import com.kovospace.newtablinks.payment.config.CreemProperties;
 import com.kovospace.newtablinks.payment.config.CreemRestClientConfiguration;
 import com.kovospace.newtablinks.payment.models.CheckoutRequest;
@@ -75,9 +76,10 @@ public class CreemCheckoutGateway implements PaymentCheckoutGateway {
             throw new PaymentProviderNotConfiguredException(
                     "Payments are not enabled on this server");
         }
-        final String productId = creemProperties.productIdFor(checkoutRequest.plan())
-                .orElseThrow(() -> new PaymentProviderNotConfiguredException(
-                        "The " + checkoutRequest.plan() + " plan is not on sale on this server"));
+        final String productId = creemProperties
+                .productIdFor(checkoutRequest.plan(), checkoutRequest.currency())
+                .orElseThrow(() -> new PlanNotOfferedInCurrencyException(
+                        checkoutRequest.plan().name(), checkoutRequest.currency()));
 
         final String requestId = UUID.randomUUID().toString();
         final JsonNode response = postCheckout(buildRequestBody(checkoutRequest, productId, requestId));
@@ -86,9 +88,9 @@ public class CreemCheckoutGateway implements PaymentCheckoutGateway {
             throw new PaymentProviderRequestFailedException(CHECKOUT_FAILED_MESSAGE, null);
         }
 
-        LOGGER.info("Opened Creem checkout {} (request {}) for account {}, plan {}",
+        LOGGER.info("Opened Creem checkout {} (request {}) for account {}, plan {} in {}",
                 textOrNull(response, "id"), requestId, checkoutRequest.accountId(),
-                checkoutRequest.plan());
+                checkoutRequest.plan(), checkoutRequest.currency());
         return new CheckoutSession(textOrNull(response, "id"), checkoutUrl);
     }
 

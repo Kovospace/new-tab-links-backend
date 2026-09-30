@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.payment.services;
 
 import com.kovospace.newtablinks.common.exceptions.PaymentProviderNotConfiguredException;
 import com.kovospace.newtablinks.common.exceptions.PaymentProviderRequestFailedException;
+import com.kovospace.newtablinks.common.exceptions.PlanNotOfferedInCurrencyException;
 import com.kovospace.newtablinks.payment.models.CheckoutRequest;
 import com.kovospace.newtablinks.payment.models.CheckoutSession;
 
@@ -21,8 +22,9 @@ public interface PaymentCheckoutGateway {
      *
      * @param checkoutRequest what is bought, by whom
      * @return the opened checkout
-     * @throws PaymentProviderNotConfiguredException when the provider or the plan's product is not
-     *                                               configured
+     * @throws PaymentProviderNotConfiguredException when the provider is not configured at all
+     * @throws PlanNotOfferedInCurrencyException     when no product sells the plan in the
+     *                                               requested currency
      * @throws PaymentProviderRequestFailedException when the provider refuses or cannot be reached
      */
     CheckoutSession openCheckout(CheckoutRequest checkoutRequest);

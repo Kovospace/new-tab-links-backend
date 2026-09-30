@@ -51,26 +51,30 @@ public class PaymentCheckoutController {
      */
     @PostMapping
     @Operation(summary = "Open a checkout for the signed-in account",
-            description = "Returns the payment provider's checkout page for the chosen plan. The "
+            description = "Returns the payment provider's checkout page for the chosen plan, in "
+                    + "the chosen currency or, when none is given, the server's default. The "
                     + "account is carried through the checkout from the access token, never from "
                     + "the request, so a payment is always attributed to whoever started it. The "
                     + "account becomes pro when the provider's webhook arrives, not when the "
                     + "customer returns to the site.")
     @ApiResponse(responseCode = "200", description = "The checkout is open")
-    @ApiResponse(responseCode = "400", description = "No plan, or an unknown one",
+    @ApiResponse(responseCode = "400", description = "No plan, an unknown one, a malformed "
+            + "currency, or a currency that does not sell the plan (reported against the "
+            + "`currency` field)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "401", description = "No valid access token was presented",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "502", description = "The payment provider refused or failed",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "503",
-            description = "Payments, or this plan, are not configured on this server",
+            description = "Payments are not configured on this server",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public CheckoutSessionDto openCheckout(
             @Valid @RequestBody final CheckoutCreationRequestDto checkoutCreationRequest) {
 
         return paymentCheckoutService.startCheckout(
                 authenticatedUserProvider.getAuthenticatedUserId(),
-                checkoutCreationRequest.plan());
+                checkoutCreationRequest.plan(),
+                checkoutCreationRequest.currency());
     }
 }

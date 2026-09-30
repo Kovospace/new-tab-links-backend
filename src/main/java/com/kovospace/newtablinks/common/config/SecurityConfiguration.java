@@ -12,6 +12,7 @@ import com.kovospace.newtablinks.common.security.FrontendApiKeyAuthenticationFil
 import com.kovospace.newtablinks.common.security.VisitorTokenAuthenticationFilter;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.crypto.spec.SecretKeySpec;
@@ -245,6 +246,11 @@ public class SecurityConfiguration {
                         // limited per address in the controller, and never tied to an account.
                         .requestMatchers(HttpMethod.POST, ANONYMOUS_STATISTICS_ENDPOINTS)
                         .permitAll()
+                        // The public price list the website shows before anybody signs in. Only
+                        // GET, and only this exact path: its prefix also holds the checkout and
+                        // subscription endpoints, which must stay authenticated.
+                        .requestMatchers(HttpMethod.GET, ApiEndpointPaths.PAYMENT_OFFERS_PATH)
+                        .permitAll()
                         .anyRequest().authenticated())
                 // Bearer flow: every API call from the website and the extension.
                 .oauth2ResourceServer(server -> server
@@ -300,22 +306,26 @@ public class SecurityConfiguration {
     /**
      * Builds the resolver that finds the bearer token on a request, except where none may count.
      *
-     * <p>On {@link #ANONYMOUS_STATISTICS_ENDPOINTS} it finds nothing, even when an
+     * <p>On {@link #ANONYMOUS_STATISTICS_ENDPOINTS} and on {@code GET}
+     * {@link ApiEndpointPaths#PAYMENT_OFFERS_PATH} it finds nothing, even when an
      * {@code Authorization} header is there. The resource server rejects an expired or invalid
      * token with 401 even on a {@code permitAll} path, so a stale token would otherwise lose a
-     * report that needs no token at all - and ignoring it outright is also the guarantee that a
-     * count is never tied to an account.</p>
+     * report - or a price list - that needs no token at all; and ignoring it outright is also the
+     * guarantee that a count is never tied to an account.</p>
      *
      * @return the resolver
      */
     private static BearerTokenResolver buildBearerTokenResolver() {
         final BearerTokenResolver defaultResolver = new DefaultBearerTokenResolver();
-        final RequestMatcher anonymousStatisticsEndpoints = new OrRequestMatcher(
+        final List<RequestMatcher> tokenlessEndpoints = new ArrayList<>(
                 Arrays.stream(ANONYMOUS_STATISTICS_ENDPOINTS)
                         .map(path -> (RequestMatcher) PathPatternRequestMatcher.withDefaults()
                                 .matcher(HttpMethod.POST, path))
                         .toList());
-        return request -> anonymousStatisticsEndpoints.matches(request)
+        tokenlessEndpoints.add(PathPatternRequestMatcher.withDefaults()
+                .matcher(HttpMethod.GET, ApiEndpointPaths.PAYMENT_OFFERS_PATH));
+        final RequestMatcher tokenlessEndpointMatcher = new OrRequestMatcher(tokenlessEndpoints);
+        return request -> tokenlessEndpointMatcher.matches(request)
                 ? null
                 : defaultResolver.resolve(request);
     }
