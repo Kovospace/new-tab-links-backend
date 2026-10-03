@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -32,6 +33,12 @@ class SyncPushRequestDtoTest {
 
     /** Longest name any record may carry, matching the column the name is stored in. */
     private static final int MAXIMUM_NAME_LENGTH = 120;
+
+    /** Most tips a profile may report dismissed, as the extension caps them. */
+    private static final int MAXIMUM_DISMISSED_TIPS = 100;
+
+    /** Longest tip identifier accepted. */
+    private static final int MAXIMUM_TIP_ID_LENGTH = 64;
 
     private static ValidatorFactory validatorFactory;
     private static Validator validator;
@@ -84,6 +91,38 @@ class SyncPushRequestDtoTest {
         assertThat(validate(aPushOf(upsertProfileNamed("   ")))).isEmpty();
     }
 
+    @Test
+    @DisplayName("dismissed tips at both limits - count and identifier length - are accepted")
+    void shouldAcceptDismissedTipsAtTheirLimits() {
+
+        final List<String> mostTipsOfLongestIdentifier =
+                Collections.nCopies(MAXIMUM_DISMISSED_TIPS, "t".repeat(MAXIMUM_TIP_ID_LENGTH));
+
+        assertThat(validate(aPushOf(upsertProfileDismissing(mostTipsOfLongestIdentifier))))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("an over-long tip identifier is refused where it is, inside the list")
+    void shouldRefuseAnOverLongTipIdentifier() {
+
+        final Set<ConstraintViolation<SyncPushRequestDto>> violations = validate(aPushOf(
+                upsertProfileDismissing(List.of("hide-tips", "t".repeat(MAXIMUM_TIP_ID_LENGTH + 1)))));
+
+        assertThat(violations).hasSize(1);
+        assertThat(violations.iterator().next().getPropertyPath())
+                .hasToString("operations[0].dismissedTips[1].<list element>");
+    }
+
+    @Test
+    @DisplayName("more dismissed tips than the limit are refused")
+    void shouldRefuseTooManyDismissedTips() {
+
+        final List<String> oneTooMany = Collections.nCopies(MAXIMUM_DISMISSED_TIPS + 1, "hide-tips");
+
+        assertThat(validate(aPushOf(upsertProfileDismissing(oneTooMany)))).hasSize(1);
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     /**
@@ -117,7 +156,22 @@ class SyncPushRequestDtoTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, UUID.randomUUID(),
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
+                null, null, 0);
+    }
+
+    /**
+     * Builds a pushed profile upsert carrying dismissed tips.
+     *
+     * @param dismissedTips the dismissed tip identifiers
+     * @return the operation
+     */
+    private static SyncOperationDto upsertProfileDismissing(final List<String> dismissedTips) {
+        return new SyncOperationDto(
+                SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, UUID.randomUUID(),
+                null, null, null, null,
+                "Work", null, null, null, null,
+                null, null, null, null, null, dismissedTips, null,
                 null, null, 0);
     }
 

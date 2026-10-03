@@ -8,6 +8,10 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.util.ArrayList;
+import java.util.List;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * A named set of environments, and the new top of the link hierarchy.
@@ -68,6 +72,18 @@ public class ProfileEntity extends AbstractAuditableEntity {
      */
     @Column(name = "hide_tips", nullable = false)
     private boolean hideTips;
+
+    /**
+     * Identifiers of the tips this profile has dismissed one by one, in the order the client sent.
+     *
+     * <p>A tip identifier is a stable name out of the extension's own list of tips, not a row
+     * anything here refers to, so it is kept as an array on the profile rather than in a table
+     * of its own: it is only ever read and replaced together with the profile. Never
+     * {@code null}; the column defaults to an empty array.</p>
+     */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "dismissed_tips", nullable = false)
+    private List<String> dismissedTips = new ArrayList<>();
 
     /**
      * Required by JPA.
@@ -167,5 +183,23 @@ public class ProfileEntity extends AbstractAuditableEntity {
      */
     public void setHideTips(final boolean hideTips) {
         this.hideTips = hideTips;
+    }
+
+    /**
+     * Returns the identifiers of the tips this profile has dismissed one by one.
+     *
+     * @return the identifiers in the order they were stored, never {@code null}; unmodifiable
+     */
+    public List<String> getDismissedTips() {
+        return List.copyOf(dismissedTips);
+    }
+
+    /**
+     * Replaces the identifiers of the tips this profile has dismissed one by one.
+     *
+     * @param dismissedTips the identifiers to store, in order; {@code null} is stored as none
+     */
+    public void setDismissedTips(final List<String> dismissedTips) {
+        this.dismissedTips = dismissedTips == null ? new ArrayList<>() : new ArrayList<>(dismissedTips);
     }
 }

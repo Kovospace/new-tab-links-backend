@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.kovospace.newtablinks.profile.dtos.ProfileDto;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -90,6 +91,27 @@ class ProfileMapperTest {
 
         assertThat(profileDto.enableDragAndDrop()).isTrue();
         assertThat(profileDto.hideTips()).isFalse();
+    }
+
+    @Test
+    @DisplayName("puts the tips dismissed one by one into the shape a client pulls, in order")
+    void carriesTheDismissedTipsIntoTheDto() {
+
+        final ProfileEntity profile = profileWithDragAndDrop(false);
+        profile.setDismissedTips(List.of("hide-tips", "change-background"));
+
+        final ProfileDto profileDto = profileMapper.toDto(profile);
+
+        assertThat(profileDto.dismissedTips()).containsExactly("hide-tips", "change-background");
+    }
+
+    @Test
+    @DisplayName("reports no dismissed tips as an empty list, never as absent")
+    void carriesNoDismissedTipsAsAnEmptyList() {
+
+        final ProfileDto profileDto = profileMapper.toDto(profileWithDragAndDrop(false));
+
+        assertThat(profileDto.dismissedTips()).isNotNull().isEmpty();
     }
 
     // ------------------------------------------------------------------ fixtures

@@ -144,6 +144,7 @@ public class ProfileSynchronizationService {
                 userService.getRequiredUserEntity(ownerId), values.name(), values.position());
         newProfile.setEnableDragAndDrop(values.enableDragAndDrop());
         newProfile.setHideTips(values.hideTips());
+        newProfile.setDismissedTips(values.dismissedTips());
 
         newProfile.setId(ClientAssignedIdentifierPolicy.chooseIdentifierForInsert(
                 requestedProfileId, profileRepository::existsById));
@@ -165,6 +166,7 @@ public class ProfileSynchronizationService {
         existingProfile.setName(values.name());
         existingProfile.setEnableDragAndDrop(values.enableDragAndDrop());
         existingProfile.setHideTips(values.hideTips());
+        existingProfile.setDismissedTips(values.dismissedTips());
         existingProfile.setPosition(values.position());
         return existingProfile;
     }

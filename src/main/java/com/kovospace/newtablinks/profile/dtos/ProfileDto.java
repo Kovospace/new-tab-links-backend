@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.profile.dtos;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -13,6 +14,7 @@ import java.util.UUID;
  * @param position  zero based position among the owner's profiles
  * @param enableDragAndDrop whether the profile lets its links and groups be rearranged by dragging
  * @param hideTips  whether the profile hides the tips shown on the new tab page background
+ * @param dismissedTips identifiers of the tips the profile has dismissed one by one, never null
  * @param createdAt when the profile was created
  * @param updatedAt when the profile was last changed
  * @since 0.0.6
@@ -29,6 +31,9 @@ public record ProfileDto(
         @Schema(description = "Whether the profile hides the tips shown on the new tab page "
                 + "background", example = "false")
         boolean hideTips,
+        @Schema(description = "Identifiers of the new tab page tips the profile has dismissed "
+                + "one by one; empty when none", example = "[\"hide-tips\"]")
+        List<String> dismissedTips,
         @Schema(description = "When the profile was created") Instant createdAt,
         @Schema(description = "When the profile was last changed") Instant updatedAt) {
 }

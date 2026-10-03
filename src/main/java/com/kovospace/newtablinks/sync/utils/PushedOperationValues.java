@@ -3,6 +3,7 @@ package com.kovospace.newtablinks.sync.utils;
 import com.kovospace.newtablinks.sync.dtos.SyncRejectionReason;
 import com.kovospace.newtablinks.sync.exceptions.SyncOperationRejectedException;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -115,5 +116,19 @@ public final class PushedOperationValues {
      */
     public static boolean flagOrFalse(final Boolean suppliedFlag) {
         return suppliedFlag != null && suppliedFlag;
+    }
+
+    /**
+     * Reads an optional list, treating an absent one as empty.
+     *
+     * <p>An upsert replaces every synchronized field and has no way to say "unchanged", so a list
+     * the operation leaves out is a list with nothing in it - the same reading
+     * {@link #flagOrFalse(Boolean)} gives an absent flag.</p>
+     *
+     * @param suppliedValues the value read from the operation, may be {@code null}
+     * @return the same values in the same order, or an empty list when it is {@code null}
+     */
+    public static List<String> listOrEmpty(final List<String> suppliedValues) {
+        return suppliedValues == null ? List.of() : List.copyOf(suppliedValues);
     }
 }

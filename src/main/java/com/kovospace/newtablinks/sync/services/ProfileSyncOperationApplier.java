@@ -53,6 +53,7 @@ public class ProfileSyncOperationApplier implements SyncOperationApplier {
                 PushedOperationValues.requireSuppliedText(operation.name()),
                 PushedOperationValues.flagOrFalse(operation.enableDragAndDrop()),
                 PushedOperationValues.flagOrFalse(operation.hideTips()),
+                PushedOperationValues.listOrEmpty(operation.dismissedTips()),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
         return profileSynchronizationService.upsertProfileFromPushedOperation(
