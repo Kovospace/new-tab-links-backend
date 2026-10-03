@@ -101,6 +101,7 @@ public class ProfileService {
         final ProfileEntity newProfile = new ProfileEntity(owner, saveRequest.name(), position);
         newProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         newProfile.setHideTips(saveRequest.hideTips());
+        newProfile.setDismissedTips(saveRequest.dismissedTips());
 
         userDataChangePublisher.publishChangeFor(ownerId);
         return profileMapper.toDto(profileRepository.save(newProfile));
@@ -128,6 +129,7 @@ public class ProfileService {
         existingProfile.setName(saveRequest.name());
         existingProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         existingProfile.setHideTips(saveRequest.hideTips());
+        existingProfile.setDismissedTips(saveRequest.dismissedTips());
         userDataChangePublisher.publishChangeFor(ownerId);
         return profileMapper.toDto(existingProfile);
     }

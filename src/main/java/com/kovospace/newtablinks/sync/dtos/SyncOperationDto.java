@@ -2,9 +2,11 @@ package com.kovospace.newtablinks.sync.dtos;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -46,6 +48,7 @@ import java.util.UUID;
  *                               dragging
  * @param hideTips               whether a profile hides the tips shown on the new tab page
  *                               background
+ * @param dismissedTips          identifiers of the tips a profile has dismissed one by one
  * @param color                  name of the Chrome tab group colour a subgroup is painted with,
  *                               absent when it has none
  * @param closedAt               moment a tab was closed, as the closing device reported it
@@ -111,6 +114,11 @@ public record SyncOperationDto(
         @Schema(description = "Whether a profile hides the tips shown on the new tab page "
                 + "background", example = "false")
         Boolean hideTips,
+
+        @Schema(description = "Identifiers of the new tab page tips a profile has dismissed one "
+                + "by one; absent means none. An upsert replaces the whole list",
+                example = "[\"hide-tips\"]")
+        @Size(max = 100) List<@NotBlank @Size(max = 64) String> dismissedTips,
 
         @Schema(description = "Name of the Chrome tab group colour a subgroup is painted with, "
                 + "one of the names Chrome accepts; absent leaves the subgroup without one",

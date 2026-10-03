@@ -149,7 +149,7 @@ class SyncPushServiceTest {
                 kind, SyncEntityKind.LINK, id,
                 null, null, UUID.randomUUID(), null,
                 null, null, "A link", "https://example.test", null,
-                null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
                 null, null, 0);
     }
 }

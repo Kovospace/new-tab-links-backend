@@ -106,7 +106,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work and study", false, false, 3));
+                new ProfileSynchronizedValuesDto("Work and study", false, false, List.of(), 3));
     }
 
     @Test
@@ -121,7 +121,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 settingsChange.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", true, false, 0));
+                new ProfileSynchronizedValuesDto("Work", true, false, List.of(), 0));
     }
 
     @Test
@@ -138,7 +138,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
     }
 
     @Test
@@ -153,7 +153,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 confusable.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
     }
 
     @Test
@@ -168,7 +168,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 tipsDismissed.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, true, 0));
+                new ProfileSynchronizedValuesDto("Work", false, true, List.of(), 0));
     }
 
     @Test
@@ -186,7 +186,41 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
+    }
+
+    @Test
+    @DisplayName("the tips a profile dismissed one by one are carried through, in order")
+    void shouldPassThePushedDismissedTipsOnInOrder() {
+
+        final SyncOperationDto twoDismissed = upsertProfileDismissingTips(
+                UUID.randomUUID(), "Work", 0, List.of("hide-tips", "change-background"));
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(twoDismissed), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                twoDismissed.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto(
+                        "Work", false, false, List.of("hide-tips", "change-background"), 0));
+    }
+
+    @Test
+    @DisplayName("a profile upsert that omits the dismissed tips stores none rather than keeping "
+            + "the old ones")
+    void shouldTreatOmittedDismissedTipsAsNone() {
+
+        // An extension build from before single tips could be dismissed sends no such field,
+        // and an upsert replaces every synchronized field - as with an omitted flag.
+        final SyncOperationDto rename =
+                upsertProfileDismissingTips(UUID.randomUUID(), "Work", 0, null);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(rename), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                rename.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
     }
 
     @Test
@@ -204,7 +238,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 draggableOnly.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", true, false, 0));
+                new ProfileSynchronizedValuesDto("Work", true, false, List.of(), 0));
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -269,7 +303,31 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, enableDragAndDrop, null, null,
+                null, null, null, enableDragAndDrop, null, null, null,
+                null, null, position);
+    }
+
+    /**
+     * Builds a pushed profile upsert carrying the dismissed tips and no settings flag.
+     *
+     * @param id            identifier of the profile
+     * @param name          name to store
+     * @param position      display position to store
+     * @param dismissedTips the dismissed tip identifiers as the operation carries them,
+     *                      {@code null} when the operation leaves them out
+     * @return the operation
+     */
+    private SyncOperationDto upsertProfileDismissingTips(
+            final UUID id,
+            final String name,
+            final Integer position,
+            final List<String> dismissedTips) {
+
+        return new SyncOperationDto(
+                SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
+                null, null, null, null,
+                name, null, null, null, null,
+                null, null, null, null, null, dismissedTips, null,
                 null, null, position);
     }
 
@@ -293,7 +351,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, hideTips, null,
+                null, null, null, null, hideTips, null, null,
                 null, null, position);
     }
 
@@ -317,7 +375,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, Boolean.TRUE, null, null, null,
+                null, null, Boolean.TRUE, null, null, null, null,
                 null, null, position);
     }
 }

@@ -15,6 +15,7 @@ import com.kovospace.newtablinks.profile.repositories.ProfileRepository;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.services.UserService;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -189,7 +190,7 @@ class ProfileSynchronizationServiceTest {
 
         profileSynchronizationService.upsertProfileFromPushedOperation(
                 profileId, OWNER_ID,
-                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, 0));
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, List.of(), 0));
 
         assertThat(existingProfile.isEnableDragAndDrop()).isTrue();
     }
@@ -204,7 +205,7 @@ class ProfileSynchronizationServiceTest {
 
         profileSynchronizationService.upsertProfileFromPushedOperation(
                 profileId, OWNER_ID,
-                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, false, 0));
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, false, List.of(), 0));
 
         // The whole point of an upsert replacing every synchronized field: switching the setting
         // off is a change like any other, and a device that never learns of it keeps dragging.
@@ -222,7 +223,7 @@ class ProfileSynchronizationServiceTest {
         final ProfileEntity storedProfile = profileSynchronizationService
                 .upsertProfileFromPushedOperation(
                         profileId, OWNER_ID,
-                        new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, 0));
+                        new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, List.of(), 0));
 
         assertThat(storedProfile.isEnableDragAndDrop()).isTrue();
     }
@@ -236,9 +237,25 @@ class ProfileSynchronizationServiceTest {
 
         profileSynchronizationService.upsertProfileFromPushedOperation(
                 profileId, OWNER_ID,
-                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, true, 0));
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, true, List.of(), 0));
 
         assertThat(existingProfile.isHideTips()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a pushed upsert replaces the tips a profile dismissed one by one")
+    void shouldReplaceTheDismissedTipsOfAnExistingProfile() {
+
+        final UUID profileId = UUID.randomUUID();
+        final ProfileEntity existingProfile = anExistingProfile(profileId, NAME_BEFORE_RENAME, 0);
+        existingProfile.setDismissedTips(List.of("disable-ads"));
+
+        profileSynchronizationService.upsertProfileFromPushedOperation(
+                profileId, OWNER_ID,
+                new ProfileSynchronizedValuesDto(
+                        NAME_AFTER_RENAME, false, false, List.of("hide-tips"), 0));
+
+        assertThat(existingProfile.getDismissedTips()).containsExactly("hide-tips");
     }
 
     @Test
@@ -251,7 +268,7 @@ class ProfileSynchronizationServiceTest {
 
         profileSynchronizationService.upsertProfileFromPushedOperation(
                 profileId, OWNER_ID,
-                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, false, 0));
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, false, List.of(), 0));
 
         // Undismissing the tips is a change like any other, and reaches the other devices the
         // same way dismissing them does.
@@ -267,7 +284,7 @@ class ProfileSynchronizationServiceTest {
 
         profileSynchronizationService.upsertProfileFromPushedOperation(
                 profileId, OWNER_ID,
-                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, 0));
+                new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, true, false, List.of(), 0));
 
         assertThat(existingProfile.isEnableDragAndDrop()).isTrue();
         assertThat(existingProfile.isHideTips()).isFalse();
@@ -284,7 +301,7 @@ class ProfileSynchronizationServiceTest {
         final ProfileEntity storedProfile = profileSynchronizationService
                 .upsertProfileFromPushedOperation(
                         profileId, OWNER_ID,
-                        new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, true, 0));
+                        new ProfileSynchronizedValuesDto(NAME_AFTER_RENAME, false, true, List.of(), 0));
 
         assertThat(storedProfile.isHideTips()).isTrue();
     }
@@ -299,7 +316,7 @@ class ProfileSynchronizationServiceTest {
      * @return the values a pushed upsert would carry
      */
     private ProfileSynchronizedValuesDto valuesRenaming(final String name, final int position) {
-        return new ProfileSynchronizedValuesDto(name, false, false, position);
+        return new ProfileSynchronizedValuesDto(name, false, false, List.of(), position);
     }
 
     /**
