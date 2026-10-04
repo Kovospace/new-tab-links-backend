@@ -387,6 +387,32 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Renders a write refused by a Fair Use Policy cap as HTTP 409, carrying the code
+     * {@code FAIR_USE_LIMIT_REACHED}, the cap and its maximum so that a client can explain the
+     * refusal without parsing the message.
+     *
+     * @param exception the exception that was thrown
+     * @return a 409 response carrying the uniform error body with {@code code}, {@code limit}
+     *         and {@code maximum} filled in
+     * @since 0.0.16
+     */
+    @ExceptionHandler(FairUseLimitReachedException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleFairUseLimitReached(
+            final FairUseLimitReachedException exception) {
+
+        final HttpStatus status = HttpStatus.CONFLICT;
+        return ResponseEntity.status(status).body(new ApiErrorResponseDto(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                exception.getMessage(),
+                List.of(),
+                FairUseLimitReachedException.ERROR_CODE,
+                exception.getLimit(),
+                exception.getMaximum()));
+    }
+
+    /**
      * Renders anything not handled above as HTTP 500, without leaking internals to the caller.
      *
      * @param exception the unexpected exception

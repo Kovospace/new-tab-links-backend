@@ -171,8 +171,16 @@ Which file holds which concern, and which endpoint lives in which controller:
   extension caps the list at 50 per profile and pushes what it prunes as deletes, so it is by far
   the highest-churn kind. **`closedAt` is the client's clock and is stored exactly as sent** — the
   row may arrive hours later and a server timestamp would refile it at the top of the list; an
-  operation without one is refused rather than stamped. There is no server-side cap: the client
-  prunes, and nothing here enforces it.
+  operation without one is refused rather than stamped. The client prunes to 50 per profile; the
+  server additionally keeps only the newest 500 per account (Fair Use Policy) and deletes the
+  oldest beyond that at the end of every sync push - never refusing one.
+- **Fair Use Policy caps refuse growth only** (`FairUseLimitGuard`): 50 profiles, 50 workspaces
+  (environments) per account, 500 links per workspace, on every plan. Interactive creates are
+  checked one by one; the sync push is judged on its end state (counts before the first
+  operation vs after the last), because the extension sends upserts before deletions - a push
+  fails whole with 409 only when it leaves a collection above its cap *and* larger than it
+  started. Every check locks the `app_user` row for the transaction. Data over a cap is never
+  deleted by the guard, and edits and deletions of it keep working.
 - **The sync push accepts client-assigned identifiers**, the one place anything does. It is safe
   because every lookup is still ownership-scoped: an identifier already taken by another account
   is not an error but a remap, stored under a server-generated identifier and reported back.
@@ -319,7 +327,9 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 - **Payments are Creem, behind one port, and in test mode only so far.** The webhook
   (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; it is read only for display -
   `premium` on the account DTO (so also `owner.premium` in the sync snapshot) and
-  `GET /api/v1/payments/subscription`. No limit is enforced, account deletion is not blocked by a
+  `GET /api/v1/payments/subscription`. No plan limit is enforced (the free plan's 2 workspaces,
+  1 profile and 5 devices exist only on the website; the Fair Use caps apply to every plan
+  alike and are not plan limits), account deletion is not blocked by a
   live subscription, and there is no cancel or refund endpoint - which is
   why that endpoint's `cancellable`/`refundable` are always false. The rules the webhook code must keep
   are in the Javadoc of `CreemWebhookController`, `PaymentWebhookClaimStore` and

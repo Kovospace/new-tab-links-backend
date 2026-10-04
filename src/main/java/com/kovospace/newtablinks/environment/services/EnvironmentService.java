@@ -1,6 +1,8 @@
 package com.kovospace.newtablinks.environment.services;
 
+import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentDto;
@@ -31,6 +33,7 @@ public class EnvironmentService {
     private final ProfileService profileService;
     private final UserDataChangePublisher userDataChangePublisher;
     private final HierarchyDeletionService hierarchyDeletionService;
+    private final FairUseLimitGuard fairUseLimitGuard;
 
     /**
      * Creates the service.
@@ -41,19 +44,22 @@ public class EnvironmentService {
      *                                it the owner
      * @param userDataChangePublisher  announces changes to the user's other browsers
      * @param hierarchyDeletionService removes a record together with everything beneath it
+     * @param fairUseLimitGuard        refuses a workspace beyond the Fair Use Policy cap
      */
     public EnvironmentService(
             final EnvironmentRepository environmentRepository,
             final EnvironmentMapper environmentMapper,
             final ProfileService profileService,
             final UserDataChangePublisher userDataChangePublisher,
-            final HierarchyDeletionService hierarchyDeletionService) {
+            final HierarchyDeletionService hierarchyDeletionService,
+            final FairUseLimitGuard fairUseLimitGuard) {
 
         this.environmentRepository = environmentRepository;
         this.environmentMapper = environmentMapper;
         this.profileService = profileService;
         this.userDataChangePublisher = userDataChangePublisher;
         this.hierarchyDeletionService = hierarchyDeletionService;
+        this.fairUseLimitGuard = fairUseLimitGuard;
     }
 
     /**
@@ -91,7 +97,9 @@ public class EnvironmentService {
      * @param saveRequest the environment to create
      * @param ownerId     identifier of the user it is created for, taken from the access token
      * @return the created environment, including its assigned identifier and position
-     * @throws ResourceNotFoundException when the named profile does not exist or is not theirs
+     * @throws ResourceNotFoundException    when the named profile does not exist or is not theirs
+     * @throws FairUseLimitReachedException when the account already holds as many workspaces as
+     *                                      the Fair Use Policy allows
      */
     @Transactional
     public EnvironmentDto createEnvironment(
@@ -100,6 +108,7 @@ public class EnvironmentService {
 
         final ProfileEntity parentProfile =
                 profileService.getRequiredProfileEntity(saveRequest.profileId(), ownerId);
+        fairUseLimitGuard.requireRoomForAnotherWorkspace(ownerId);
 
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 environmentRepository.findHighestPositionByOwnerId(ownerId));

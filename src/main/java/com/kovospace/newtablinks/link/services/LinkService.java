@@ -1,6 +1,8 @@
 package com.kovospace.newtablinks.link.services;
 
+import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import com.kovospace.newtablinks.group.services.GroupService;
@@ -36,6 +38,7 @@ public class LinkService {
     private final GroupService groupService;
     private final SubgroupService subgroupService;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final FairUseLimitGuard fairUseLimitGuard;
 
     /**
      * Creates the service.
@@ -45,19 +48,22 @@ public class LinkService {
      * @param groupService    resolves the owning group
      * @param subgroupService resolves the optional owning subgroup
      * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param fairUseLimitGuard       refuses a link beyond the Fair Use Policy cap of its workspace
      */
     public LinkService(
             final LinkRepository linkRepository,
             final LinkMapper linkMapper,
             final GroupService groupService,
             final SubgroupService subgroupService,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final FairUseLimitGuard fairUseLimitGuard) {
 
         this.linkRepository = linkRepository;
         this.linkMapper = linkMapper;
         this.groupService = groupService;
         this.subgroupService = subgroupService;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.fairUseLimitGuard = fairUseLimitGuard;
     }
 
     /**
@@ -109,12 +115,17 @@ public class LinkService {
      * @param saveRequest the link to create
      * @param ownerId     identifier of the user that must own the target group and subgroup
      * @return the created link, including its assigned identifier and position
-     * @throws ResourceNotFoundException when the group or subgroup does not exist or is not theirs
+     * @throws ResourceNotFoundException    when the group or subgroup does not exist or is not
+     *                                      theirs
+     * @throws FairUseLimitReachedException when the group's workspace already holds as many links
+     *                                      as the Fair Use Policy allows
      */
     @Transactional
     public LinkDto createLink(final LinkSaveRequestDto saveRequest, final UUID ownerId) {
         final GroupEntity parentGroup =
                 groupService.getRequiredGroupEntity(saveRequest.parentGroupId(), ownerId);
+        fairUseLimitGuard.requireRoomForAnotherLinkInWorkspace(
+                ownerId, parentGroup.getEnvironment().getId());
         final SubgroupEntity parentSubgroup =
                 resolveOptionalSubgroup(saveRequest.parentSubgroupId(), ownerId);
 

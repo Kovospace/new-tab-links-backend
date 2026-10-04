@@ -59,4 +59,19 @@ public interface ClosedTabRepository extends JpaRepository<ClosedTabEntity, UUID
             + "where closedTab.id = :closedTabId and closedTab.profile.owner.id = :ownerId")
     Optional<ClosedTabEntity> findByIdAndOwnerId(
             @Param("closedTabId") UUID closedTabId, @Param("ownerId") UUID ownerId);
+
+    /**
+     * Lists the identifiers of an account's closed tabs, most recently closed first.
+     *
+     * <p>Ties on the closing moment are broken by identifier, so that which entry is the oldest
+     * is decided the same way on every call.</p>
+     *
+     * @param ownerId identifier of the owning user
+     * @return the identifiers, newest first; empty when the account has none
+     * @since 0.0.16
+     */
+    @Query("select closedTab.id from ClosedTabEntity closedTab "
+            + "where closedTab.profile.owner.id = :ownerId "
+            + "order by closedTab.closedAt desc, closedTab.id desc")
+    List<UUID> findIdsByOwnerIdNewestFirst(@Param("ownerId") UUID ownerId);
 }

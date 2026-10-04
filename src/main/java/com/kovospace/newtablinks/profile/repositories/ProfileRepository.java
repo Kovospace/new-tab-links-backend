@@ -48,4 +48,13 @@ public interface ProfileRepository extends JpaRepository<ProfileEntity, UUID> {
     @Query("select max(profile.position) from ProfileEntity profile "
             + "where profile.owner.id = :ownerId")
     Integer findHighestPositionByOwnerId(@Param("ownerId") UUID ownerId);
+
+    /**
+     * Counts an account's profiles.
+     *
+     * @param ownerId identifier of the owning user
+     * @return how many profiles the account has
+     * @since 0.0.16
+     */
+    long countByOwnerId(UUID ownerId);
 }

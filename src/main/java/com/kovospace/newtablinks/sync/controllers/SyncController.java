@@ -83,11 +83,19 @@ public class SyncController {
                     + "given, so the caller must order parents before their children and delete "
                     + "children before their parents. Applying the same batch twice is harmless: "
                     + "an upsert of something that already exists updates it, and a delete of "
-                    + "something already gone does nothing.")
+                    + "something already gone does nothing. The Fair Use Policy is judged on "
+                    + "the state after the whole batch: a batch that leaves profiles, workspaces "
+                    + "or the links of one workspace above their cap and more numerous than "
+                    + "before is refused entirely with 409. Closed-tab history never refuses; "
+                    + "its oldest entries beyond the cap are deleted.")
     @ApiResponse(responseCode = "200", description = "The batch was applied")
     @ApiResponse(responseCode = "400", description = "The batch was not well formed",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "401", description = "No valid access token was presented",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The batch would grow the account past a "
+            + "Fair Use Policy cap; nothing was applied. Code FAIR_USE_LIMIT_REACHED, limit "
+            + "PROFILES, WORKSPACES or LINKS_PER_WORKSPACE, and the cap's maximum",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public SyncPushResultDto pushMyChanges(
             @Valid @RequestBody final SyncPushRequestDto pushRequest) {

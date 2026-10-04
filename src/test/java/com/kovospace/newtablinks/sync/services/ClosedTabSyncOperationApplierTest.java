@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.kovospace.newtablinks.closedtab.dtos.ClosedTabSynchronizedValuesDto;
 import com.kovospace.newtablinks.closedtab.models.ClosedTabEntity;
 import com.kovospace.newtablinks.closedtab.services.ClosedTabSynchronizationService;
+import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.profile.services.ProfileSynchronizationService;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
@@ -66,7 +67,9 @@ class ClosedTabSyncOperationApplierTest {
     private final SyncPushService syncPushService = new SyncPushService(
             List.of(new ClosedTabSyncOperationApplier(
                     closedTabSynchronizationService, profileSynchronizationService)),
-            mock(UserDataChangePublisher.class));
+            mock(UserDataChangePublisher.class),
+            mock(FairUseLimitGuard.class),
+            mock(ClosedTabSynchronizationService.class));
 
     @Test
     @DisplayName("stores the closing moment the client sent rather than a server clock")

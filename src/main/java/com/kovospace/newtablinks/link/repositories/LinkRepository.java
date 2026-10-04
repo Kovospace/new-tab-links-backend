@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.link.repositories;
 
 import com.kovospace.newtablinks.link.models.LinkEntity;
+import com.kovospace.newtablinks.link.models.WorkspaceLinkCount;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -113,4 +114,28 @@ public interface LinkRepository extends JpaRepository<LinkEntity, UUID> {
      */
     @Query("select max(link.position) from LinkEntity link where link.parentSubgroup.id = :subgroupId")
     Integer findHighestPositionAmongSubgroupLinks(@Param("subgroupId") UUID subgroupId);
+
+    /**
+     * Counts the links of one environment, through every group and subgroup of it.
+     *
+     * @param environmentId identifier of the environment, already resolved for its owner
+     * @return how many links the environment holds
+     * @since 0.0.16
+     */
+    @Query("select count(link) from LinkEntity link "
+            + "where link.parentGroup.environment.id = :environmentId")
+    long countByEnvironmentId(@Param("environmentId") UUID environmentId);
+
+    /**
+     * Counts the links of every environment of an account that holds at least one.
+     *
+     * @param ownerId identifier of the owning user
+     * @return one entry per environment with links; an environment without any is absent
+     * @since 0.0.16
+     */
+    @Query("select new com.kovospace.newtablinks.link.models.WorkspaceLinkCount("
+            + "link.parentGroup.environment.id, count(link)) from LinkEntity link "
+            + "where link.parentGroup.environment.owner.id = :ownerId "
+            + "group by link.parentGroup.environment.id")
+    List<WorkspaceLinkCount> countLinksPerEnvironmentOfOwner(@Param("ownerId") UUID ownerId);
 }

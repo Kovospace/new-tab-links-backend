@@ -109,6 +109,9 @@ public class LinkController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The named group or subgroup does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The group's workspace already holds as many links as the Fair Use Policy allows - code FAIR_USE_LIMIT_REACHED, "
+            + "limit LINKS_PER_WORKSPACE, and the cap's maximum",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<LinkDto> createLink(@Valid @RequestBody final LinkSaveRequestDto saveRequest) {
         return ResponseEntity.status(HttpStatus.CREATED).body(linkService.createLink(
                 saveRequest, authenticatedUserProvider.getAuthenticatedUserId()));

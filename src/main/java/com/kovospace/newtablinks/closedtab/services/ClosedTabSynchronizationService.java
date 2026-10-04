@@ -3,9 +3,12 @@ package com.kovospace.newtablinks.closedtab.services;
 import com.kovospace.newtablinks.closedtab.dtos.ClosedTabSynchronizedValuesDto;
 import com.kovospace.newtablinks.closedtab.models.ClosedTabEntity;
 import com.kovospace.newtablinks.closedtab.repositories.ClosedTabRepository;
+import com.kovospace.newtablinks.common.config.FairUseLimitProperties;
+import com.kovospace.newtablinks.common.models.FairUseLimit;
 import com.kovospace.newtablinks.common.utils.ClientAssignedIdentifierPolicy;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -32,19 +35,23 @@ public class ClosedTabSynchronizationService {
 
     private final ClosedTabRepository closedTabRepository;
     private final UserDataChangePublisher userDataChangePublisher;
+    private final FairUseLimitProperties fairUseLimitProperties;
 
     /**
      * Creates the service.
      *
      * @param closedTabRepository     persistence access for closed tabs
      * @param userDataChangePublisher announces changes to the user's other browsers
+     * @param fairUseLimitProperties  how much closed-tab history an account keeps
      */
     public ClosedTabSynchronizationService(
             final ClosedTabRepository closedTabRepository,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final FairUseLimitProperties fairUseLimitProperties) {
 
         this.closedTabRepository = closedTabRepository;
         this.userDataChangePublisher = userDataChangePublisher;
+        this.fairUseLimitProperties = fairUseLimitProperties;
     }
 
     /**
@@ -105,6 +112,33 @@ public class ClosedTabSynchronizationService {
         closedTabRepository.delete(existingClosedTab.get());
         userDataChangePublisher.publishChangeFor(ownerId);
         return true;
+    }
+
+    /**
+     * Deletes an account's oldest closed tabs beyond the Fair Use Policy's history cap.
+     *
+     * <p>Closed-tab history is the one capped collection that is never refused: the policy says
+     * the oldest entries make room for newer ones. A push may legitimately take an account past
+     * the cap - the first sync of a second browser merges two histories - so the sync push calls
+     * this after its operations, and what remains is the newest
+     * {@code newtablinks.fair-use.closed-tab-history} entries across all profiles, by
+     * {@code closedAt}.</p>
+     *
+     * @param ownerId identifier of the account
+     * @return how many entries were deleted; zero when the account was within the cap
+     * @since 0.0.16
+     */
+    @Transactional
+    public int trimHistoryToFairUseCap(final UUID ownerId) {
+        final int maximum = fairUseLimitProperties.maximumFor(FairUseLimit.CLOSED_TAB_HISTORY);
+        final List<UUID> newestFirst = closedTabRepository.findIdsByOwnerIdNewestFirst(ownerId);
+        if (newestFirst.size() <= maximum) {
+            return 0;
+        }
+        final List<UUID> oldestBeyondTheCap = newestFirst.subList(maximum, newestFirst.size());
+        closedTabRepository.deleteAllById(oldestBeyondTheCap);
+        userDataChangePublisher.publishChangeFor(ownerId);
+        return oldestBeyondTheCap.size();
     }
 
     /**

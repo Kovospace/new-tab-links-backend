@@ -2,12 +2,17 @@ package com.kovospace.newtablinks.sync.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.kovospace.newtablinks.closedtab.services.ClosedTabSynchronizationService;
+import com.kovospace.newtablinks.common.models.FairUseCounts;
+import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationDto;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationKind;
@@ -18,10 +23,12 @@ import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import com.kovospace.newtablinks.sync.exceptions.SyncOperationRejectedException;
 import com.kovospace.newtablinks.sync.models.SyncOperationContext;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 /**
  * Tests how a pushed batch is dispatched, and what a single bad operation does to the rest.
@@ -37,13 +44,18 @@ class SyncPushServiceTest {
     private final UserDataChangePublisher userDataChangePublisher =
             mock(UserDataChangePublisher.class);
 
+    private final FairUseLimitGuard fairUseLimitGuard = mock(FairUseLimitGuard.class);
+    private final ClosedTabSynchronizationService closedTabSynchronizationService =
+            mock(ClosedTabSynchronizationService.class);
+
     private SyncPushService syncPushService;
 
     @BeforeEach
     void createServiceWithOneApplier() {
         // Stubbed before construction: the service indexes its appliers by the kind they claim.
         when(linkApplier.supportedEntityKind()).thenReturn(SyncEntityKind.LINK);
-        syncPushService = new SyncPushService(List.of(linkApplier), userDataChangePublisher);
+        syncPushService = new SyncPushService(List.of(linkApplier), userDataChangePublisher,
+                fairUseLimitGuard, closedTabSynchronizationService);
     }
 
     @Test
@@ -128,6 +140,36 @@ class SyncPushServiceTest {
                 new SyncPushRequestDto(ORIGIN_DEVICE_ID, List.of()), OWNER_ID);
 
         verify(userDataChangePublisher, never()).publishChangeFor(any(), any());
+    }
+
+    @Test
+    @DisplayName("counts before the first operation, trims closed tabs and judges the caps after "
+            + "the last")
+    void judgesTheFairUseCapsOnTheBatchAsAWhole() {
+
+        final FairUseCounts countsBefore = new FairUseCounts(1, 1, Map.of());
+        when(fairUseLimitGuard.captureCountsBeforeBatch(OWNER_ID)).thenReturn(countsBefore);
+        when(linkApplier.applyUpsert(any(), any())).thenReturn(UUID.randomUUID());
+
+        syncPushService.applyPushedOperations(
+                push(upsertLink(UUID.randomUUID()), deleteLink(UUID.randomUUID())), OWNER_ID);
+
+        final InOrder order = inOrder(fairUseLimitGuard, linkApplier, closedTabSynchronizationService);
+        order.verify(fairUseLimitGuard).captureCountsBeforeBatch(OWNER_ID);
+        order.verify(linkApplier).applyUpsert(any(), any());
+        order.verify(linkApplier).applyDelete(any(), any());
+        order.verify(closedTabSynchronizationService).trimHistoryToFairUseCap(OWNER_ID);
+        order.verify(fairUseLimitGuard).requireBatchDidNotGrowPastCaps(OWNER_ID, countsBefore);
+    }
+
+    @Test
+    @DisplayName("an empty batch neither locks the account nor counts anything")
+    void leavesTheCapsAloneForAnEmptyBatch() {
+
+        syncPushService.applyPushedOperations(
+                new SyncPushRequestDto(ORIGIN_DEVICE_ID, List.of()), OWNER_ID);
+
+        verifyNoInteractions(fairUseLimitGuard, closedTabSynchronizationService);
     }
 
     // ------------------------------------------------------------------ fixtures

@@ -1,5 +1,9 @@
 package com.kovospace.newtablinks.sync.services;
 
+import com.kovospace.newtablinks.closedtab.services.ClosedTabSynchronizationService;
+import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
+import com.kovospace.newtablinks.common.models.FairUseCounts;
+import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationDto;
 import com.kovospace.newtablinks.sync.dtos.SyncPushRequestDto;
@@ -33,6 +37,14 @@ import org.springframework.transaction.annotation.Transactional;
  * all-or-nothing at the level of the transaction, so a genuine failure leaves the account exactly
  * as it was.</p>
  *
+ * <p>The Fair Use Policy is judged on the batch as a whole, not per operation: the account is
+ * locked and counted before the first operation and counted again after the last, and a batch
+ * that left a profile, workspace or links-per-workspace count both above its cap and larger than
+ * it started fails entirely with {@link FairUseLimitReachedException} (HTTP 409), leaving the
+ * account as it was. Per operation would refuse a device that replaces a record at a cap, since a
+ * device sends its upserts before its deletions. Closed-tab history never fails a push: the
+ * oldest entries beyond its cap are deleted instead.</p>
+ *
  * @since 0.0.6
  */
 @Service
@@ -44,20 +56,28 @@ public class SyncPushService {
             new EnumMap<>(SyncEntityKind.class);
 
     private final UserDataChangePublisher userDataChangePublisher;
+    private final FairUseLimitGuard fairUseLimitGuard;
+    private final ClosedTabSynchronizationService closedTabSynchronizationService;
 
     /**
      * Creates the service.
      *
      * @param appliers                every applier Spring found, one per kind of record
-     * @param userDataChangePublisher announces the change to the user's other browsers
+     * @param userDataChangePublisher         announces the change to the user's other browsers
+     * @param fairUseLimitGuard               refuses a batch that grows the account past a cap
+     * @param closedTabSynchronizationService trims closed-tab history to its cap
      */
     public SyncPushService(
             final List<SyncOperationApplier> appliers,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final FairUseLimitGuard fairUseLimitGuard,
+            final ClosedTabSynchronizationService closedTabSynchronizationService) {
 
         appliers.forEach(applier ->
                 appliersByEntityKind.put(applier.supportedEntityKind(), applier));
         this.userDataChangePublisher = userDataChangePublisher;
+        this.fairUseLimitGuard = fairUseLimitGuard;
+        this.closedTabSynchronizationService = closedTabSynchronizationService;
     }
 
     /**
@@ -73,6 +93,8 @@ public class SyncPushService {
      * @param pushRequest the batch to apply
      * @param ownerId     identifier of the user it belongs to, taken from the access token
      * @return the identifiers that had to be remapped and the operations that were refused
+     * @throws FairUseLimitReachedException when the batch would leave a capped collection above
+     *                                      its cap and larger than before; nothing is applied
      */
     @Transactional
     public SyncPushResultDto applyPushedOperations(
@@ -83,13 +105,18 @@ public class SyncPushService {
         final SyncOperationContext context = new SyncOperationContext(ownerId);
         final List<SyncRejectedOperationDto> rejectedOperations = new ArrayList<>();
 
-        if (!operations.isEmpty()) {
-            userDataChangePublisher.publishChangeFor(ownerId, pushRequest.originDeviceId());
+        if (operations.isEmpty()) {
+            return new SyncPushResultDto(Instant.now(), List.of(), List.of());
         }
+        userDataChangePublisher.publishChangeFor(ownerId, pushRequest.originDeviceId());
+        final FairUseCounts countsBeforeBatch = fairUseLimitGuard.captureCountsBeforeBatch(ownerId);
 
         for (int index = 0; index < operations.size(); index++) {
             applyOneOperation(operations.get(index), index, context, rejectedOperations);
         }
+
+        closedTabSynchronizationService.trimHistoryToFairUseCap(ownerId);
+        fairUseLimitGuard.requireBatchDidNotGrowPastCaps(ownerId, countsBeforeBatch);
 
         LOGGER.debug("Applied {} pushed operations for account {}, {} remapped, {} refused",
                 operations.size(), ownerId, context.getRemappings().size(),

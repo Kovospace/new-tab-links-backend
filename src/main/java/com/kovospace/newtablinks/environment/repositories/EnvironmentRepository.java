@@ -60,4 +60,13 @@ public interface EnvironmentRepository extends JpaRepository<EnvironmentEntity, 
             "select max(environment.position) from EnvironmentEntity environment "
                     + "where environment.owner.id = :ownerId")
     Integer findHighestPositionByOwnerId(@Param("ownerId") UUID ownerId);
+
+    /**
+     * Counts an account's environments, across all of its profiles.
+     *
+     * @param ownerId identifier of the owning user
+     * @return how many environments the account has
+     * @since 0.0.16
+     */
+    long countByOwnerId(UUID ownerId);
 }
