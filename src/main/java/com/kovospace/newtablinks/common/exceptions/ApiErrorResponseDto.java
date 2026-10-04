@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Uniform error body returned by every failing endpoint.
  *
- * <p>The last three components are optional and left out of the JSON entirely when absent, so
+ * <p>The last four components are optional and left out of the JSON entirely when absent, so
  * every body that does not carry them is byte-for-byte what it was before they existed.</p>
  *
  * @param timestamp        moment the failure was handled
@@ -19,11 +19,13 @@ import java.util.List;
  *                         request validation failure
  * @param code             machine-readable failure code a client may branch on, {@code null}
  *                         (and omitted) for failures that have none
- * @param limit            the cap a refused write would have exceeded - a
- *                         {@code FairUseLimit} name with code {@code FAIR_USE_LIMIT_REACHED}, a
- *                         {@code FreePlanLimit} name with code {@code FREE_PLAN_LIMIT_REACHED};
- *                         absent otherwise
- * @param maximum          that cap's maximum, present only with one of those two codes
+ * @param limit            the plan limit a refused request would have exceeded - a
+ *                         {@code PlanLimit} name; present only with a plan-limit code
+ * @param maximum          that limit's maximum for this account; present only with a
+ *                         plan-limit code
+ * @param manageUrl        absolute address of the website's devices page, where the user sees
+ *                         what synchronises and can sign installations out; present only with a
+ *                         plan-limit code
  * @since 0.0.1
  */
 @Schema(description = "Uniform error body returned by every failing endpoint")
@@ -45,22 +47,28 @@ public record ApiErrorResponseDto(
         List<String> validationErrors,
 
         @Schema(description = "Machine-readable failure code; absent when the failure has none",
-                example = "FAIR_USE_LIMIT_REACHED", nullable = true)
+                example = "FREE_PLAN_LIMIT_REACHED", nullable = true)
         @JsonInclude(JsonInclude.Include.NON_NULL)
         String code,
 
-        @Schema(description = "The cap that was reached. With code FAIR_USE_LIMIT_REACHED one "
-                + "of LINKS_PER_WORKSPACE, WORKSPACES, PROFILES; with code "
-                + "FREE_PLAN_LIMIT_REACHED one of WORKSPACES, PROFILES, DEVICES",
-                example = "LINKS_PER_WORKSPACE", nullable = true)
+        @Schema(description = "The plan limit that was reached; only with code "
+                + "FREE_PLAN_LIMIT_REACHED or FAIR_USE_LIMIT_REACHED",
+                allowableValues = {"PROFILES", "WORKSPACES_PER_PROFILE", "GROUPS_PER_WORKSPACE",
+                        "SUBGROUPS_PER_GROUP", "LINKS_PER_WORKSPACE", "DEVICES"},
+                example = "WORKSPACES_PER_PROFILE", nullable = true)
         @JsonInclude(JsonInclude.Include.NON_NULL)
         String limit,
 
-        @Schema(description = "The maximum of that cap; only with code FAIR_USE_LIMIT_REACHED "
-                + "or FREE_PLAN_LIMIT_REACHED",
-                example = "500", nullable = true)
+        @Schema(description = "That limit's maximum for this account; only with a plan-limit "
+                + "code", example = "2", nullable = true)
         @JsonInclude(JsonInclude.Include.NON_NULL)
-        Integer maximum) {
+        Integer maximum,
+
+        @Schema(description = "Absolute address of the website's devices page, where the user "
+                + "sees what synchronises and can sign installations out; only with a plan-limit "
+                + "code", example = "https://tabilinks.app/devices", nullable = true)
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String manageUrl) {
 
     /**
      * Creates a body without a failure code - the shape of every failure but a few.
@@ -78,6 +86,6 @@ public record ApiErrorResponseDto(
             final String message,
             final List<String> validationErrors) {
 
-        this(timestamp, status, error, message, validationErrors, null, null, null);
+        this(timestamp, status, error, message, validationErrors, null, null, null, null);
     }
 }

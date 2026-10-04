@@ -2,6 +2,7 @@ package com.kovospace.newtablinks.sync.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -11,8 +12,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.kovospace.newtablinks.closedtab.services.ClosedTabSynchronizationService;
-import com.kovospace.newtablinks.common.models.FairUseCounts;
-import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
+import com.kovospace.newtablinks.common.models.EffectivePlanLimits;
+import com.kovospace.newtablinks.common.models.PlanLimitValues;
+import com.kovospace.newtablinks.common.models.PushFootprint;
+import com.kovospace.newtablinks.common.models.PushLimitBaseline;
+import com.kovospace.newtablinks.common.services.SyncPushLimitGuard;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationDto;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationKind;
@@ -44,7 +48,7 @@ class SyncPushServiceTest {
     private final UserDataChangePublisher userDataChangePublisher =
             mock(UserDataChangePublisher.class);
 
-    private final FairUseLimitGuard fairUseLimitGuard = mock(FairUseLimitGuard.class);
+    private final SyncPushLimitGuard syncPushLimitGuard = PermissiveSyncPushLimitGuard.create();
     private final ClosedTabSynchronizationService closedTabSynchronizationService =
             mock(ClosedTabSynchronizationService.class);
 
@@ -55,7 +59,7 @@ class SyncPushServiceTest {
         // Stubbed before construction: the service indexes its appliers by the kind they claim.
         when(linkApplier.supportedEntityKind()).thenReturn(SyncEntityKind.LINK);
         syncPushService = new SyncPushService(List.of(linkApplier), userDataChangePublisher,
-                fairUseLimitGuard, closedTabSynchronizationService);
+                syncPushLimitGuard, closedTabSynchronizationService);
     }
 
     @Test
@@ -143,23 +147,26 @@ class SyncPushServiceTest {
     }
 
     @Test
-    @DisplayName("counts before the first operation, trims closed tabs and judges the caps after "
-            + "the last")
-    void judgesTheFairUseCapsOnTheBatchAsAWhole() {
+    @DisplayName("takes the baseline before the first operation, trims closed tabs to the plan "
+            + "and judges the end state with what the operations wrote into, after the last")
+    void judgesThePlanOnTheBatchAsAWhole() {
 
-        final FairUseCounts countsBefore = new FairUseCounts(1, 1, Map.of());
-        when(fairUseLimitGuard.captureCountsBeforeBatch(OWNER_ID)).thenReturn(countsBefore);
+        final PushLimitBaseline baseline = new PushLimitBaseline(
+                new EffectivePlanLimits(false, new PlanLimitValues(1, 2, 25, 25, 500, 25, 5)),
+                Map.of(), Map.of(), Map.of(), 40);
+        when(syncPushLimitGuard.captureBaselineBeforeBatch(OWNER_ID)).thenReturn(baseline);
         when(linkApplier.applyUpsert(any(), any())).thenReturn(UUID.randomUUID());
 
         syncPushService.applyPushedOperations(
                 push(upsertLink(UUID.randomUUID()), deleteLink(UUID.randomUUID())), OWNER_ID);
 
-        final InOrder order = inOrder(fairUseLimitGuard, linkApplier, closedTabSynchronizationService);
-        order.verify(fairUseLimitGuard).captureCountsBeforeBatch(OWNER_ID);
+        final InOrder order = inOrder(syncPushLimitGuard, linkApplier, closedTabSynchronizationService);
+        order.verify(syncPushLimitGuard).captureBaselineBeforeBatch(OWNER_ID);
         order.verify(linkApplier).applyUpsert(any(), any());
         order.verify(linkApplier).applyDelete(any(), any());
-        order.verify(closedTabSynchronizationService).trimHistoryToFairUseCap(OWNER_ID);
-        order.verify(fairUseLimitGuard).requireBatchDidNotGrowPastCaps(OWNER_ID, countsBefore);
+        order.verify(closedTabSynchronizationService).trimHistoryToPlanLimit(OWNER_ID, 25, 40);
+        order.verify(syncPushLimitGuard).requireEndStateWithinLimits(
+                eq(OWNER_ID), eq(baseline), any(PushFootprint.class));
     }
 
     @Test
@@ -169,7 +176,7 @@ class SyncPushServiceTest {
         syncPushService.applyPushedOperations(
                 new SyncPushRequestDto(ORIGIN_DEVICE_ID, List.of()), OWNER_ID);
 
-        verifyNoInteractions(fairUseLimitGuard, closedTabSynchronizationService);
+        verifyNoInteractions(syncPushLimitGuard, closedTabSynchronizationService);
     }
 
     // ------------------------------------------------------------------ fixtures

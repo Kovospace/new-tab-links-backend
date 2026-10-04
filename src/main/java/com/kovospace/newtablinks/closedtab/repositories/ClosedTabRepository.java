@@ -74,4 +74,13 @@ public interface ClosedTabRepository extends JpaRepository<ClosedTabEntity, UUID
             + "where closedTab.profile.owner.id = :ownerId "
             + "order by closedTab.closedAt desc, closedTab.id desc")
     List<UUID> findIdsByOwnerIdNewestFirst(@Param("ownerId") UUID ownerId);
+
+    /**
+     * Counts an account's closed-tab history entries, across all of its profiles.
+     *
+     * @param ownerId identifier of the owning user
+     * @return how many entries the account holds
+     * @since 0.0.18
+     */
+    long countByProfileOwnerId(UUID ownerId);
 }

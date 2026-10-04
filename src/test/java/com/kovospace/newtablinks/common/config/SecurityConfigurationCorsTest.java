@@ -277,7 +277,8 @@ class SecurityConfigurationCorsTest {
                 "/activate",
                 "/auth/callback",
                 "/reset-password",
-                "a-frontend-api-key");
+                "a-frontend-api-key",
+                "/devices");
     }
 
     /**

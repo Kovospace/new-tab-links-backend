@@ -1,7 +1,9 @@
 package com.kovospace.newtablinks.group.services;
 
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
+import com.kovospace.newtablinks.common.services.PlanLimitGuard;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.environment.services.EnvironmentService;
@@ -35,6 +37,7 @@ public class GroupService {
     private final EnvironmentService environmentService;
     private final UserDataChangePublisher userDataChangePublisher;
     private final HierarchyDeletionService hierarchyDeletionService;
+    private final PlanLimitGuard planLimitGuard;
 
     /**
      * Creates the service.
@@ -44,19 +47,22 @@ public class GroupService {
      * @param environmentService       resolves the owning environment
      * @param userDataChangePublisher  announces changes to the user's other browsers
      * @param hierarchyDeletionService removes a record together with everything beneath it
+     * @param planLimitGuard           refuses writes the account's plan does not allow
      */
     public GroupService(
             final GroupRepository groupRepository,
             final GroupMapper groupMapper,
             final EnvironmentService environmentService,
             final UserDataChangePublisher userDataChangePublisher,
-            final HierarchyDeletionService hierarchyDeletionService) {
+            final HierarchyDeletionService hierarchyDeletionService,
+            final PlanLimitGuard planLimitGuard) {
 
         this.groupRepository = groupRepository;
         this.groupMapper = groupMapper;
         this.environmentService = environmentService;
         this.userDataChangePublisher = userDataChangePublisher;
         this.hierarchyDeletionService = hierarchyDeletionService;
+        this.planLimitGuard = planLimitGuard;
     }
 
     /**
@@ -92,12 +98,15 @@ public class GroupService {
      * @param saveRequest the group to create
      * @param ownerId     identifier of the user that must own the target environment
      * @return the created group, including its assigned identifier and position
-     * @throws ResourceNotFoundException when the environment does not exist or is not theirs
+     * @throws ResourceNotFoundException  when the environment does not exist or is not theirs
+     * @throws PlanLimitReachedException when the environment holds no synchronisation slot, or
+     *                                    already holds as many groups as the plan allows
      */
     @Transactional
     public GroupDto createGroup(final GroupSaveRequestDto saveRequest, final UUID ownerId) {
         final EnvironmentEntity environment = environmentService.getRequiredEnvironmentEntity(
                 saveRequest.environmentId(), ownerId);
+        planLimitGuard.requireRoomForAnotherGroup(environment.toWorkspaceLocation());
 
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 groupRepository.findHighestPositionByEnvironmentId(environment.getId()));
@@ -116,6 +125,7 @@ public class GroupService {
      * @param ownerId     identifier of the user that must own it
      * @return the updated group
      * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     * @throws PlanLimitReachedException when the workspace holds no synchronisation slot
      */
     @Transactional
     public GroupDto updateGroup(
@@ -124,6 +134,8 @@ public class GroupService {
             final UUID ownerId) {
 
         final GroupEntity existingGroup = getRequiredGroupEntity(groupId, ownerId);
+        planLimitGuard.requireWorkspaceHoldsSlot(
+                existingGroup.getEnvironment().toWorkspaceLocation());
         existingGroup.setName(saveRequest.name());
         existingGroup.setDescription(saveRequest.description());
         userDataChangePublisher.publishChangeFor(ownerId);
@@ -137,11 +149,13 @@ public class GroupService {
      * @param groupId identifier of the group to delete
      * @param ownerId identifier of the user that must own it
      * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     * @throws PlanLimitReachedException when the workspace holds no synchronisation slot
      */
     @Transactional
     public void deleteGroup(final UUID groupId, final UUID ownerId) {
-        hierarchyDeletionService.deleteGroupWithDescendants(
-                getRequiredGroupEntity(groupId, ownerId));
+        final GroupEntity group = getRequiredGroupEntity(groupId, ownerId);
+        planLimitGuard.requireWorkspaceHoldsSlot(group.getEnvironment().toWorkspaceLocation());
+        hierarchyDeletionService.deleteGroupWithDescendants(group);
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 

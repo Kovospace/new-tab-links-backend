@@ -1,8 +1,14 @@
 package com.kovospace.newtablinks.user.controllers;
 
+import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
+import com.kovospace.newtablinks.common.config.ClientRequestHeaders;
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
 import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
+import com.kovospace.newtablinks.user.dtos.DeviceInventoryDto;
+import com.kovospace.newtablinks.user.dtos.DeviceInventoryReportRequestDto;
+import com.kovospace.newtablinks.user.dtos.DeviceRenameRequestDto;
 import com.kovospace.newtablinks.user.dtos.UserDeviceDto;
+import com.kovospace.newtablinks.user.services.DeviceInventoryService;
 import com.kovospace.newtablinks.user.services.UserDeviceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -10,18 +16,16 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
-import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
-import com.kovospace.newtablinks.common.config.ClientRequestHeaders;
-import com.kovospace.newtablinks.user.dtos.DeviceRenameRequestDto;
-import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,19 +44,23 @@ public class UserDeviceController {
 
     private final UserDeviceService userDeviceService;
     private final AuthenticatedUserProvider authenticatedUserProvider;
+    private final DeviceInventoryService deviceInventoryService;
 
     /**
      * Creates the controller.
      *
      * @param userDeviceService         service holding the business logic
      * @param authenticatedUserProvider identifies the user the request is authenticated as
+     * @param deviceInventoryService    stores and reads what each installation holds
      */
     public UserDeviceController(
             final UserDeviceService userDeviceService,
-            final AuthenticatedUserProvider authenticatedUserProvider) {
+            final AuthenticatedUserProvider authenticatedUserProvider,
+            final DeviceInventoryService deviceInventoryService) {
 
         this.userDeviceService = userDeviceService;
         this.authenticatedUserProvider = authenticatedUserProvider;
+        this.deviceInventoryService = deviceInventoryService;
     }
 
     /**
@@ -64,7 +72,9 @@ public class UserDeviceController {
     @Operation(summary = "List where the account has been signed in from",
             description = "A history, not a list of live sessions: a device stays listed after "
                     + "its session ends. `signedIn` says which ones still hold a usable session, "
-                    + "and `lastUsedAt` when each was last seen.")
+                    + "and `lastUsedAt` when each was last seen. `syncSummary` says how much of "
+                    + "what an installation holds synchronises, from its last inventory report "
+                    + "(`inventoryReportedAt`); UNKNOWN when it never reported.")
     @ApiResponse(responseCode = "200", description = "The devices, most recently used first")
     @ApiResponse(responseCode = "401", description = "No valid access token was presented",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
@@ -119,11 +129,6 @@ public class UserDeviceController {
     @ApiResponse(responseCode = "401", description = "No valid access token was presented",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No such device belongs to this account",
-            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "The take-over would give a free account one "
-            + "more synchronised installation than its plan allows - only possible when this "
-            + "installation has no device of its own and the target carries none. Code "
-            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> takeOverDevice(
             @PathVariable final UUID deviceId,
@@ -184,5 +189,68 @@ public class UserDeviceController {
         }
 
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Stores what the installation making the request holds, replacing its last report.
+     *
+     * @param installationId the installation reporting, from its header
+     * @param report         its profiles and workspaces - names, sync states and counts
+     * @return 204 once stored
+     * @since 0.0.18
+     */
+    @PutMapping("/current/inventory")
+    @Operation(summary = "Report what this installation holds",
+            description = "Sent by the extension after a sync cycle in which its inventory "
+                    + "changed. Per profile its account id (null when local only), name and sync "
+                    + "state; per workspace the same plus its numbers of groups, subgroups and "
+                    + "links. Names and counts only - never a link, an address or a group name. "
+                    + "The installation is the one named by `X-Installation-Id` within the "
+                    + "token's account. Stored as sent with the time it arrived, replaced by the "
+                    + "next report, deleted with the device and the account. Bounded: at most "
+                    + "200 profiles, 200 workspaces per profile and 5000 in total, names up to "
+                    + "120 characters.")
+    @ApiResponse(responseCode = "204", description = "The report was stored")
+    @ApiResponse(responseCode = "400", description = "The report is malformed or too large",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "401", description = "No valid access token was presented",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "404", description = "The request named no installation, or this "
+            + "account has no device for it",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    public ResponseEntity<Void> reportCurrentInstallationInventory(
+            @RequestHeader(value = ClientRequestHeaders.INSTALLATION_ID, required = false)
+                    final String installationId,
+            @Valid @RequestBody final DeviceInventoryReportRequestDto report) {
+
+        deviceInventoryService.replaceInventoryOfInstallation(
+                authenticatedUserProvider.getAuthenticatedUserId(),
+                ClientDescriptionDto.from(null, null, installationId).installationId(),
+                report);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Returns what one device last reported holding.
+     *
+     * @param deviceId identifier of the device
+     * @return the report and when it arrived
+     * @since 0.0.18
+     */
+    @GetMapping("/{deviceId}/inventory")
+    @Operation(summary = "Return what one installation last reported holding",
+            description = "For the website's device detail page: every profile with its sync "
+                    + "state and workspaces, each workspace with its sync state and numbers of "
+                    + "groups, subgroups and links - exactly as the installation reported them.")
+    @ApiResponse(responseCode = "200", description = "The last report")
+    @ApiResponse(responseCode = "401", description = "No valid access token was presented",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "404", description = "No such device belongs to this account, or "
+            + "it has never reported",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    public DeviceInventoryDto getDeviceInventory(@PathVariable final UUID deviceId) {
+        return deviceInventoryService.findInventoryOfDevice(
+                authenticatedUserProvider.getAuthenticatedUserId(), deviceId);
     }
 }

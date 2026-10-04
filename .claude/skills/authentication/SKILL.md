@@ -88,12 +88,16 @@ Two behaviours worth not breaking, both covered by the live checks:
   mid-session would otherwise silently create a second device on every refresh.
 - **Signing a device out keeps the row** and only revokes its tokens.
 
-**The free plan limits synchronised installations** (5 by default, `FreePlanLimitGuard`): an
-account that is not premium cannot add a device row carrying an installation identifier beyond
-it. `recordDeviceUse` asks before a new installation's row and before one claims a name-only
-row; `takeOverDevice` asks only when the taker has no row and the target has no installation.
-A known installation always signs in again, and the website (no `X-Installation-Id`) is never
-counted. The refusal rolls the sign-in back - no tokens, and a connect code stays unspent.
+**The plan limits signed-in installations** (5 free / 100 premium,
+`SignedInInstallationLimitService`): counted are devices with an installation identifier *and* a
+live refresh token - never rows. A known installation already in session always signs in again;
+a new installation, or one claiming a name-only row (whose live session is the website's), is
+counted. The refusal (409 DEVICES with `manageUrl`) rolls the sign-in back - no tokens, a connect
+code stays unspent. When the limit drops below the number in session (premium ended), the
+installations beyond it in device `createdAt` order are signed out **at their next refresh**:
+tokens revoked, refresh answers 409 DEVICES; `refresh` is `noRollbackFor` that exception so the
+revocation commits. A take-over asks no limit (it cannot add a session) and moves the taker's
+inventory report onto the target. The website (no `X-Installation-Id`) is never counted.
 A name lookup searches **unattributed rows only**: installations may share names, and including
 their rows made the third same-named installation fail with a non-unique result.
 

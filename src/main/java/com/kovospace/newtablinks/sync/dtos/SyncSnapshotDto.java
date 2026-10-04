@@ -6,6 +6,7 @@ import com.kovospace.newtablinks.group.dtos.GroupDto;
 import com.kovospace.newtablinks.link.dtos.LinkDto;
 import com.kovospace.newtablinks.profile.dtos.ProfileDto;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupDto;
+import com.kovospace.newtablinks.user.dtos.PlanLimitsDto;
 import com.kovospace.newtablinks.user.dtos.UserDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
@@ -30,6 +31,7 @@ import java.util.List;
  * @param links        every link of those groups and subgroups, in display order
  * @param closedTabs   every closed tab of those profiles, most recently closed first
  * @param capturedAt   moment the snapshot was assembled
+ * @param planLimits   the plan limits that hold for the owner right now
  * @since 0.0.1
  */
 @Schema(description = "Everything one user owns, as flat collections keyed by identifier")
@@ -57,5 +59,9 @@ public record SyncSnapshotDto(
         List<ClosedTabDto> closedTabs,
 
         @Schema(description = "Moment the snapshot was assembled", example = "2026-08-24T10:15:30Z")
-        Instant capturedAt) {
+        Instant capturedAt,
+
+        @Schema(description = "The plan limits that hold for the owner right now - the same "
+                + "object GET /api/v1/users/me/plan-limits returns")
+        PlanLimitsDto planLimits) {
 }

@@ -1,8 +1,8 @@
 package com.kovospace.newtablinks.link.services;
 
-import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
-import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
+import com.kovospace.newtablinks.common.services.PlanLimitGuard;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import com.kovospace.newtablinks.group.services.GroupService;
@@ -38,7 +38,7 @@ public class LinkService {
     private final GroupService groupService;
     private final SubgroupService subgroupService;
     private final UserDataChangePublisher userDataChangePublisher;
-    private final FairUseLimitGuard fairUseLimitGuard;
+    private final PlanLimitGuard planLimitGuard;
 
     /**
      * Creates the service.
@@ -48,7 +48,7 @@ public class LinkService {
      * @param groupService    resolves the owning group
      * @param subgroupService resolves the optional owning subgroup
      * @param userDataChangePublisher announces changes to the user's other browsers
-     * @param fairUseLimitGuard       refuses a link beyond the Fair Use Policy cap of its workspace
+     * @param planLimitGuard       refuses a link beyond the Fair Use Policy cap of its workspace
      */
     public LinkService(
             final LinkRepository linkRepository,
@@ -56,14 +56,14 @@ public class LinkService {
             final GroupService groupService,
             final SubgroupService subgroupService,
             final UserDataChangePublisher userDataChangePublisher,
-            final FairUseLimitGuard fairUseLimitGuard) {
+            final PlanLimitGuard planLimitGuard) {
 
         this.linkRepository = linkRepository;
         this.linkMapper = linkMapper;
         this.groupService = groupService;
         this.subgroupService = subgroupService;
         this.userDataChangePublisher = userDataChangePublisher;
-        this.fairUseLimitGuard = fairUseLimitGuard;
+        this.planLimitGuard = planLimitGuard;
     }
 
     /**
@@ -117,15 +117,14 @@ public class LinkService {
      * @return the created link, including its assigned identifier and position
      * @throws ResourceNotFoundException    when the group or subgroup does not exist or is not
      *                                      theirs
-     * @throws FairUseLimitReachedException when the group's workspace already holds as many links
-     *                                      as the Fair Use Policy allows
+     * @throws PlanLimitReachedException   when the group's workspace holds no synchronisation
+     *                                      slot, or already holds as many links as the plan allows
      */
     @Transactional
     public LinkDto createLink(final LinkSaveRequestDto saveRequest, final UUID ownerId) {
         final GroupEntity parentGroup =
                 groupService.getRequiredGroupEntity(saveRequest.parentGroupId(), ownerId);
-        fairUseLimitGuard.requireRoomForAnotherLinkInWorkspace(
-                ownerId, parentGroup.getEnvironment().getId());
+        planLimitGuard.requireRoomForAnotherLink(parentGroup.getEnvironment().toWorkspaceLocation());
         final SubgroupEntity parentSubgroup =
                 resolveOptionalSubgroup(saveRequest.parentSubgroupId(), ownerId);
 
@@ -152,6 +151,7 @@ public class LinkService {
      * @param ownerId     identifier of the user that must own it
      * @return the updated link
      * @throws ResourceNotFoundException when the link or subgroup does not exist or is not theirs
+     * @throws PlanLimitReachedException when the workspace holds no synchronisation slot
      */
     @Transactional
     public LinkDto updateLink(
@@ -160,6 +160,8 @@ public class LinkService {
             final UUID ownerId) {
 
         final LinkEntity existingLink = getRequiredLinkEntity(linkId, ownerId);
+        planLimitGuard.requireWorkspaceHoldsSlot(
+                existingLink.getParentGroup().getEnvironment().toWorkspaceLocation());
 
         existingLink.setTitle(saveRequest.title());
         existingLink.setUrl(saveRequest.url());
@@ -178,10 +180,14 @@ public class LinkService {
      * @param linkId  identifier of the link to delete
      * @param ownerId identifier of the user that must own it
      * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     * @throws PlanLimitReachedException when the workspace holds no synchronisation slot
      */
     @Transactional
     public void deleteLink(final UUID linkId, final UUID ownerId) {
-        linkRepository.delete(getRequiredLinkEntity(linkId, ownerId));
+        final LinkEntity link = getRequiredLinkEntity(linkId, ownerId);
+        planLimitGuard.requireWorkspaceHoldsSlot(
+                link.getParentGroup().getEnvironment().toWorkspaceLocation());
+        linkRepository.delete(link);
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 

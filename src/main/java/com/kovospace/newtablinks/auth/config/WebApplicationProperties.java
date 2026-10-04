@@ -22,6 +22,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param frontendApiKey       value the website sends in
  *                             {@link com.kovospace.newtablinks.common.config.ClientRequestHeaders#FRONTEND_API_KEY};
  *                             blank or absent disables every endpoint that requires it
+ * @param devicesPath          path of the website's devices page, where a user sees what each
+ *                             installation synchronises and signs installations out; sent as
+ *                             {@code manageUrl} with every plan-limit refusal
  * @since 0.0.2
  */
 @ConfigurationProperties(prefix = "newtablinks.web")
@@ -30,7 +33,8 @@ public record WebApplicationProperties(
         String activationPath,
         String oauthCallbackPath,
         String passwordResetPath,
-        String frontendApiKey) {
+        String frontendApiKey,
+        String devicesPath) {
 
     /**
      * Builds the absolute activation link mailed to a newly registered user.
@@ -43,6 +47,16 @@ public record WebApplicationProperties(
                 baseUrl,
                 activationPath,
                 java.net.URLEncoder.encode(activationToken, java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Builds the absolute address of the website's devices page.
+     *
+     * @return the absolute link, without parameters
+     * @since 0.0.18
+     */
+    public String buildDevicesPageLink() {
+        return baseUrl + devicesPath;
     }
 
     /**

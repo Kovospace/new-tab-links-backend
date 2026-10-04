@@ -1,7 +1,7 @@
 package com.kovospace.newtablinks.link.repositories;
 
+import com.kovospace.newtablinks.common.models.ContainerItemCount;
 import com.kovospace.newtablinks.link.models.LinkEntity;
-import com.kovospace.newtablinks.link.models.WorkspaceLinkCount;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -133,9 +133,9 @@ public interface LinkRepository extends JpaRepository<LinkEntity, UUID> {
      * @return one entry per environment with links; an environment without any is absent
      * @since 0.0.16
      */
-    @Query("select new com.kovospace.newtablinks.link.models.WorkspaceLinkCount("
+    @Query("select new com.kovospace.newtablinks.common.models.ContainerItemCount("
             + "link.parentGroup.environment.id, count(link)) from LinkEntity link "
             + "where link.parentGroup.environment.owner.id = :ownerId "
             + "group by link.parentGroup.environment.id")
-    List<WorkspaceLinkCount> countLinksPerEnvironmentOfOwner(@Param("ownerId") UUID ownerId);
+    List<ContainerItemCount> countLinksPerEnvironmentOfOwner(@Param("ownerId") UUID ownerId);
 }

@@ -3,8 +3,6 @@ package com.kovospace.newtablinks.closedtab.services;
 import com.kovospace.newtablinks.closedtab.dtos.ClosedTabSynchronizedValuesDto;
 import com.kovospace.newtablinks.closedtab.models.ClosedTabEntity;
 import com.kovospace.newtablinks.closedtab.repositories.ClosedTabRepository;
-import com.kovospace.newtablinks.common.config.FairUseLimitProperties;
-import com.kovospace.newtablinks.common.models.FairUseLimit;
 import com.kovospace.newtablinks.common.utils.ClientAssignedIdentifierPolicy;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
@@ -35,23 +33,19 @@ public class ClosedTabSynchronizationService {
 
     private final ClosedTabRepository closedTabRepository;
     private final UserDataChangePublisher userDataChangePublisher;
-    private final FairUseLimitProperties fairUseLimitProperties;
 
     /**
      * Creates the service.
      *
      * @param closedTabRepository     persistence access for closed tabs
      * @param userDataChangePublisher announces changes to the user's other browsers
-     * @param fairUseLimitProperties  how much closed-tab history an account keeps
      */
     public ClosedTabSynchronizationService(
             final ClosedTabRepository closedTabRepository,
-            final UserDataChangePublisher userDataChangePublisher,
-            final FairUseLimitProperties fairUseLimitProperties) {
+            final UserDataChangePublisher userDataChangePublisher) {
 
         this.closedTabRepository = closedTabRepository;
         this.userDataChangePublisher = userDataChangePublisher;
-        this.fairUseLimitProperties = fairUseLimitProperties;
     }
 
     /**
@@ -115,30 +109,41 @@ public class ClosedTabSynchronizationService {
     }
 
     /**
-     * Deletes an account's oldest closed tabs beyond the Fair Use Policy's history cap.
+     * Deletes an account's oldest closed tabs beyond what its plan keeps, but never more than a
+     * push added.
      *
-     * <p>Closed-tab history is the one capped collection that is never refused: the policy says
-     * the oldest entries make room for newer ones. A push may legitimately take an account past
-     * the cap - the first sync of a second browser merges two histories - so the sync push calls
-     * this after its operations, and what remains is the newest
-     * {@code newtablinks.fair-use.closed-tab-history} entries across all profiles, by
-     * {@code closedAt}.</p>
+     * <p>Closed-tab history is the one limit that never refuses: the oldest entries make room for
+     * newer ones. A push may legitimately take an account past it - the first sync of a second
+     * browser merges two histories - so the sync push calls this after its operations, and what
+     * remains is the newest entries across all profiles, by {@code closedAt}.</p>
      *
-     * @param ownerId identifier of the account
-     * @return how many entries were deleted; zero when the account was within the cap
+     * <p>How many remain is the plan's limit, or the size the history had before the push when
+     * that was larger. That is what makes a downgrade gentle: an account that kept 500 entries
+     * as premium does not lose 475 of them on its first push as a free account; its history rolls
+     * at the size it has, and shrinks as the extension prunes it to the free limit.</p>
+     *
+     * @param ownerId                identifier of the account
+     * @param historyLimit           how many entries the account's plan keeps
+     * @param historySizeBeforePush  how many it held before the push began
+     * @return how many entries were deleted; zero when the account was within what it keeps
      * @since 0.0.16
      */
     @Transactional
-    public int trimHistoryToFairUseCap(final UUID ownerId) {
-        final int maximum = fairUseLimitProperties.maximumFor(FairUseLimit.CLOSED_TAB_HISTORY);
+    public int trimHistoryToPlanLimit(
+            final UUID ownerId,
+            final int historyLimit,
+            final long historySizeBeforePush) {
+
+        final long entriesToKeep = Math.max(historyLimit, historySizeBeforePush);
         final List<UUID> newestFirst = closedTabRepository.findIdsByOwnerIdNewestFirst(ownerId);
-        if (newestFirst.size() <= maximum) {
+        if (newestFirst.size() <= entriesToKeep) {
             return 0;
         }
-        final List<UUID> oldestBeyondTheCap = newestFirst.subList(maximum, newestFirst.size());
-        closedTabRepository.deleteAllById(oldestBeyondTheCap);
+        final List<UUID> oldestBeyondTheLimit =
+                newestFirst.subList((int) entriesToKeep, newestFirst.size());
+        closedTabRepository.deleteAllById(oldestBeyondTheLimit);
         userDataChangePublisher.publishChangeFor(ownerId);
-        return oldestBeyondTheCap.size();
+        return oldestBeyondTheLimit.size();
     }
 
     /**

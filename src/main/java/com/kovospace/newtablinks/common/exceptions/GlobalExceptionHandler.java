@@ -7,10 +7,10 @@ import java.util.Comparator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.context.MessageSourceResolvable;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.method.MethodValidationException;
 import org.springframework.validation.method.MethodValidationResult;
@@ -387,18 +387,17 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Renders a write refused by a Fair Use Policy cap as HTTP 409, carrying the code
-     * {@code FAIR_USE_LIMIT_REACHED}, the cap and its maximum so that a client can explain the
-     * refusal without parsing the message.
+     * Renders a request refused by a plan limit as HTTP 409, carrying {@code code}
+     * ({@code FREE_PLAN_LIMIT_REACHED} or {@code FAIR_USE_LIMIT_REACHED}), {@code limit},
+     * {@code maximum} and {@code manageUrl} at the top level of the body.
      *
      * @param exception the exception that was thrown
-     * @return a 409 response carrying the uniform error body with {@code code}, {@code limit}
-     *         and {@code maximum} filled in
-     * @since 0.0.16
+     * @return a 409 response carrying the uniform error body with the plan-limit fields filled in
+     * @since 0.0.18
      */
-    @ExceptionHandler(FairUseLimitReachedException.class)
-    public ResponseEntity<ApiErrorResponseDto> handleFairUseLimitReached(
-            final FairUseLimitReachedException exception) {
+    @ExceptionHandler(PlanLimitReachedException.class)
+    public ResponseEntity<ApiErrorResponseDto> handlePlanLimitReached(
+            final PlanLimitReachedException exception) {
 
         final HttpStatus status = HttpStatus.CONFLICT;
         return ResponseEntity.status(status).body(new ApiErrorResponseDto(
@@ -407,35 +406,10 @@ public class GlobalExceptionHandler {
                 status.getReasonPhrase(),
                 exception.getMessage(),
                 List.of(),
-                FairUseLimitReachedException.ERROR_CODE,
+                exception.getCode().name(),
                 exception.getLimit().name(),
-                exception.getMaximum()));
-    }
-
-    /**
-     * Renders a write refused by a free plan limit as HTTP 409, carrying the code
-     * {@code FREE_PLAN_LIMIT_REACHED}, the limit and its maximum - the same shape as a Fair Use
-     * refusal, told apart by {@code code}.
-     *
-     * @param exception the exception that was thrown
-     * @return a 409 response carrying the uniform error body with {@code code}, {@code limit}
-     *         and {@code maximum} filled in
-     * @since 0.0.17
-     */
-    @ExceptionHandler(FreePlanLimitReachedException.class)
-    public ResponseEntity<ApiErrorResponseDto> handleFreePlanLimitReached(
-            final FreePlanLimitReachedException exception) {
-
-        final HttpStatus status = HttpStatus.CONFLICT;
-        return ResponseEntity.status(status).body(new ApiErrorResponseDto(
-                Instant.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                exception.getMessage(),
-                List.of(),
-                FreePlanLimitReachedException.ERROR_CODE,
-                exception.getLimit().name(),
-                exception.getMaximum()));
+                exception.getMaximum(),
+                exception.getManageUrl()));
     }
 
     /**

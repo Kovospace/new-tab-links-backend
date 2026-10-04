@@ -8,8 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.kovospace.newtablinks.auth.services.AccessTokenIssuer;
 import com.kovospace.newtablinks.common.MigratedPostgresDatabase;
-import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
-import com.kovospace.newtablinks.common.models.FairUseLimit;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
+import com.kovospace.newtablinks.common.models.PlanLimit;
+import com.kovospace.newtablinks.common.models.PlanLimitRefusalCode;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentDto;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentSaveRequestDto;
 import com.kovospace.newtablinks.environment.services.EnvironmentService;
@@ -22,6 +23,9 @@ import com.kovospace.newtablinks.link.services.LinkService;
 import com.kovospace.newtablinks.profile.dtos.ProfileDto;
 import com.kovospace.newtablinks.profile.dtos.ProfileSaveRequestDto;
 import com.kovospace.newtablinks.profile.services.ProfileService;
+import com.kovospace.newtablinks.subgroup.dtos.SubgroupDto;
+import com.kovospace.newtablinks.subgroup.dtos.SubgroupSaveRequestDto;
+import com.kovospace.newtablinks.subgroup.services.SubgroupService;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
@@ -52,7 +56,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * editable, and that two parallel writes at one below a cap cannot both get through.
  *
  * <p>The caps are set small so they are reachable; the sync push has its own test,
- * {@code SyncPushFairUseAgainstMigratedSchemaTest}.</p>
+ * {@code SyncPushFairUseAgainstMigratedSchemaTest}, and the free plan's lower limits and the
+ * slots {@code PlanLimitsAgainstMigratedSchemaTest}.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -62,7 +67,8 @@ class FairUseLimitsAgainstMigratedSchemaTest {
     private static final int WORKSPACE_CAP = 2;
     private static final int LINKS_PER_WORKSPACE_CAP = 3;
 
-    private static final int UNREACHABLE_FREE_LIMIT = 1_000;
+    private static final int GROUPS_PER_WORKSPACE_CAP = 2;
+    private static final int SUBGROUPS_PER_GROUP_CAP = 2;
 
     private static MigratedPostgresDatabase database;
 
@@ -91,7 +97,10 @@ class FairUseLimitsAgainstMigratedSchemaTest {
     private LinkService linkService;
 
     @Autowired
-    private FairUseLimitGuard fairUseLimitGuard;
+    private SubgroupService subgroupService;
+
+    @Autowired
+    private PlanLimitGuard planLimitGuard;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -120,13 +129,20 @@ class FairUseLimitsAgainstMigratedSchemaTest {
     @DynamicPropertySource
     static void useTheMigratedDatabaseAndSmallCaps(final DynamicPropertyRegistry registry) {
         database.registerDataSource(registry);
-        registry.add("newtablinks.fair-use.profiles", () -> PROFILE_CAP);
-        registry.add("newtablinks.fair-use.workspaces", () -> WORKSPACE_CAP);
-        registry.add("newtablinks.fair-use.links-per-workspace", () -> LINKS_PER_WORKSPACE_CAP);
-        // These accounts are free; the free plan's lower limits are FreePlanLimitsAgainst-
-        // MigratedSchemaTest's subject, and would otherwise refuse before any fair use cap.
-        registry.add("newtablinks.plan-limits.free.profiles", () -> UNREACHABLE_FREE_LIMIT);
-        registry.add("newtablinks.plan-limits.free.workspaces", () -> UNREACHABLE_FREE_LIMIT);
+        registry.add("newtablinks.plan-limits.premium.profiles", () -> PROFILE_CAP);
+        registry.add("newtablinks.plan-limits.premium.workspaces-per-profile", () -> WORKSPACE_CAP);
+        registry.add("newtablinks.plan-limits.premium.groups-per-workspace",
+                () -> GROUPS_PER_WORKSPACE_CAP);
+        registry.add("newtablinks.plan-limits.premium.subgroups-per-group",
+                () -> SUBGROUPS_PER_GROUP_CAP);
+        registry.add("newtablinks.plan-limits.premium.links-per-workspace",
+                () -> LINKS_PER_WORKSPACE_CAP);
+        // These accounts are free; with the free plan's own limits equal to the premium ones,
+        // every refusal here is the Fair Use Policy's. The free plan's lower limits are
+        // PlanLimitsAgainstMigratedSchemaTest's subject.
+        registry.add("newtablinks.plan-limits.free.profiles", () -> PROFILE_CAP);
+        registry.add("newtablinks.plan-limits.free.workspaces-per-profile", () -> WORKSPACE_CAP);
+        registry.add("newtablinks.web.base-url", () -> "https://tabilinks.example");
     }
 
     @Test
@@ -147,13 +163,14 @@ class FairUseLimitsAgainstMigratedSchemaTest {
                 .andExpect(jsonPath("$.code").value("FAIR_USE_LIMIT_REACHED"))
                 .andExpect(jsonPath("$.limit").value("PROFILES"))
                 .andExpect(jsonPath("$.maximum").value(PROFILE_CAP))
+                .andExpect(jsonPath("$.manageUrl").value("https://tabilinks.example/devices"))
                 .andExpect(jsonPath("$.validationErrors").isEmpty());
 
         assertThat(countProfiles(owner.getId())).isEqualTo(PROFILE_CAP);
     }
 
     @Test
-    @DisplayName("an ordinary error body carries no code, limit or maximum at all")
+    @DisplayName("an ordinary error body carries no code, limit, maximum or manageUrl at all")
     void shouldLeaveTheNewFieldsOutOfEveryOtherErrorBody() throws Exception {
         final UserEntity owner = newAccount();
 
@@ -165,22 +182,49 @@ class FairUseLimitsAgainstMigratedSchemaTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.limit").doesNotExist())
-                .andExpect(jsonPath("$.maximum").doesNotExist());
+                .andExpect(jsonPath("$.maximum").doesNotExist())
+                .andExpect(jsonPath("$.manageUrl").doesNotExist());
     }
 
     @Test
-    @DisplayName("a workspace beyond the cap is refused, counted across every profile")
-    void shouldRefuseAWorkspaceBeyondTheCapAcrossProfiles() {
+    @DisplayName("a workspace beyond the cap is refused, counted per profile: another profile "
+            + "still takes one")
+    void shouldRefuseAWorkspaceBeyondTheCapOfItsProfileOnly() {
         final UUID ownerId = newAccount().getId();
         final List<ProfileDto> profiles = createProfiles(ownerId, 2);
         createWorkspace(profiles.get(0).id(), ownerId);
-        createWorkspace(profiles.get(1).id(), ownerId);
+        createWorkspace(profiles.get(0).id(), ownerId);
 
-        assertThatThrownBy(() -> createWorkspace(profiles.get(1).id(), ownerId))
-                .isInstanceOfSatisfying(FairUseLimitReachedException.class, refusal -> {
-                    assertThat(refusal.getLimit()).isEqualTo(FairUseLimit.WORKSPACES);
+        assertThatThrownBy(() -> createWorkspace(profiles.get(0).id(), ownerId))
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal -> {
+                    assertThat(refusal.getCode())
+                            .isEqualTo(PlanLimitRefusalCode.FAIR_USE_LIMIT_REACHED);
+                    assertThat(refusal.getLimit()).isEqualTo(PlanLimit.WORKSPACES_PER_PROFILE);
                     assertThat(refusal.getMaximum()).isEqualTo(WORKSPACE_CAP);
                 });
+        assertThat(createWorkspace(profiles.get(1).id(), ownerId)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a group beyond the cap of its workspace, and a subgroup beyond the cap of its "
+            + "group, are refused; the next container still takes one")
+    void shouldRefuseGroupsAndSubgroupsBeyondTheCapOfTheirContainer() {
+        final UUID ownerId = newAccount().getId();
+        final UUID profileId = createProfiles(ownerId, 1).getFirst().id();
+        final UUID workspaceId = createWorkspace(profileId, ownerId).id();
+        final GroupDto firstGroup = createGroup(workspaceId, ownerId);
+        final GroupDto secondGroup = createGroup(workspaceId, ownerId);
+
+        assertThatThrownBy(() -> createGroup(workspaceId, ownerId))
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal ->
+                        assertThat(refusal.getLimit()).isEqualTo(PlanLimit.GROUPS_PER_WORKSPACE));
+
+        createSubgroup(firstGroup.id(), ownerId);
+        createSubgroup(firstGroup.id(), ownerId);
+        assertThatThrownBy(() -> createSubgroup(firstGroup.id(), ownerId))
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal ->
+                        assertThat(refusal.getLimit()).isEqualTo(PlanLimit.SUBGROUPS_PER_GROUP));
+        assertThat(createSubgroup(secondGroup.id(), ownerId)).isNotNull();
     }
 
     @Test
@@ -197,8 +241,8 @@ class FairUseLimitsAgainstMigratedSchemaTest {
         createLink(secondGroup.id(), ownerId);
 
         assertThatThrownBy(() -> createLink(secondGroup.id(), ownerId))
-                .isInstanceOfSatisfying(FairUseLimitReachedException.class, refusal ->
-                        assertThat(refusal.getLimit()).isEqualTo(FairUseLimit.LINKS_PER_WORKSPACE));
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal ->
+                        assertThat(refusal.getLimit()).isEqualTo(PlanLimit.LINKS_PER_WORKSPACE));
 
         final GroupDto groupElsewhere =
                 createGroup(createWorkspace(profileId, ownerId).id(), ownerId);
@@ -227,7 +271,7 @@ class FairUseLimitsAgainstMigratedSchemaTest {
         assertThat(countLinksInGroup(groupId)).isEqualTo(4);
 
         assertThatThrownBy(() -> createLink(groupId, ownerId))
-                .isInstanceOf(FairUseLimitReachedException.class);
+                .isInstanceOf(PlanLimitReachedException.class);
         assertThat(countLinksInGroup(groupId)).isEqualTo(4);
     }
 
@@ -243,7 +287,7 @@ class FairUseLimitsAgainstMigratedSchemaTest {
 
         final CompletableFuture<Void> first = CompletableFuture.runAsync(() ->
                 transactionTemplate.executeWithoutResult(status -> {
-                    fairUseLimitGuard.requireRoomForAnotherProfile(ownerId);
+                    planLimitGuard.requireRoomForAnotherProfile(ownerId);
                     insertProfileBehindTheGuardsBack(ownerId);
                     firstHoldsTheLock.countDown();
                     awaitQuietly(releaseTheFirst);
@@ -263,7 +307,7 @@ class FairUseLimitsAgainstMigratedSchemaTest {
 
         assertThat(second).failsWithin(Duration.ofSeconds(10))
                 .withThrowableOfType(java.util.concurrent.ExecutionException.class)
-                .withCauseInstanceOf(FairUseLimitReachedException.class);
+                .withCauseInstanceOf(PlanLimitReachedException.class);
         assertThat(countProfiles(ownerId)).isEqualTo(PROFILE_CAP);
     }
 
@@ -314,6 +358,18 @@ class FairUseLimitsAgainstMigratedSchemaTest {
     private EnvironmentDto createWorkspace(final UUID profileId, final UUID ownerId) {
         return environmentService.createEnvironment(
                 new EnvironmentSaveRequestDto(profileId, "Workspace", null), ownerId);
+    }
+
+    /**
+     * Creates a subgroup.
+     *
+     * @param groupId the group it belongs to
+     * @param ownerId identifier of the account
+     * @return the created subgroup
+     */
+    private SubgroupDto createSubgroup(final UUID groupId, final UUID ownerId) {
+        return subgroupService.createSubgroup(new SubgroupSaveRequestDto(
+                groupId, "Subgroup", null, false, false, false, null), ownerId);
     }
 
     /**

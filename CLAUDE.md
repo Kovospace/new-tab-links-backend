@@ -174,23 +174,37 @@ Which file holds which concern, and which endpoint lives in which controller:
   operation without one is refused rather than stamped. The client prunes to 50 per profile; the
   server additionally keeps only the newest 500 per account (Fair Use Policy) and deletes the
   oldest beyond that at the end of every sync push - never refusing one.
-- **Fair Use Policy caps refuse growth only** (`FairUseLimitGuard`): 50 profiles, 50 workspaces
-  (environments) per account, 500 links per workspace, on every plan. Interactive creates are
-  checked one by one; the sync push is judged on its end state (counts before the first
-  operation vs after the last), because the extension sends upserts before deletions - a push
-  fails whole with 409 only when it leaves a collection above its cap *and* larger than it
-  started. Every check locks the `app_user` row for the transaction. Data over a cap is never
-  deleted by the guard, and edits and deletions of it keep working.
-- **Free plan limits refuse growth the same way** (`FreePlanLimitGuard`): 2 workspaces,
-  1 profile and 5 synchronised installations for an account that is not premium *right now*
-  (`EntitlementStandingService.isAccountProNow`, never a stored flag); a premium account gets
-  the Fair Use caps instead. Profiles and workspaces are asked by `FairUseLimitGuard` before its
-  own caps (free wins, it is lower); 409 `FREE_PLAN_LIMIT_REACHED`, `limit`
-  `WORKSPACES`/`PROFILES`/`DEVICES`. A downgraded account keeps everything over a limit and can
-  edit, delete and sync it. A synchronised installation is a `user_device` row with an
-  `installation_id` - the website's sign-ins report none and are never counted; every way an
-  installation lands on a row (`UserDeviceService`: new installation, claim of a name-only row,
-  a take-over that adds one) is guarded, and a known installation always signs in again.
+- **Plan limits are slots, judged live** (`common/services/PlanLimitPolicy`, numbers only in
+  `newtablinks.plan-limits.{premium,free}.*`): premium = the Fair Use Policy (50 profiles,
+  50 workspaces *per profile*, 25 groups/workspace, 25 subgroups/group, 500 links/workspace,
+  500 closed tabs, 100 signed-in installations); free = 1 profile, 2 workspaces per profile,
+  25 closed tabs, 5 installations, premium numbers elsewhere. Premium is
+  `EntitlementStandingService.isAccountProNow`, never a stored flag. **Slots:** the account's
+  first N profiles and the first M workspaces of each slot-holding profile, ordered by
+  `createdAt` then `id` (`SynchronisationSlotReader`). Refused (409 `PlanLimitReachedException`,
+  `code` FREE_PLAN_LIMIT_REACHED when the free number is the lower one, else
+  FAIR_USE_LIMIT_REACHED, plus `limit`, `maximum`, `manageUrl` = web base URL + devices path):
+  creating beyond the slots; **any write into a profile/workspace holding no slot** and into its
+  groups/subgroups/links; growing a group/subgroup/link container past its cap. Deleting a
+  slot-less profile, or a slot-less workspace of a slot-holding profile, is allowed - data is
+  never deleted by a limit. REST: `PlanLimitGuard` per call. Sync push: `SyncPushLimitGuard` on
+  the end state (baseline before the first operation, `PushFootprint` of what each applier
+  wrote into, check after the last), whole push or nothing. Both lock the `app_user` row.
+  Known gap: a record *moved out of* a slot-less container is recorded only under its new one.
+- **Closed tabs never refuse:** after every push the oldest beyond the plan's limit are deleted,
+  but never more than the push added (`max(limit, size before push)`), so a downgrade does not
+  cut 500 to 25 at once.
+- **Installations are counted while signed in, never as rows** (`SignedInInstallationLimitService`):
+  a device with `installation_id` and a live refresh token. A sign-in past the limit is refused
+  (a known installation already in session always passes; a new one, or one claiming a
+  website-recorded name-only row, is always counted). When the limit drops (premium ends), the
+  installations beyond it in device `createdAt` order are signed out **at their next token
+  refresh**: their tokens are revoked and the refresh answers 409 DEVICES (`refresh` does not
+  roll back for `PlanLimitReachedException`). The website never counts.
+- **Inventory report:** each installation reports its profiles/workspaces (names, sync states,
+  counts) via `PUT /api/v1/users/me/devices/current/inventory`; stored as JSON on
+  `user_device.inventory` (V16), summarised as `syncSummary` on the device list
+  (`DeviceSyncSummaryCalculator`, examples ignored), served by `GET .../{deviceId}/inventory`.
 - **The sync push accepts client-assigned identifiers**, the one place anything does. It is safe
   because every lookup is still ownership-scoped: an identifier already taken by another account
   is not an error but a remap, stored under a server-generated identifier and reported back.
@@ -299,7 +313,7 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   username as its subject; a user token carries neither. `AuthenticatedUserProvider` refuses a
   subject that is not a UUID, which is what stops an operator from acting *as* a user. Do not
   "fix" that by giving admin tokens a UUID subject.
-- **No general rate limiting.** The only device limit is the free plan's (5 synchronised
+- **No general rate limiting.** The only device limit is the plan's (signed-in extension
   installations, see Domain notes). Two other things exist and neither is rate limiting: the
   per-account failed-login counter (brute-force protection, unrelated to device counts — do not
   remove it), and the visitor token, which meters only registration and the username lookup.
@@ -336,11 +350,10 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   methods still leave `position` alone deliberately, and the sync push is what sets it. A
   reorder made on the website would still need one.
 - **Payments are Creem, behind one port, and in test mode only so far.** The webhook
-  (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; it is read only for display -
+  (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; it is read for display -
   `premium` on the account DTO (so also `owner.premium` in the sync snapshot) and
-  `GET /api/v1/payments/subscription`, and by `FreePlanLimitGuard`, which holds a non-premium
-  account to the free plan's 2 workspaces, 1 profile and 5 synchronised installations (the Fair
-  Use caps apply to every plan alike). Account deletion is not blocked by a
+  `GET /api/v1/payments/subscription` - and by `PlanLimitPolicy`, which picks the free or the
+  premium set of plan limits (see Domain notes). Account deletion is not blocked by a
   live subscription, and there is no cancel or refund endpoint - which is
   why that endpoint's `cancellable`/`refundable` are always false. The rules the webhook code must keep
   are in the Javadoc of `CreemWebhookController`, `PaymentWebhookClaimStore` and

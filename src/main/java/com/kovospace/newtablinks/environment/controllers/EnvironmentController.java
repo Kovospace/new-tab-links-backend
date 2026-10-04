@@ -93,10 +93,10 @@ public class EnvironmentController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The owning user does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "The account already has as many "
-            + "workspaces as it may: a free account as many as the free plan allows (code "
-            + "FREE_PLAN_LIMIT_REACHED), a premium one as many as the Fair Use Policy allows "
-            + "(code FAIR_USE_LIMIT_REACHED); limit WORKSPACES and the maximum either way",
+    @ApiResponse(responseCode = "409", description = "The profile holds no synchronisation slot (limit PROFILES), or every workspace slot of it is taken (limit WORKSPACES_PER_PROFILE). "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<EnvironmentDto> createEnvironment(
             @Valid @RequestBody final EnvironmentSaveRequestDto saveRequest) {
@@ -120,6 +120,11 @@ public class EnvironmentController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No environment has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public EnvironmentDto updateEnvironment(
             @PathVariable final UUID environmentId,
             @Valid @RequestBody final EnvironmentSaveRequestDto saveRequest) {
@@ -138,6 +143,11 @@ public class EnvironmentController {
     @Operation(summary = "Delete an environment")
     @ApiResponse(responseCode = "204", description = "The environment was deleted")
     @ApiResponse(responseCode = "404", description = "No environment has that identifier",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The workspace's profile holds no synchronisation slot (limit PROFILES). A workspace without a slot of its own may be deleted. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteEnvironment(@PathVariable final UUID environmentId) {
         environmentService.deleteEnvironment(

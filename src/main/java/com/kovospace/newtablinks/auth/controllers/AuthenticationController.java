@@ -248,10 +248,10 @@ public class AuthenticationController {
     @ApiResponse(responseCode = "200", description = "The issued token pair")
     @ApiResponse(responseCode = "401", description = "The credentials were refused",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "A free account already has as many "
-            + "synchronised installations as its plan allows, and this request came from an "
-            + "installation it does not know yet (X-Installation-Id); no tokens were issued. Code "
-            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
+    @ApiResponse(responseCode = "409", description = "Signing in would put more extension installations in session than the account's plan allows (limit DEVICES); sign one out on the devices page, or upgrade. No tokens were issued, and a code is not spent. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto login(
             @Valid @RequestBody final LoginRequestDto loginRequest,
@@ -275,6 +275,11 @@ public class AuthenticationController {
             description = "The presented token is revoked in the process, so each refresh token "
                     + "works exactly once.")
     @ApiResponse(responseCode = "200", description = "The issued token pair")
+    @ApiResponse(responseCode = "409", description = "This installation lay beyond the plan's limit of signed-in installations, in the order they first signed in - premium ended - and has been signed out: every token of it is revoked (limit DEVICES). Treat it like a refused sign-in. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "401", description = "The refresh token was refused",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto refresh(@Valid @RequestBody final RefreshRequestDto refreshRequest) {
@@ -312,10 +317,10 @@ public class AuthenticationController {
     @ApiResponse(responseCode = "200", description = "The issued token pair")
     @ApiResponse(responseCode = "400", description = "The code is unknown, spent, or expired",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "A free account already has as many "
-            + "synchronised installations as its plan allows, and this request came from an "
-            + "installation it does not know yet (X-Installation-Id); no tokens were issued. Code "
-            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
+    @ApiResponse(responseCode = "409", description = "Signing in would put more extension installations in session than the account's plan allows (limit DEVICES); sign one out on the devices page, or upgrade. No tokens were issued, and a code is not spent. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto exchangeSessionHandoffCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,
@@ -368,10 +373,10 @@ public class AuthenticationController {
     @ApiResponse(responseCode = "200", description = "The issued token pair")
     @ApiResponse(responseCode = "400", description = "The code is unknown, spent, or expired",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "A free account already has as many "
-            + "synchronised installations as its plan allows, and this request came from an "
-            + "installation it does not know yet (X-Installation-Id); no tokens were issued. Code "
-            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
+    @ApiResponse(responseCode = "409", description = "Signing in would put more extension installations in session than the account's plan allows (limit DEVICES); sign one out on the devices page, or upgrade. No tokens were issued, and a code is not spent. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto exchangeExtensionConnectCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,

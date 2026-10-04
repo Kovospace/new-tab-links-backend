@@ -56,11 +56,14 @@ public class ProfileSyncOperationApplier implements SyncOperationApplier {
                 PushedOperationValues.listOrEmpty(operation.dismissedTips()),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
-        return profileSynchronizationService.upsertProfileFromPushedOperation(
+        final UUID storedProfileId = profileSynchronizationService
+                .upsertProfileFromPushedOperation(
                         context.resolveStoredIdentifier(operation.id()),
                         context.getOwnerId(),
                         values)
                 .getId();
+        context.recordWriteIntoProfile(storedProfileId);
+        return storedProfileId;
     }
 
     /**

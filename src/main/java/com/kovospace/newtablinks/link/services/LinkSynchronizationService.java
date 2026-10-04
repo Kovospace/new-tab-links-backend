@@ -49,6 +49,19 @@ public class LinkSynchronizationService {
     }
 
     /**
+     * Looks a link up without throwing when it is absent or somebody else's.
+     *
+     * @param linkId  identifier of the link
+     * @param ownerId identifier of the user that must own it
+     * @return the managed entity, or an empty optional when it does not exist or is not theirs
+     * @since 0.0.18
+     */
+    @Transactional(readOnly = true)
+    public Optional<LinkEntity> findLinkEntityForOwner(final UUID linkId, final UUID ownerId) {
+        return linkRepository.findByIdAndOwnerId(linkId, ownerId);
+    }
+
+    /**
      * Stores a link the client pushed, updating the owner's existing row or inserting a new one.
      *
      * @param requestedLinkId identifier the client wants the link stored under

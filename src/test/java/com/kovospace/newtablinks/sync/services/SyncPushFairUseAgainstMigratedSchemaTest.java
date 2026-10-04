@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.kovospace.newtablinks.common.MigratedPostgresDatabase;
-import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
-import com.kovospace.newtablinks.common.models.FairUseLimit;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
+import com.kovospace.newtablinks.common.models.PlanLimit;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationDto;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationKind;
@@ -43,7 +43,6 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
     private static final int LINKS_PER_WORKSPACE_CAP = 3;
     private static final int CLOSED_TAB_CAP = 3;
 
-    private static final int UNREACHABLE_FREE_LIMIT = 1_000;
 
     private static MigratedPostgresDatabase database;
 
@@ -80,14 +79,15 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
     @DynamicPropertySource
     static void useTheMigratedDatabaseAndSmallCaps(final DynamicPropertyRegistry registry) {
         database.registerDataSource(registry);
-        registry.add("newtablinks.fair-use.profiles", () -> PROFILE_CAP);
-        registry.add("newtablinks.fair-use.workspaces", () -> WORKSPACE_CAP);
-        registry.add("newtablinks.fair-use.links-per-workspace", () -> LINKS_PER_WORKSPACE_CAP);
+        registry.add("newtablinks.plan-limits.premium.profiles", () -> PROFILE_CAP);
+        registry.add("newtablinks.plan-limits.premium.workspaces-per-profile", () -> WORKSPACE_CAP);
+        registry.add("newtablinks.plan-limits.premium.links-per-workspace",
+                () -> LINKS_PER_WORKSPACE_CAP);
         // These accounts are free; the free plan's lower limits are FreePlanLimitsAgainst-
         // MigratedSchemaTest's subject, and would otherwise refuse before any fair use cap.
-        registry.add("newtablinks.plan-limits.free.profiles", () -> UNREACHABLE_FREE_LIMIT);
-        registry.add("newtablinks.plan-limits.free.workspaces", () -> UNREACHABLE_FREE_LIMIT);
-        registry.add("newtablinks.fair-use.closed-tab-history", () -> CLOSED_TAB_CAP);
+        registry.add("newtablinks.plan-limits.free.profiles", () -> PROFILE_CAP);
+        registry.add("newtablinks.plan-limits.free.workspaces-per-profile", () -> WORKSPACE_CAP);
+        registry.add("newtablinks.plan-limits.free.closed-tabs", () -> CLOSED_TAB_CAP);
     }
 
     @Test
@@ -100,8 +100,8 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
         assertThatThrownBy(() -> push(account,
                 upsertLink(UUID.randomUUID(), account.groupId(), "New"),
                 upsertLink(links.getFirst(), account.groupId(), "Edited")))
-                .isInstanceOfSatisfying(FairUseLimitReachedException.class, refusal -> {
-                    assertThat(refusal.getLimit()).isEqualTo(FairUseLimit.LINKS_PER_WORKSPACE);
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal -> {
+                    assertThat(refusal.getLimit()).isEqualTo(PlanLimit.LINKS_PER_WORKSPACE);
                     assertThat(refusal.getMaximum()).isEqualTo(LINKS_PER_WORKSPACE_CAP);
                 });
 
@@ -146,7 +146,7 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
                 upsertLink(UUID.randomUUID(), account.groupId(), "Growth"),
                 upsertLink(UUID.randomUUID(), account.groupId(), "Growth"),
                 delete(SyncEntityKind.LINK, links.get(0))))
-                .isInstanceOf(FairUseLimitReachedException.class);
+                .isInstanceOf(PlanLimitReachedException.class);
         assertThat(countLinksInGroup(account.groupId())).isEqualTo(4);
     }
 
@@ -162,8 +162,8 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
         push(account, upsertLink(wanderer, groupInOtherWorkspace, "Wanderer"));
 
         assertThatThrownBy(() -> push(account, upsertLink(wanderer, account.groupId(), "Wanderer")))
-                .isInstanceOfSatisfying(FairUseLimitReachedException.class, refusal ->
-                        assertThat(refusal.getLimit()).isEqualTo(FairUseLimit.LINKS_PER_WORKSPACE));
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal ->
+                        assertThat(refusal.getLimit()).isEqualTo(PlanLimit.LINKS_PER_WORKSPACE));
 
         push(account, upsertLink(resident, secondGroupInFullWorkspace, "Resident"));
         assertThat(countLinksInGroup(secondGroupInFullWorkspace)).isEqualTo(1);
@@ -182,7 +182,7 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
 
         push(account, upsertGroup(emptyGroup, account.workspaceId()));
         assertThatThrownBy(() -> push(account, upsertGroup(groupWithALink, account.workspaceId())))
-                .isInstanceOf(FairUseLimitReachedException.class);
+                .isInstanceOf(PlanLimitReachedException.class);
     }
 
     @Test
@@ -212,7 +212,8 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
     }
 
     @Test
-    @DisplayName("a new profile or a new workspace beyond its cap fails the push with that cap")
+    @DisplayName("a new profile beyond the profile slots, or a new workspace beyond its "
+            + "profile's slots, fails the push with that limit; another profile still takes one")
     void shouldRefuseProfilesAndWorkspacesBeyondTheirCaps() {
         final Account account = newAccountWithOneWorkspace();
         final UUID secondProfile = UUID.randomUUID();
@@ -220,15 +221,17 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
         pushWorkspace(account);
 
         assertThatThrownBy(() -> push(account, upsertProfile(UUID.randomUUID())))
-                .isInstanceOfSatisfying(FairUseLimitReachedException.class, refusal -> {
-                    assertThat(refusal.getLimit()).isEqualTo(FairUseLimit.PROFILES);
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal -> {
+                    assertThat(refusal.getLimit()).isEqualTo(PlanLimit.PROFILES);
                     assertThat(refusal.getMaximum()).isEqualTo(PROFILE_CAP);
                 });
-        assertThatThrownBy(() -> push(account, upsertWorkspace(UUID.randomUUID(), secondProfile)))
-                .isInstanceOfSatisfying(FairUseLimitReachedException.class, refusal -> {
-                    assertThat(refusal.getLimit()).isEqualTo(FairUseLimit.WORKSPACES);
+        assertThatThrownBy(() ->
+                push(account, upsertWorkspace(UUID.randomUUID(), account.profileId())))
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal -> {
+                    assertThat(refusal.getLimit()).isEqualTo(PlanLimit.WORKSPACES_PER_PROFILE);
                     assertThat(refusal.getMaximum()).isEqualTo(WORKSPACE_CAP);
                 });
+        push(account, upsertWorkspace(UUID.randomUUID(), secondProfile));
     }
 
     // ------------------------------------------------------------------ fixtures

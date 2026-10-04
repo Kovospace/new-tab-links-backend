@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.group.repositories;
 
+import com.kovospace.newtablinks.common.models.ContainerItemCount;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import java.util.List;
 import java.util.Optional;
@@ -73,4 +74,26 @@ public interface GroupRepository extends JpaRepository<GroupEntity, UUID> {
     @Query("select max(linkGroup.position) from GroupEntity linkGroup "
             + "where linkGroup.environment.id = :environmentId")
     Integer findHighestPositionByEnvironmentId(@Param("environmentId") UUID environmentId);
+
+    /**
+     * Counts the groups of one environment.
+     *
+     * @param environmentId identifier of the environment, already resolved for its owner
+     * @return how many groups the environment holds
+     * @since 0.0.18
+     */
+    long countByEnvironmentId(UUID environmentId);
+
+    /**
+     * Counts the groups of every environment of an account that holds at least one.
+     *
+     * @param ownerId identifier of the owning user
+     * @return one entry per environment with groups; an environment without any is absent
+     * @since 0.0.18
+     */
+    @Query("select new com.kovospace.newtablinks.common.models.ContainerItemCount("
+            + "linkGroup.environment.id, count(linkGroup)) from GroupEntity linkGroup "
+            + "where linkGroup.environment.owner.id = :ownerId "
+            + "group by linkGroup.environment.id")
+    List<ContainerItemCount> countGroupsPerEnvironmentOfOwner(@Param("ownerId") UUID ownerId);
 }

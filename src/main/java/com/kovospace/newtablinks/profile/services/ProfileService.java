@@ -1,9 +1,9 @@
 package com.kovospace.newtablinks.profile.services;
 
-import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
-import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
+import com.kovospace.newtablinks.common.services.PlanLimitGuard;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.profile.dtos.ProfileDto;
 import com.kovospace.newtablinks.profile.dtos.ProfileSaveRequestDto;
@@ -37,7 +37,7 @@ public class ProfileService {
     private final UserService userService;
     private final UserDataChangePublisher userDataChangePublisher;
     private final HierarchyDeletionService hierarchyDeletionService;
-    private final FairUseLimitGuard fairUseLimitGuard;
+    private final PlanLimitGuard planLimitGuard;
 
     /**
      * Creates the service.
@@ -47,7 +47,7 @@ public class ProfileService {
      * @param userService              resolves the owning user
      * @param userDataChangePublisher  announces changes to the user's other browsers
      * @param hierarchyDeletionService removes a record together with everything beneath it
-     * @param fairUseLimitGuard        refuses a profile beyond the Fair Use Policy cap
+     * @param planLimitGuard        refuses a profile beyond the Fair Use Policy cap
      */
     public ProfileService(
             final ProfileRepository profileRepository,
@@ -55,14 +55,14 @@ public class ProfileService {
             final UserService userService,
             final UserDataChangePublisher userDataChangePublisher,
             final HierarchyDeletionService hierarchyDeletionService,
-            final FairUseLimitGuard fairUseLimitGuard) {
+            final PlanLimitGuard planLimitGuard) {
 
         this.profileRepository = profileRepository;
         this.profileMapper = profileMapper;
         this.userService = userService;
         this.userDataChangePublisher = userDataChangePublisher;
         this.hierarchyDeletionService = hierarchyDeletionService;
-        this.fairUseLimitGuard = fairUseLimitGuard;
+        this.planLimitGuard = planLimitGuard;
     }
 
     /**
@@ -97,13 +97,12 @@ public class ProfileService {
      * @param ownerId     identifier of the user it is created for, taken from the access token
      * @return the created profile, including its assigned identifier and position
      * @throws ResourceNotFoundException    when the owning user does not exist
-     * @throws FairUseLimitReachedException when the account already holds as many profiles as the
-     *                                      Fair Use Policy allows
+     * @throws PlanLimitReachedException when every profile slot of the account's plan is taken
      */
     @Transactional
     public ProfileDto createProfile(final ProfileSaveRequestDto saveRequest, final UUID ownerId) {
         final UserEntity owner = userService.getRequiredUserEntity(ownerId);
-        fairUseLimitGuard.requireRoomForAnotherProfile(owner.getId());
+        planLimitGuard.requireRoomForAnotherProfile(owner.getId());
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 profileRepository.findHighestPositionByOwnerId(owner.getId()));
 
@@ -126,7 +125,8 @@ public class ProfileService {
      * @param saveRequest the values to store
      * @param ownerId     identifier of the user that must own it
      * @return the updated profile
-     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     * @throws ResourceNotFoundException  when it does not exist or belongs to somebody else
+     * @throws PlanLimitReachedException when the profile holds no synchronisation slot
      */
     @Transactional
     public ProfileDto updateProfile(
@@ -135,6 +135,7 @@ public class ProfileService {
             final UUID ownerId) {
 
         final ProfileEntity existingProfile = getRequiredProfileEntity(profileId, ownerId);
+        planLimitGuard.requireProfileHoldsSlot(ownerId, existingProfile.getId());
         existingProfile.setName(saveRequest.name());
         existingProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         existingProfile.setHideTips(saveRequest.hideTips());

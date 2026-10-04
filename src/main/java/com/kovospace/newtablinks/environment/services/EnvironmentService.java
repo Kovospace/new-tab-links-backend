@@ -1,9 +1,9 @@
 package com.kovospace.newtablinks.environment.services;
 
-import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
-import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
+import com.kovospace.newtablinks.common.services.PlanLimitGuard;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentDto;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentSaveRequestDto;
@@ -33,7 +33,7 @@ public class EnvironmentService {
     private final ProfileService profileService;
     private final UserDataChangePublisher userDataChangePublisher;
     private final HierarchyDeletionService hierarchyDeletionService;
-    private final FairUseLimitGuard fairUseLimitGuard;
+    private final PlanLimitGuard planLimitGuard;
 
     /**
      * Creates the service.
@@ -44,7 +44,7 @@ public class EnvironmentService {
      *                                it the owner
      * @param userDataChangePublisher  announces changes to the user's other browsers
      * @param hierarchyDeletionService removes a record together with everything beneath it
-     * @param fairUseLimitGuard        refuses a workspace beyond the Fair Use Policy cap
+     * @param planLimitGuard        refuses a workspace beyond the Fair Use Policy cap
      */
     public EnvironmentService(
             final EnvironmentRepository environmentRepository,
@@ -52,14 +52,14 @@ public class EnvironmentService {
             final ProfileService profileService,
             final UserDataChangePublisher userDataChangePublisher,
             final HierarchyDeletionService hierarchyDeletionService,
-            final FairUseLimitGuard fairUseLimitGuard) {
+            final PlanLimitGuard planLimitGuard) {
 
         this.environmentRepository = environmentRepository;
         this.environmentMapper = environmentMapper;
         this.profileService = profileService;
         this.userDataChangePublisher = userDataChangePublisher;
         this.hierarchyDeletionService = hierarchyDeletionService;
-        this.fairUseLimitGuard = fairUseLimitGuard;
+        this.planLimitGuard = planLimitGuard;
     }
 
     /**
@@ -98,7 +98,7 @@ public class EnvironmentService {
      * @param ownerId     identifier of the user it is created for, taken from the access token
      * @return the created environment, including its assigned identifier and position
      * @throws ResourceNotFoundException    when the named profile does not exist or is not theirs
-     * @throws FairUseLimitReachedException when the account already holds as many workspaces as
+     * @throws PlanLimitReachedException when the account already holds as many workspaces as
      *                                      the Fair Use Policy allows
      */
     @Transactional
@@ -108,7 +108,7 @@ public class EnvironmentService {
 
         final ProfileEntity parentProfile =
                 profileService.getRequiredProfileEntity(saveRequest.profileId(), ownerId);
-        fairUseLimitGuard.requireRoomForAnotherWorkspace(ownerId);
+        planLimitGuard.requireRoomForAnotherWorkspace(ownerId, parentProfile.getId());
 
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 environmentRepository.findHighestPositionByOwnerId(ownerId));
@@ -132,8 +132,10 @@ public class EnvironmentService {
      * @param saveRequest   the values to store
      * @param ownerId       identifier of the user that must own it
      * @return the updated environment
-     * @throws ResourceNotFoundException when the environment or the named profile does not exist
-     *                                   or belongs to somebody else
+     * @throws ResourceNotFoundException  when the environment or the named profile does not exist
+     *                                    or belongs to somebody else
+     * @throws PlanLimitReachedException when the environment holds no synchronisation slot, or
+     *                                    the profile it would move to has no room for it
      */
     @Transactional
     public EnvironmentDto updateEnvironment(
@@ -143,9 +145,14 @@ public class EnvironmentService {
 
         final EnvironmentEntity existingEnvironment =
                 getRequiredEnvironmentEntity(environmentId, ownerId);
+        final ProfileEntity targetProfile =
+                profileService.getRequiredProfileEntity(saveRequest.profileId(), ownerId);
+        planLimitGuard.requireWorkspaceHoldsSlot(existingEnvironment.toWorkspaceLocation());
+        if (!targetProfile.getId().equals(existingEnvironment.getProfile().getId())) {
+            planLimitGuard.requireRoomForAnotherWorkspace(ownerId, targetProfile.getId());
+        }
 
-        existingEnvironment.setProfile(
-                profileService.getRequiredProfileEntity(saveRequest.profileId(), ownerId));
+        existingEnvironment.setProfile(targetProfile);
         existingEnvironment.setName(saveRequest.name());
         existingEnvironment.setDescription(saveRequest.description());
 
@@ -159,12 +166,15 @@ public class EnvironmentService {
      *
      * @param environmentId identifier of the environment to delete
      * @param ownerId       identifier of the user that must own it
-     * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     * @throws ResourceNotFoundException  when it does not exist or belongs to somebody else
+     * @throws PlanLimitReachedException when its profile holds no synchronisation slot - an
+     *                                    environment without a slot of its own may be deleted
      */
     @Transactional
     public void deleteEnvironment(final UUID environmentId, final UUID ownerId) {
-        hierarchyDeletionService.deleteEnvironmentWithDescendants(
-                getRequiredEnvironmentEntity(environmentId, ownerId));
+        final EnvironmentEntity environment = getRequiredEnvironmentEntity(environmentId, ownerId);
+        planLimitGuard.requireProfileHoldsSlot(ownerId, environment.getProfile().getId());
+        hierarchyDeletionService.deleteEnvironmentWithDescendants(environment);
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 

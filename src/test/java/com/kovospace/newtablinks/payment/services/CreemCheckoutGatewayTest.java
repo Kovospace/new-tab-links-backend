@@ -149,6 +149,6 @@ class CreemCheckoutGatewayTest {
      */
     private static WebApplicationProperties websiteAt(final String baseUrl) {
         return new WebApplicationProperties(baseUrl, "/activate", "/auth/callback",
-                "/reset-password", "");
+                "/reset-password", "", "/devices");
     }
 }

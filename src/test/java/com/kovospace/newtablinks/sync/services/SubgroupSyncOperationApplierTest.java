@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import com.kovospace.newtablinks.group.services.GroupSynchronizationService;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupSynchronizedValuesDto;
@@ -135,6 +136,9 @@ class SubgroupSyncOperationApplierTest {
             final String color) {
 
         final GroupEntity parentGroup = mock(GroupEntity.class);
+        final EnvironmentEntity parentWorkspace = mock(EnvironmentEntity.class);
+        when(parentWorkspace.getId()).thenReturn(UUID.randomUUID());
+        when(parentGroup.getEnvironment()).thenReturn(parentWorkspace);
         when(groupSynchronizationService.findGroupEntityForOwner(PARENT_GROUP_ID, OWNER_ID))
                 .thenReturn(Optional.of(parentGroup));
 

@@ -8,10 +8,12 @@ import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
 import com.kovospace.newtablinks.auth.utils.TokenHasher;
 import com.kovospace.newtablinks.common.exceptions.AuthenticationFailedException;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserDeviceEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
+import com.kovospace.newtablinks.user.services.SignedInInstallationLimitService;
 import java.time.Instant;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -47,6 +49,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final TokenPairFactory tokenPairFactory;
     private final AuthenticationProperties authenticationProperties;
+    private final SignedInInstallationLimitService signedInInstallationLimitService;
 
     /**
      * Creates the service.
@@ -56,19 +59,22 @@ public class AuthenticationService {
      * @param passwordEncoder          verifies submitted passwords
      * @param tokenPairFactory         issues the resulting tokens
      * @param authenticationProperties lockout threshold
+     * @param signedInInstallationLimitService signs out an installation beyond the plan's limit
      */
     public AuthenticationService(
             final UserRepository userRepository,
             final RefreshTokenRepository refreshTokenRepository,
             final PasswordEncoder passwordEncoder,
             final TokenPairFactory tokenPairFactory,
-            final AuthenticationProperties authenticationProperties) {
+            final AuthenticationProperties authenticationProperties,
+            final SignedInInstallationLimitService signedInInstallationLimitService) {
 
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenPairFactory = tokenPairFactory;
         this.authenticationProperties = authenticationProperties;
+        this.signedInInstallationLimitService = signedInInstallationLimitService;
     }
 
     /**
@@ -130,12 +136,20 @@ public class AuthenticationService {
      * indefinitely: the legitimate client's next refresh invalidates the thief's copy, or the
      * thief's use invalidates the client's, and either way somebody notices.</p>
      *
+     * <p>An extension installation beyond its account's limit of signed-in installations - which
+     * happens when premium ends - is signed out here instead, in the order the installations
+     * first signed in: every token of its device is revoked and the refresh refused. That
+     * revocation must survive the refusal, so this transaction does not roll back for
+     * {@link PlanLimitReachedException}.</p>
+     *
      * @param rawRefreshToken the token presented by the client
      * @return a fresh token pair
      * @throws AuthenticationFailedException when the token is unknown, spent, or its account can
      *                                       no longer sign in
+     * @throws PlanLimitReachedException     with limit {@code DEVICES} when the installation was
+     *                                       signed out for being beyond its plan's limit
      */
-    @Transactional
+    @Transactional(noRollbackFor = PlanLimitReachedException.class)
     public TokenPairDto refresh(final String rawRefreshToken) {
         final RefreshTokenEntity storedToken = refreshTokenRepository
                 .findByTokenHash(TokenHasher.hash(rawRefreshToken))
@@ -153,6 +167,7 @@ public class AuthenticationService {
             throw new AuthenticationFailedException();
         }
 
+        signedInInstallationLimitService.signOutWhenBeyondLimit(storedToken.getDevice());
         storedToken.revoke(now);
 
         // The device comes from the token, not from this request's headers: a client that

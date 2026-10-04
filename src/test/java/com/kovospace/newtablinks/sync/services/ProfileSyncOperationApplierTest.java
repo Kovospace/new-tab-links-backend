@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.kovospace.newtablinks.closedtab.services.ClosedTabSynchronizationService;
-import com.kovospace.newtablinks.common.services.FairUseLimitGuard;
 import com.kovospace.newtablinks.profile.dtos.ProfileSynchronizedValuesDto;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.profile.services.ProfileSynchronizationService;
@@ -58,7 +57,7 @@ class ProfileSyncOperationApplierTest {
     private final SyncPushService syncPushService = new SyncPushService(
             List.of(new ProfileSyncOperationApplier(profileSynchronizationService)),
             mock(UserDataChangePublisher.class),
-            mock(FairUseLimitGuard.class),
+            PermissiveSyncPushLimitGuard.create(),
             mock(ClosedTabSynchronizationService.class));
 
     @Test
