@@ -421,7 +421,8 @@ public class SecurityConfiguration {
      *
      * <p>The website and the extension live on different origins from the API, so neither can
      * call it without being listed here. The extension's origin is
-     * {@code chrome-extension://<extension id>}. Origins are deployment-dependent and therefore
+     * {@code chrome-extension://<extension id>} in Chrome and
+     * {@code moz-extension://<per-installation uuid>} in Firefox. Origins are deployment-dependent and therefore
      * configured, through {@code newtablinks.security.allowed-cors-origins}.</p>
      *
      * <p>Everything else is stated in code, because it describes the API rather than the
