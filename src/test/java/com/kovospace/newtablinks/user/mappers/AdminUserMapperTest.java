@@ -7,6 +7,7 @@ import com.kovospace.newtablinks.entitlement.models.ProStanding;
 import com.kovospace.newtablinks.user.dtos.AdminUserDto;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserEntity;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,18 +28,20 @@ class AdminUserMapperTest {
     private static final UUID PLAIN_ACCOUNT_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000003");
 
+    private static final Instant GRANTED_UNTIL = Instant.parse("2027-10-04T12:00:00Z");
+
     private final AdminUserMapper adminUserMapper = new AdminUserMapperImpl();
 
     @Test
-    @DisplayName("each account on a page carries premium and its source, or false and null")
+    @DisplayName("each account on a page carries premium, its source and end, or false and null")
     void shouldCarryEachAccountsProStanding() {
         final List<UserEntity> accounts = List.of(
                 account(PAID_ACCOUNT_ID, "paid"),
                 account(GRANTED_ACCOUNT_ID, "granted"),
                 account(PLAIN_ACCOUNT_ID, "plain"));
         final Map<UUID, ProStanding> standing = Map.of(
-                PAID_ACCOUNT_ID, new ProStanding(true, EntitlementSource.LIFETIME),
-                GRANTED_ACCOUNT_ID, new ProStanding(true, EntitlementSource.GRANT),
+                PAID_ACCOUNT_ID, new ProStanding(true, EntitlementSource.LIFETIME, null),
+                GRANTED_ACCOUNT_ID, new ProStanding(true, EntitlementSource.GRANT, GRANTED_UNTIL),
                 PLAIN_ACCOUNT_ID, ProStanding.NOT_PRO);
 
         final List<AdminUserDto> rendered = adminUserMapper.toDtoList(accounts, standing);
@@ -48,6 +51,8 @@ class AdminUserMapperTest {
         assertThat(rendered).extracting(AdminUserDto::premium).containsExactly(true, true, false);
         assertThat(rendered).extracting(AdminUserDto::premiumSource)
                 .containsExactly(EntitlementSource.LIFETIME, EntitlementSource.GRANT, null);
+        assertThat(rendered).extracting(AdminUserDto::premiumUntil)
+                .containsExactly(null, GRANTED_UNTIL, null);
     }
 
     @Test
@@ -59,6 +64,7 @@ class AdminUserMapperTest {
 
         assertThat(rendered.premium()).isFalse();
         assertThat(rendered.premiumSource()).isNull();
+        assertThat(rendered.premiumUntil()).isNull();
         assertThat(rendered.id()).isEqualTo(PLAIN_ACCOUNT_ID);
     }
 

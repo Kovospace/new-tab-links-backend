@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.user.dtos;
 
+import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
@@ -30,6 +31,13 @@ import jakarta.validation.constraints.Size;
  *                    such a grant back, {@code null} or absent to leave pro as it is - so a
  *                    client that predates this field cannot revoke anything by omitting it.
  *                    Revoking pro that was paid for is refused.
+ * @param premiumGrantTerm how long the grant lasts when {@code premium} is true. On an account
+ *                    already pro through a grant, a term re-applies the grant from now (switching
+ *                    between one year and lifetime, or renewing a year) and {@code null} leaves
+ *                    it exactly as it is - so a form that sends every field on every save does
+ *                    not keep extending a year. On an account that is not pro, {@code null} means
+ *                    {@link PremiumGrantTerm#LIFETIME}. A paid entitlement is never touched.
+ *                    Ignored unless {@code premium} is true.
  * @since 0.0.6
  */
 @Schema(description = "The fields an operator may change on an account")
@@ -47,5 +55,12 @@ public record AdminUserUpdateRequestDto(
         @Schema(description = "true grants pro, false revokes an operator grant (a paid "
                 + "entitlement is refused with 409), null or absent leaves pro unchanged",
                 example = "true", nullable = true)
-        Boolean premium) {
+        Boolean premium,
+
+        @Schema(description = "How long the operator grant lasts: ONE_YEAR from now, or "
+                + "LIFETIME. Only read when premium is true. On an account already pro through "
+                + "a grant, a value re-applies the grant from now and null leaves it unchanged; "
+                + "on an account not yet pro, null means LIFETIME. Paid pro is never changed.",
+                example = "ONE_YEAR", nullable = true)
+        PremiumGrantTerm premiumGrantTerm) {
 }

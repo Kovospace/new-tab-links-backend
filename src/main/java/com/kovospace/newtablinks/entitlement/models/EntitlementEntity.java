@@ -207,6 +207,11 @@ public class EntitlementEntity extends AbstractAuditableEntity {
                 && !references.subscriptionId().equals(providerSubscriptionId)) {
             this.providerOrderId = null;
         }
+        if (isOperatorGrant()) {
+            // A time-limited grant's end is not a paid period: the subscription taking over
+            // must wait for the provider to report its own, exactly as a fresh row does.
+            this.paidUntil = null;
+        }
         this.source = EntitlementSource.SUBSCRIPTION;
         this.paymentProvider = provider;
         if (references.subscriptionId() != null) {
@@ -219,10 +224,12 @@ public class EntitlementEntity extends AbstractAuditableEntity {
     }
 
     /**
-     * Makes this an operator grant: pro given without any payment, and without an end.
+     * Makes this an operator grant: pro given without any payment, until the given moment or
+     * without an end.
      *
-     * <p>Replaces whatever the row rested on before - only ever a purchase that no longer grants,
-     * which the caller checks. Every payment column is cleared, because the migrated schema's
+     * <p>Replaces whatever the row rested on before - a purchase that no longer grants, or an
+     * earlier grant whose term the operator is changing; the caller checks that no standing
+     * purchase is overwritten. Every payment column is cleared, because the migrated schema's
      * {@code ck_user_entitlement_grant_unpaid} forbids a grant to carry a provider or an amount,
      * and because a subscription or order identifier left behind would let a late event about
      * that old purchase be taken as concerning this grant.</p>
@@ -230,11 +237,14 @@ public class EntitlementEntity extends AbstractAuditableEntity {
      * <p>Two things are deliberately kept. {@link #lastProviderEventAt}, so that a delayed event
      * older than what was already applied is still refused as stale; and a pending superseded
      * subscription cancellation, which must still be carried out at the provider.</p>
+     *
+     * @param grantedUntil when the grant stops granting pro, or {@code null} for a grant without
+     *                     an end
      */
-    public void becomeOperatorGrant() {
+    public void becomeOperatorGrant(final Instant grantedUntil) {
         this.source = EntitlementSource.GRANT;
         this.status = EntitlementStatus.ACTIVE;
-        this.paidUntil = null;
+        this.paidUntil = grantedUntil;
         this.chargedAmountInMinorUnits = null;
         this.chargedCurrency = null;
         this.paymentProvider = null;

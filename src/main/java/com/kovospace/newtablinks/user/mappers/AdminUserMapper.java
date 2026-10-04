@@ -28,12 +28,13 @@ public interface AdminUserMapper {
      * Converts a single account.
      *
      * @param userEntity  entity to convert
-     * @param proStanding whether the account is pro right now, and through what
+     * @param proStanding whether the account is pro right now, through what, and until when
      * @return the converted account
      */
     @Mapping(target = "hasPassword", expression = "java(userEntity.hasPassword())")
     @Mapping(target = "premium", source = "proStanding.premium")
     @Mapping(target = "premiumSource", source = "proStanding.premiumSource")
+    @Mapping(target = "premiumUntil", source = "proStanding.premiumUntil")
     AdminUserDto toDto(UserEntity userEntity, ProStanding proStanding);
 
     /**

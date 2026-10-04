@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.user.dtos;
 
 import com.kovospace.newtablinks.auth.utils.UsernameConstraints;
+import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
@@ -28,6 +29,8 @@ import jakarta.validation.constraints.Size;
  * @param status      lifecycle state to create the account in
  * @param premium     whether to give the account pro through an operator grant; absent means
  *                    {@code false}
+ * @param premiumGrantTerm how long the grant lasts when {@code premium} is true; absent means
+ *                    {@link PremiumGrantTerm#LIFETIME}. Ignored when {@code premium} is false.
  * @since 0.0.6
  */
 @Schema(description = "An account created by the operator")
@@ -54,5 +57,10 @@ public record AdminUserCreateRequestDto(
 
         @Schema(description = "Whether to give the account pro through an operator grant; "
                 + "absent means false", example = "false")
-        boolean premium) {
+        boolean premium,
+
+        @Schema(description = "How long the operator grant lasts: ONE_YEAR from now, or "
+                + "LIFETIME. Null or absent means LIFETIME. Only read when premium is true.",
+                example = "ONE_YEAR", nullable = true)
+        PremiumGrantTerm premiumGrantTerm) {
 }

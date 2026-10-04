@@ -13,7 +13,8 @@ import java.time.Instant;
  * {@code refundableUntil} and {@code pendingCheckout} always {@code null} for now, because no
  * cancel or refund endpoint exists yet and no checkout is tracked before its webhook arrives.</p>
  *
- * @param plan            the plan held, or {@code null} for none or an operator grant
+ * @param plan            the plan held, or {@code null} for none; an operator grant reads as
+ *                        {@code LIFETIME} without an end and {@code YEARLY_RECURRING} with one
  * @param state           where the plan stands; {@code NONE} when there has never been one
  * @param startedAt       when the account first became entitled, or {@code null}
  * @param validUntil      end of what has been paid for; {@code null} for lifetime or none
@@ -23,13 +24,16 @@ import java.time.Instant;
  * @param refundable      whether the website may offer a refund; always {@code false} for now
  * @param refundableUntil until when a refund may be asked for; always {@code null} for now
  * @param pendingCheckout a checkout started but not yet confirmed; always {@code null} for now
+ * @param grantedByOperator whether the plan was given by the operator rather than bought; since
+ *                        0.0.15
  * @since 0.0.9
  */
 @Schema(description = "The signed-in account's pro plan and where it stands")
 public record SubscriptionStatusDto(
 
-        @Schema(description = "The plan held. Null when the account holds none, and also for "
-                + "pro granted by the operator, which is not a purchasable plan.",
+        @Schema(description = "The plan held; null when the account holds none. Pro granted by "
+                + "the operator reads as LIFETIME when it has no end and YEARLY_RECURRING when "
+                + "it has one - grantedByOperator tells it apart from a purchase.",
                 nullable = true, example = "YEARLY_RECURRING")
         SubscriptionPlan plan,
 
@@ -42,7 +46,8 @@ public record SubscriptionStatusDto(
                 example = "2026-09-27T10:00:00Z")
         Instant startedAt,
 
-        @Schema(description = "End of the period paid for; null for a lifetime plan",
+        @Schema(description = "End of the period paid for, or of a one-year operator grant; "
+                + "null for a lifetime plan or grant",
                 nullable = true, example = "2027-09-27T10:00:00Z")
         Instant validUntil,
 
@@ -69,5 +74,10 @@ public record SubscriptionStatusDto(
         @Schema(description = "A checkout started but not yet confirmed by the provider. Always "
                 + "null for now; reserved so the shape does not change when it is tracked.",
                 nullable = true, types = {"object", "null"})
-        Object pendingCheckout) {
+        Object pendingCheckout,
+
+        @Schema(description = "Whether the operator gave this plan rather than it being bought. "
+                + "A grant never renews by itself, so renewsAt is null; validUntil is its end, "
+                + "null for a grant without one.", example = "false")
+        boolean grantedByOperator) {
 }

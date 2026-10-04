@@ -36,7 +36,8 @@ class SubscriptionStatusMapperTest {
                 subscriptionStatusMapper.toDtoForAccountWithoutEntitlement();
 
         assertThat(status).isEqualTo(new SubscriptionStatusDto(
-                null, SubscriptionState.NONE, null, null, null, null, false, false, null, null));
+                null, SubscriptionState.NONE, null, null, null, null, false, false, null, null,
+                false));
     }
 
     @ParameterizedTest(name = "{0} {1} -> plan {2}, state {3}, renews {4}")
@@ -53,13 +54,13 @@ class SubscriptionStatusMapperTest {
             "LIFETIME,     CANCELED,         LIFETIME,         EXPIRED,   false",
             "LIFETIME,     EXPIRED,          LIFETIME,         EXPIRED,   false",
             "LIFETIME,     REFUNDED,         LIFETIME,         REFUNDED,  false",
-            "GRANT,        ACTIVE,           null,             ACTIVE,    false",
-            "GRANT,        PAST_DUE,         null,             PAST_DUE,  false",
-            "GRANT,        SCHEDULED_CANCEL, null,             CANCELLED, false",
-            "GRANT,        CANCELED,         null,             EXPIRED,   false",
-            "GRANT,        EXPIRED,          null,             EXPIRED,   false",
-            "GRANT,        REFUNDED,         null,             REFUNDED,  false"})
-    @DisplayName("maps every source and status to the website's plan and state")
+            "GRANT,        ACTIVE,           YEARLY_RECURRING, ACTIVE,    false",
+            "GRANT,        PAST_DUE,         YEARLY_RECURRING, PAST_DUE,  false",
+            "GRANT,        SCHEDULED_CANCEL, YEARLY_RECURRING, CANCELLED, false",
+            "GRANT,        CANCELED,         YEARLY_RECURRING, EXPIRED,   false",
+            "GRANT,        EXPIRED,          YEARLY_RECURRING, EXPIRED,   false",
+            "GRANT,        REFUNDED,         YEARLY_RECURRING, REFUNDED,  false"})
+    @DisplayName("maps every source and status to the website's plan and state; a grant here has an end")
     void shouldMapEverySourceAndStatus(
             final EntitlementSource source,
             final EntitlementStatus status,
@@ -82,12 +83,43 @@ class SubscriptionStatusMapperTest {
         assertThat(mapped.refundable()).isFalse();
         assertThat(mapped.refundableUntil()).isNull();
         assertThat(mapped.pendingCheckout()).isNull();
+        assertThat(mapped.grantedByOperator()).isEqualTo(source == EntitlementSource.GRANT);
+    }
+
+    @Test
+    @DisplayName("an operator grant without an end reads as a lifetime plan, granted by the operator")
+    void shouldDescribeAGrantWithoutAnEndAsALifetimePlanGrantedByTheOperator() {
+        final EntitlementEntity grant = new EntitlementEntity(new UserEntity(
+                "given", "given@example.com", null, "Given", UserAccountStatus.ACTIVE));
+        grant.becomeOperatorGrant(null);
+        ReflectionTestUtils.setField(grant, "createdAt", CREATED_AT);
+
+        final SubscriptionStatusDto mapped = subscriptionStatusMapper.toDto(grant);
+
+        assertThat(mapped).isEqualTo(new SubscriptionStatusDto(
+                SubscriptionPlan.LIFETIME, SubscriptionState.ACTIVE, CREATED_AT, null, null, null,
+                false, false, null, null, true));
+    }
+
+    @Test
+    @DisplayName("a one-year operator grant reads as a yearly plan valid until its end, never renewing")
+    void shouldDescribeAOneYearGrantAsAYearlyPlanThatDoesNotRenew() {
+        final EntitlementEntity grant = new EntitlementEntity(new UserEntity(
+                "given", "given@example.com", null, "Given", UserAccountStatus.ACTIVE));
+        grant.becomeOperatorGrant(PAID_UNTIL);
+        ReflectionTestUtils.setField(grant, "createdAt", CREATED_AT);
+
+        final SubscriptionStatusDto mapped = subscriptionStatusMapper.toDto(grant);
+
+        assertThat(mapped).isEqualTo(new SubscriptionStatusDto(
+                SubscriptionPlan.YEARLY_RECURRING, SubscriptionState.ACTIVE, CREATED_AT,
+                PAID_UNTIL, null, null, false, false, null, null, true));
     }
 
     /**
      * Builds an entitlement row in the given shape, as it would have been loaded.
      *
-     * <p>The source is set reflectively because nothing writes a grant yet.</p>
+     * <p>The source is set reflectively so that every source can be paired with every status.</p>
      *
      * @param source    where it came from
      * @param status    where it stands

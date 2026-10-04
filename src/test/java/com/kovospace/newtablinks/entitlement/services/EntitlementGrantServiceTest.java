@@ -18,12 +18,14 @@ import com.kovospace.newtablinks.entitlement.models.EntitlementSource;
 import com.kovospace.newtablinks.entitlement.models.EntitlementStatus;
 import com.kovospace.newtablinks.entitlement.models.OperatorProDecisionOutcome;
 import com.kovospace.newtablinks.entitlement.models.PaymentProvider;
+import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.entitlement.models.ProviderPurchaseReferences;
 import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -34,12 +36,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 
 /**
  * Pins what the operator's premium checkbox does to an entitlement: a grant is written only where
- * nothing grants, only a grant can be taken back, and a later payment still takes a grant over.
+ * nothing grants or over an earlier grant when a term is named, only a grant can be taken back,
+ * and a later payment still takes a grant over.
  *
  * <p>The service judges against the real clock, so every fixture here is placed relative to
  * now: far enough in the past or future that the test cannot straddle a boundary.</p>
@@ -79,7 +83,7 @@ class EntitlementGrantServiceTest {
         void shouldWriteAGrantForAnAccountWithoutAnEntitlement() {
             storedEntitlement(null);
 
-            final OperatorProDecisionOutcome outcome = grantService.grantProUnlessAlreadyPro(account);
+            final OperatorProDecisionOutcome outcome = grantService.grantPro(account, null);
 
             assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANTED);
             final EntitlementEntity saved = capturedSave();
@@ -98,7 +102,7 @@ class EntitlementGrantServiceTest {
             final Instant newestEventBefore = lapsed.getLastProviderEventAt();
             storedEntitlement(lapsed);
 
-            final OperatorProDecisionOutcome outcome = grantService.grantProUnlessAlreadyPro(account);
+            final OperatorProDecisionOutcome outcome = grantService.grantPro(account, null);
 
             assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANTED);
             assertThat(capturedSave()).isSameAs(lapsed);
@@ -116,10 +120,128 @@ class EntitlementGrantServiceTest {
             final EntitlementSource sourceBefore = standing.getSource();
             storedEntitlement(standing);
 
-            final OperatorProDecisionOutcome outcome = grantService.grantProUnlessAlreadyPro(account);
+            final OperatorProDecisionOutcome outcome = grantService.grantPro(account, null);
 
             assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.ALREADY_PRO);
             assertThat(standing.getSource()).isEqualTo(sourceBefore);
+            verify(entitlementRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("a one-year grant runs for one calendar year from now, in UTC")
+        void shouldWriteAOneYearGrantEndingACalendarYearFromNow() {
+            storedEntitlement(null);
+            final Instant before = Instant.now();
+
+            final OperatorProDecisionOutcome outcome =
+                    grantService.grantPro(account, PremiumGrantTerm.ONE_YEAR);
+
+            final Instant after = Instant.now();
+            assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANTED);
+            final EntitlementEntity saved = capturedSave();
+            assertIsUnpaidActiveGrantUntil(saved, oneCalendarYearAfter(before), oneCalendarYearAfter(after));
+        }
+
+        @Test
+        @DisplayName("an explicit lifetime grant has no end")
+        void shouldWriteALifetimeGrantWithoutAnEnd() {
+            storedEntitlement(null);
+
+            final OperatorProDecisionOutcome outcome =
+                    grantService.grantPro(account, PremiumGrantTerm.LIFETIME);
+
+            assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANTED);
+            assertIsUnpaidActiveGrant(capturedSave());
+        }
+
+        @Test
+        @DisplayName("a one-year grant that has run out is replaced by a new grant, lifetime when no term is named")
+        void shouldReplaceALapsedOneYearGrantWithANewGrant() {
+            final EntitlementEntity lapsed = grantEndingIn(Duration.ofDays(-1));
+            storedEntitlement(lapsed);
+
+            final OperatorProDecisionOutcome outcome = grantService.grantPro(account, null);
+
+            assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANTED);
+            assertThat(capturedSave()).isSameAs(lapsed);
+            assertIsUnpaidActiveGrant(lapsed);
+        }
+
+        @Test
+        @DisplayName("a lifetime grant switched to one year now ends a calendar year from now")
+        void shouldSwitchAStandingLifetimeGrantToOneYear() {
+            final EntitlementEntity grant = pureGrant();
+            storedEntitlement(grant);
+            final Instant before = Instant.now();
+
+            final OperatorProDecisionOutcome outcome =
+                    grantService.grantPro(account, PremiumGrantTerm.ONE_YEAR);
+
+            final Instant after = Instant.now();
+            assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANT_TERM_REAPPLIED);
+            assertThat(capturedSave()).isSameAs(grant);
+            assertIsUnpaidActiveGrantUntil(grant, oneCalendarYearAfter(before), oneCalendarYearAfter(after));
+        }
+
+        @Test
+        @DisplayName("a one-year grant switched to lifetime loses its end")
+        void shouldSwitchAStandingOneYearGrantToLifetime() {
+            final EntitlementEntity grant = grantEndingIn(Duration.ofDays(100));
+            storedEntitlement(grant);
+
+            final OperatorProDecisionOutcome outcome =
+                    grantService.grantPro(account, PremiumGrantTerm.LIFETIME);
+
+            assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANT_TERM_REAPPLIED);
+            assertThat(capturedSave()).isSameAs(grant);
+            assertIsUnpaidActiveGrant(grant);
+        }
+
+        @Test
+        @DisplayName("a one-year grant named again is renewed for a calendar year from now")
+        void shouldRenewAStandingOneYearGrantFromNow() {
+            final EntitlementEntity grant = grantEndingIn(Duration.ofDays(30));
+            storedEntitlement(grant);
+            final Instant before = Instant.now();
+
+            final OperatorProDecisionOutcome outcome =
+                    grantService.grantPro(account, PremiumGrantTerm.ONE_YEAR);
+
+            final Instant after = Instant.now();
+            assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.GRANT_TERM_REAPPLIED);
+            assertIsUnpaidActiveGrantUntil(grant, oneCalendarYearAfter(before), oneCalendarYearAfter(after));
+        }
+
+        @Test
+        @DisplayName("a standing one-year grant is left alone when no term is named, so saving the form does not extend it")
+        void shouldLeaveAStandingOneYearGrantAloneWithoutATerm() {
+            final Instant grantedUntil = Instant.now().plus(Duration.ofDays(30));
+            final EntitlementEntity grant = newEntitlement();
+            grant.becomeOperatorGrant(grantedUntil);
+            storedEntitlement(grant);
+
+            final OperatorProDecisionOutcome outcome = grantService.grantPro(account, null);
+
+            assertThat(outcome).isEqualTo(OperatorProDecisionOutcome.ALREADY_PRO);
+            assertThat(grant.getPaidUntil()).isEqualTo(grantedUntil);
+            verify(entitlementRepository, never()).save(any());
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @EnumSource(PremiumGrantTerm.class)
+        @DisplayName("a standing purchase is never touched, whatever term is named")
+        void shouldNeverTouchAStandingPurchaseWhateverTheTerm(final PremiumGrantTerm term) {
+            for (final EntitlementEntity purchase
+                    : new EntitlementEntity[] {activeSubscription(), standingLifetime()}) {
+                final EntitlementSource sourceBefore = purchase.getSource();
+                final Instant paidUntilBefore = purchase.getPaidUntil();
+                storedEntitlement(purchase);
+
+                assertThat(grantService.grantPro(account, term))
+                        .isEqualTo(OperatorProDecisionOutcome.ALREADY_PRO);
+                assertThat(purchase.getSource()).isEqualTo(sourceBefore);
+                assertThat(purchase.getPaidUntil()).isEqualTo(paidUntilBefore);
+            }
             verify(entitlementRepository, never()).save(any());
         }
     }
@@ -144,7 +266,7 @@ class EntitlementGrantServiceTest {
         @DisplayName("a grant over provider history is kept but ended, so the stale guard survives")
         void shouldEndAGrantThatCarriesProviderHistoryInPlace() {
             final EntitlementEntity grant = expiredSubscription();
-            grant.becomeOperatorGrant();
+            grant.becomeOperatorGrant(null);
             storedEntitlement(grant);
 
             final OperatorProDecisionOutcome outcome = grantService.revokeGrantedPro(account);
@@ -240,6 +362,33 @@ class EntitlementGrantServiceTest {
         }
 
         @Test
+        @DisplayName("a lifetime purchase takes a one-year grant over and removes its end")
+        void shouldLetALifetimePurchaseTakeOverAOneYearGrant() {
+            final EntitlementEntity grant = grantEndingIn(Duration.ofDays(100));
+
+            final EntitlementSignalOutcome outcome =
+                    POLICY.apply(grant, false, lifetimeSignal(Instant.now()));
+
+            assertThat(outcome).isEqualTo(EntitlementSignalOutcome.APPLIED);
+            assertThat(grant.getSource()).isEqualTo(EntitlementSource.LIFETIME);
+            assertThat(grant.getPaidUntil()).isNull();
+            assertThat(grant.grantsProAt(Instant.now().plus(Duration.ofDays(1000)))).isTrue();
+        }
+
+        @Test
+        @DisplayName("a subscription taking over a one-year grant does not inherit the grant's end")
+        void shouldNotCarryAOneYearGrantsEndIntoASubscription() {
+            final EntitlementEntity grant = grantEndingIn(Duration.ofDays(100));
+
+            POLICY.apply(grant, false, subscriptionSignal(
+                    EntitlementSignalKind.SUBSCRIPTION_PURCHASED, NEW_SUBSCRIPTION,
+                    Instant.now(), null));
+
+            assertThat(grant.getSource()).isEqualTo(EntitlementSource.SUBSCRIPTION);
+            assertThat(grant.getPaidUntil()).isNull();
+        }
+
+        @Test
         @DisplayName("a lifetime purchase takes the grant over and schedules no cancellation")
         void shouldLetALifetimePurchaseTakeOverAGrantWithoutCancellingAnything() {
             final EntitlementEntity grant = pureGrant();
@@ -258,7 +407,7 @@ class EntitlementGrantServiceTest {
         @DisplayName("a late failure of the subscription the grant replaced does not touch it")
         void shouldIgnoreALateEventOfTheReplacedSubscription() {
             final EntitlementEntity grant = expiredSubscription();
-            grant.becomeOperatorGrant();
+            grant.becomeOperatorGrant(null);
 
             final EntitlementSignalOutcome outcome = POLICY.apply(grant, false, subscriptionSignal(
                     EntitlementSignalKind.SUBSCRIPTION_CANCELED, OLD_SUBSCRIPTION,
@@ -272,7 +421,7 @@ class EntitlementGrantServiceTest {
         @DisplayName("an older event of the replaced subscription is still refused as stale")
         void shouldStillRefuseAnOlderEventOfTheReplacedSubscription() {
             final EntitlementEntity grant = expiredSubscription();
-            grant.becomeOperatorGrant();
+            grant.becomeOperatorGrant(null);
 
             final EntitlementSignalOutcome outcome = POLICY.apply(grant, false, subscriptionSignal(
                     EntitlementSignalKind.SUBSCRIPTION_PAID, OLD_SUBSCRIPTION,
@@ -287,7 +436,7 @@ class EntitlementGrantServiceTest {
         @DisplayName("a refund of the lifetime order the grant replaced does not revoke the grant")
         void shouldIgnoreARefundOfTheReplacedPurchase() {
             final EntitlementEntity grant = refundedLifetime();
-            grant.becomeOperatorGrant();
+            grant.becomeOperatorGrant(null);
 
             final EntitlementSignalOutcome outcome =
                     POLICY.apply(grant, false, refundOf(LIFETIME_ORDER, Instant.now()));
@@ -356,9 +505,34 @@ class EntitlementGrantServiceTest {
      * @param entitlement the row
      */
     private static void assertIsUnpaidActiveGrant(final EntitlementEntity entitlement) {
+        assertThat(entitlement.getPaidUntil()).isNull();
+        assertCarriesNothingButAStandingGrant(entitlement);
+    }
+
+    /**
+     * Asserts a row is a standing, unpaid grant ending within the given bounds.
+     *
+     * @param entitlement  the row
+     * @param earliestEnd  the earliest acceptable end
+     * @param latestEnd    the latest acceptable end
+     */
+    private static void assertIsUnpaidActiveGrantUntil(
+            final EntitlementEntity entitlement,
+            final Instant earliestEnd,
+            final Instant latestEnd) {
+
+        assertThat(entitlement.getPaidUntil()).isBetween(earliestEnd, latestEnd);
+        assertCarriesNothingButAStandingGrant(entitlement);
+    }
+
+    /**
+     * Asserts a row is an active grant with no payment column or purchase identifier set.
+     *
+     * @param entitlement the row
+     */
+    private static void assertCarriesNothingButAStandingGrant(final EntitlementEntity entitlement) {
         assertThat(entitlement.getSource()).isEqualTo(EntitlementSource.GRANT);
         assertThat(entitlement.getStatus()).isEqualTo(EntitlementStatus.ACTIVE);
-        assertThat(entitlement.getPaidUntil()).isNull();
         assertThat(entitlement.getPaymentProvider()).isNull();
         assertThat(entitlement.getChargedAmountInMinorUnits()).isNull();
         assertThat(entitlement.getChargedCurrency()).isNull();
@@ -372,8 +546,30 @@ class EntitlementGrantServiceTest {
     /** @return a grant written onto a fresh row, with no provider history */
     private static EntitlementEntity pureGrant() {
         final EntitlementEntity grant = newEntitlement();
-        grant.becomeOperatorGrant();
+        grant.becomeOperatorGrant(null);
         return grant;
+    }
+
+    /**
+     * Builds a grant on a fresh row ending at the given distance from now.
+     *
+     * @param untilEnd how far from now the grant ends; negative for one already over
+     * @return the grant
+     */
+    private static EntitlementEntity grantEndingIn(final Duration untilEnd) {
+        final EntitlementEntity grant = newEntitlement();
+        grant.becomeOperatorGrant(Instant.now().plus(untilEnd));
+        return grant;
+    }
+
+    /**
+     * Adds one calendar year in UTC, the way a one-year grant counts it.
+     *
+     * @param moment the start
+     * @return the same moment a year later
+     */
+    private static Instant oneCalendarYearAfter(final Instant moment) {
+        return moment.atZone(ZoneOffset.UTC).plusYears(1).toInstant();
     }
 
     /** @return a subscription paid a month ago, good for most of a year */
