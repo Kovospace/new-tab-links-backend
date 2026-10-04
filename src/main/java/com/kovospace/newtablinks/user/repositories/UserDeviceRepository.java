@@ -16,14 +16,21 @@ import org.springframework.stereotype.Repository;
 public interface UserDeviceRepository extends JpaRepository<UserDeviceEntity, UUID> {
 
     /**
-     * Finds a user's device by the pair that identifies it.
+     * Finds a user's device recorded by name only - one no installation has claimed - by the
+     * pair of names it was recorded under.
+     *
+     * <p>Only unattributed rows are searched, because only they are unique by name
+     * ({@code uk_user_device_unattributed}): any number of installations may send the same names
+     * - every Chromium install on one Linux machine does - and searching their rows too returned
+     * several results once a third such installation signed in.</p>
      *
      * @param userId      identifier of the owning account
      * @param deviceName  name of the machine
      * @param browserName browser on that machine
-     * @return the matching device, or an empty optional when it has not been seen before
+     * @return the matching device, or an empty optional when no unattributed row carries those
+     *         names
      */
-    Optional<UserDeviceEntity> findByUserIdAndDeviceNameAndBrowserName(
+    Optional<UserDeviceEntity> findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
             UUID userId, String deviceName, String browserName);
 
     /**
@@ -54,4 +61,18 @@ public interface UserDeviceRepository extends JpaRepository<UserDeviceEntity, UU
      * @return the device, or an empty optional when it does not exist or is not theirs
      */
     Optional<UserDeviceEntity> findByIdAndUserId(UUID deviceId, UUID userId);
+
+    /**
+     * Counts an account's synchronised installations: devices recorded for a client that reported
+     * its own installation identifier.
+     *
+     * <p>The extension reports one on every token request; the website reports none, so its
+     * sign-ins are recorded by name only and are not counted. Signed-out devices are counted -
+     * they stay listed until forgotten.</p>
+     *
+     * @param userId identifier of the owning account
+     * @return the count, zero when there are none
+     * @since 0.0.17
+     */
+    long countByUserIdAndInstallationIdIsNotNull(UUID userId);
 }

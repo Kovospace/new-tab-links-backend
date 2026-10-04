@@ -62,6 +62,8 @@ class FairUseLimitsAgainstMigratedSchemaTest {
     private static final int WORKSPACE_CAP = 2;
     private static final int LINKS_PER_WORKSPACE_CAP = 3;
 
+    private static final int UNREACHABLE_FREE_LIMIT = 1_000;
+
     private static MigratedPostgresDatabase database;
 
     @Autowired
@@ -121,6 +123,10 @@ class FairUseLimitsAgainstMigratedSchemaTest {
         registry.add("newtablinks.fair-use.profiles", () -> PROFILE_CAP);
         registry.add("newtablinks.fair-use.workspaces", () -> WORKSPACE_CAP);
         registry.add("newtablinks.fair-use.links-per-workspace", () -> LINKS_PER_WORKSPACE_CAP);
+        // These accounts are free; the free plan's lower limits are FreePlanLimitsAgainst-
+        // MigratedSchemaTest's subject, and would otherwise refuse before any fair use cap.
+        registry.add("newtablinks.plan-limits.free.profiles", () -> UNREACHABLE_FREE_LIMIT);
+        registry.add("newtablinks.plan-limits.free.workspaces", () -> UNREACHABLE_FREE_LIMIT);
     }
 
     @Test

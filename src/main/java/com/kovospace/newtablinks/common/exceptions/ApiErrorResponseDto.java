@@ -1,7 +1,6 @@
 package com.kovospace.newtablinks.common.exceptions;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.kovospace.newtablinks.common.models.FairUseLimit;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
@@ -20,10 +19,11 @@ import java.util.List;
  *                         request validation failure
  * @param code             machine-readable failure code a client may branch on, {@code null}
  *                         (and omitted) for failures that have none
- * @param limit            the Fair Use Policy cap a refused write would have exceeded, present
- *                         only with code {@code FAIR_USE_LIMIT_REACHED}
- * @param maximum          that cap's maximum, present only with code
- *                         {@code FAIR_USE_LIMIT_REACHED}
+ * @param limit            the cap a refused write would have exceeded - a
+ *                         {@code FairUseLimit} name with code {@code FAIR_USE_LIMIT_REACHED}, a
+ *                         {@code FreePlanLimit} name with code {@code FREE_PLAN_LIMIT_REACHED};
+ *                         absent otherwise
+ * @param maximum          that cap's maximum, present only with one of those two codes
  * @since 0.0.1
  */
 @Schema(description = "Uniform error body returned by every failing endpoint")
@@ -49,12 +49,15 @@ public record ApiErrorResponseDto(
         @JsonInclude(JsonInclude.Include.NON_NULL)
         String code,
 
-        @Schema(description = "The Fair Use Policy cap that was reached; only with code "
-                + "FAIR_USE_LIMIT_REACHED", example = "LINKS_PER_WORKSPACE", nullable = true)
+        @Schema(description = "The cap that was reached. With code FAIR_USE_LIMIT_REACHED one "
+                + "of LINKS_PER_WORKSPACE, WORKSPACES, PROFILES; with code "
+                + "FREE_PLAN_LIMIT_REACHED one of WORKSPACES, PROFILES, DEVICES",
+                example = "LINKS_PER_WORKSPACE", nullable = true)
         @JsonInclude(JsonInclude.Include.NON_NULL)
-        FairUseLimit limit,
+        String limit,
 
-        @Schema(description = "The maximum of that cap; only with code FAIR_USE_LIMIT_REACHED",
+        @Schema(description = "The maximum of that cap; only with code FAIR_USE_LIMIT_REACHED "
+                + "or FREE_PLAN_LIMIT_REACHED",
                 example = "500", nullable = true)
         @JsonInclude(JsonInclude.Include.NON_NULL)
         Integer maximum) {

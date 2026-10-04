@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,7 +15,10 @@ import static org.mockito.Mockito.when;
 import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
+import com.kovospace.newtablinks.common.exceptions.FreePlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.models.FreePlanLimit;
+import com.kovospace.newtablinks.common.services.FreePlanLimitGuard;
 import com.kovospace.newtablinks.user.models.UserDeviceEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserDeviceRepository;
@@ -52,8 +56,10 @@ class UserDeviceServiceTest {
     private final RefreshTokenRepository refreshTokenRepository =
             mock(RefreshTokenRepository.class);
 
-    private final UserDeviceService userDeviceService =
-            new UserDeviceService(userDeviceRepository, refreshTokenRepository);
+    private final FreePlanLimitGuard freePlanLimitGuard = mock(FreePlanLimitGuard.class);
+
+    private final UserDeviceService userDeviceService = new UserDeviceService(
+            userDeviceRepository, refreshTokenRepository, freePlanLimitGuard);
 
     private final UserEntity account = mock(UserEntity.class);
 
@@ -74,12 +80,10 @@ class UserDeviceServiceTest {
         final UserDeviceEntity firstDevice =
                 userDeviceService.recordDeviceUse(account, chromiumInstall(firstInstallation));
 
-        // The first one is now on record, and the second one finds it by name - but must not
-        // take it, because that row already belongs to somebody.
+        // The first one is now on record under the same names, but it belongs to an
+        // installation, so the name lookup - which searches unattributed rows only - must not
+        // offer it to the second.
         when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, firstInstallation))
-                .thenReturn(Optional.of(firstDevice));
-        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
-                ACCOUNT_ID, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME))
                 .thenReturn(Optional.of(firstDevice));
 
         final UserDeviceEntity secondDevice =
@@ -136,7 +140,7 @@ class UserDeviceServiceTest {
 
         when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, installation))
                 .thenReturn(Optional.empty());
-        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
+        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
                 ACCOUNT_ID, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME))
                 .thenReturn(Optional.of(legacy));
 
@@ -155,7 +159,7 @@ class UserDeviceServiceTest {
         final UserDeviceEntity website = new UserDeviceEntity(
                 account, "NewTabLinks (production)", "Firefox", null, Instant.now());
 
-        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
+        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
                 ACCOUNT_ID, "NewTabLinks (production)", "Firefox"))
                 .thenReturn(Optional.of(website));
 
@@ -350,6 +354,104 @@ class UserDeviceServiceTest {
 
         verify(userDeviceRepository, never()).delete(any(UserDeviceEntity.class));
         verify(refreshTokenRepository, never()).deleteAll(anyIterable());
+    }
+
+    @Test
+    @DisplayName("asks the free plan before recording a new installation, and records nothing "
+            + "when it refuses")
+    void asksTheFreePlanBeforeRecordingANewInstallation() {
+
+        doThrow(new FreePlanLimitReachedException(FreePlanLimit.DEVICES, 5))
+                .when(freePlanLimitGuard).requireRoomForAnotherSynchronisedInstallation(ACCOUNT_ID);
+
+        assertThatThrownBy(() ->
+                userDeviceService.recordDeviceUse(account, chromiumInstall(UUID.randomUUID())))
+                .isInstanceOf(FreePlanLimitReachedException.class);
+
+        verify(userDeviceRepository, never()).save(any(UserDeviceEntity.class));
+    }
+
+    @Test
+    @DisplayName("asks the free plan before an installation claims a row recorded by name")
+    void asksTheFreePlanBeforeClaimingAnUnattributedRow() {
+
+        final UUID installation = UUID.randomUUID();
+        final UserDeviceEntity legacy = new UserDeviceEntity(
+                account, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME, null, Instant.now());
+        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
+                ACCOUNT_ID, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME))
+                .thenReturn(Optional.of(legacy));
+        doThrow(new FreePlanLimitReachedException(FreePlanLimit.DEVICES, 5))
+                .when(freePlanLimitGuard).requireRoomForAnotherSynchronisedInstallation(ACCOUNT_ID);
+
+        assertThatThrownBy(() ->
+                userDeviceService.recordDeviceUse(account, chromiumInstall(installation)))
+                .isInstanceOf(FreePlanLimitReachedException.class);
+
+        assertThat(legacy.getInstallationId()).isNull();
+    }
+
+    @Test
+    @DisplayName("never asks the free plan about an installation the account already knows")
+    void neverAsksTheFreePlanAboutAKnownInstallation() {
+
+        final UUID installation = UUID.randomUUID();
+        when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, installation))
+                .thenReturn(Optional.of(deviceOf(installation, SHARED_DEVICE_NAME,
+                        SHARED_BROWSER_NAME)));
+
+        userDeviceService.recordDeviceUse(account, chromiumInstall(installation));
+
+        verify(freePlanLimitGuard, never()).requireRoomForAnotherSynchronisedInstallation(any());
+    }
+
+    @Test
+    @DisplayName("never asks the free plan about the website's own sign-in, which reports no "
+            + "installation")
+    void neverAsksTheFreePlanAboutTheWebsite() {
+
+        userDeviceService.recordDeviceUse(account,
+                new ClientDescriptionDto("NewTabLinks (production)", "Firefox", null));
+
+        verify(freePlanLimitGuard, never()).requireRoomForAnotherSynchronisedInstallation(any());
+    }
+
+    @Test
+    @DisplayName("asks the free plan when a take-over would add an installation to the account")
+    void asksTheFreePlanWhenATakeOverAddsAnInstallation() {
+
+        final UUID taker = UUID.randomUUID();
+        final UserDeviceEntity websiteRow = deviceOf(null, "NewTabLinks (production)", "Firefox");
+        when(userDeviceRepository.findByIdAndUserId(websiteRow.getId(), ACCOUNT_ID))
+                .thenReturn(Optional.of(websiteRow));
+        doThrow(new FreePlanLimitReachedException(FreePlanLimit.DEVICES, 5))
+                .when(freePlanLimitGuard).requireRoomForAnotherSynchronisedInstallation(ACCOUNT_ID);
+
+        assertThatThrownBy(() ->
+                userDeviceService.takeOverDevice(websiteRow.getId(), ACCOUNT_ID, taker))
+                .isInstanceOf(FreePlanLimitReachedException.class);
+
+        assertThat(websiteRow.getInstallationId()).isNull();
+        verify(refreshTokenRepository, never()).revokeAllLiveTokensOfDevice(any(), any());
+    }
+
+    @Test
+    @DisplayName("never asks the free plan about a take-over that swaps one installation's row "
+            + "for another")
+    void neverAsksTheFreePlanAboutATakeOverThatAddsNothing() {
+
+        final UUID taker = UUID.randomUUID();
+        final UserDeviceEntity target = deviceOf(null, "Work desktop", "Firefox");
+        final UserDeviceEntity takersOwn = deviceOf(taker, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME);
+        when(userDeviceRepository.findByIdAndUserId(target.getId(), ACCOUNT_ID))
+                .thenReturn(Optional.of(target));
+        when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, taker))
+                .thenReturn(Optional.of(takersOwn));
+
+        userDeviceService.takeOverDevice(target.getId(), ACCOUNT_ID, taker);
+
+        verify(freePlanLimitGuard, never()).requireRoomForAnotherSynchronisedInstallation(any());
+        assertThat(target.getInstallationId()).isEqualTo(taker);
     }
 
     /** A stored device with an identifier of its own, which take-over needs to tell rows apart. */

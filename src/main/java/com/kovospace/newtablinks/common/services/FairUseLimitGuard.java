@@ -2,9 +2,11 @@ package com.kovospace.newtablinks.common.services;
 
 import com.kovospace.newtablinks.common.config.FairUseLimitProperties;
 import com.kovospace.newtablinks.common.exceptions.FairUseLimitReachedException;
+import com.kovospace.newtablinks.common.exceptions.FreePlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.common.models.FairUseCounts;
 import com.kovospace.newtablinks.common.models.FairUseLimit;
+import com.kovospace.newtablinks.common.models.FreePlanLimit;
 import com.kovospace.newtablinks.environment.repositories.EnvironmentRepository;
 import com.kovospace.newtablinks.link.models.WorkspaceLinkCount;
 import com.kovospace.newtablinks.link.repositories.LinkRepository;
@@ -37,6 +39,11 @@ import org.springframework.transaction.annotation.Transactional;
  *       {@link #requireBatchDidNotGrowPastCaps} after its last operation, before commit.</li>
  * </ul>
  *
+ * <p><strong>Free accounts meet the free plan first.</strong> For an account that is not premium
+ * right now, every profile and workspace check asks {@link FreePlanLimitGuard} before applying
+ * the Fair Use cap, on the same lock and the same counts, so the lower limit refuses first with
+ * {@link FreePlanLimitReachedException}. Links have no free plan limit.</p>
+ *
  * <p><strong>Only growth is refused.</strong> A collection is in breach only when it ends above
  * its cap <em>and</em> larger than it started, so data already over a cap is never deleted and
  * stays editable, and a push that edits, moves within or deletes from it goes through.</p>
@@ -63,6 +70,7 @@ public class FairUseLimitGuard {
     private final ProfileRepository profileRepository;
     private final EnvironmentRepository environmentRepository;
     private final LinkRepository linkRepository;
+    private final FreePlanLimitGuard freePlanLimitGuard;
 
     /**
      * Creates the guard.
@@ -72,44 +80,58 @@ public class FairUseLimitGuard {
      * @param profileRepository      counts profiles
      * @param environmentRepository  counts environments
      * @param linkRepository         counts links
+     * @param freePlanLimitGuard     applies the free plan's lower limits to a free account
      */
     public FairUseLimitGuard(
             final FairUseLimitProperties fairUseLimitProperties,
             final UserRepository userRepository,
             final ProfileRepository profileRepository,
             final EnvironmentRepository environmentRepository,
-            final LinkRepository linkRepository) {
+            final LinkRepository linkRepository,
+            final FreePlanLimitGuard freePlanLimitGuard) {
 
         this.fairUseLimitProperties = fairUseLimitProperties;
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.environmentRepository = environmentRepository;
         this.linkRepository = linkRepository;
+        this.freePlanLimitGuard = freePlanLimitGuard;
     }
 
     /**
-     * Refuses one more profile when the account is already at its cap.
+     * Refuses one more profile when the account is already at its cap - the free plan's when it
+     * is not premium, the Fair Use Policy's otherwise.
      *
      * @param ownerId identifier of the account
-     * @throws FairUseLimitReachedException when the account holds the maximum or more
-     * @throws ResourceNotFoundException    when the account does not exist
+     * @throws FreePlanLimitReachedException when a free account holds the free maximum or more
+     * @throws FairUseLimitReachedException  when the account holds the fair use maximum or more
+     * @throws ResourceNotFoundException     when the account does not exist
      */
     public void requireRoomForAnotherProfile(final UUID ownerId) {
         lockAccountAgainstConcurrentGrowth(ownerId);
-        requireRoomForOneMore(FairUseLimit.PROFILES, profileRepository.countByOwnerId(ownerId));
+        final long profileCount = profileRepository.countByOwnerId(ownerId);
+        if (freePlanLimitGuard.isHeldToFreePlanLimits(ownerId)) {
+            freePlanLimitGuard.requireRoomForOneMore(FreePlanLimit.PROFILES, profileCount);
+        }
+        requireRoomForOneMore(FairUseLimit.PROFILES, profileCount);
     }
 
     /**
-     * Refuses one more workspace (environment) when the account is already at its cap.
+     * Refuses one more workspace (environment) when the account is already at its cap - the
+     * free plan's when it is not premium, the Fair Use Policy's otherwise.
      *
      * @param ownerId identifier of the account
-     * @throws FairUseLimitReachedException when the account holds the maximum or more
-     * @throws ResourceNotFoundException    when the account does not exist
+     * @throws FreePlanLimitReachedException when a free account holds the free maximum or more
+     * @throws FairUseLimitReachedException  when the account holds the fair use maximum or more
+     * @throws ResourceNotFoundException     when the account does not exist
      */
     public void requireRoomForAnotherWorkspace(final UUID ownerId) {
         lockAccountAgainstConcurrentGrowth(ownerId);
-        requireRoomForOneMore(
-                FairUseLimit.WORKSPACES, environmentRepository.countByOwnerId(ownerId));
+        final long workspaceCount = environmentRepository.countByOwnerId(ownerId);
+        if (freePlanLimitGuard.isHeldToFreePlanLimits(ownerId)) {
+            freePlanLimitGuard.requireRoomForOneMore(FreePlanLimit.WORKSPACES, workspaceCount);
+        }
+        requireRoomForOneMore(FairUseLimit.WORKSPACES, workspaceCount);
     }
 
     /**
@@ -149,14 +171,20 @@ public class FairUseLimitGuard {
      *
      * @param ownerId      identifier of the account
      * @param countsBefore what {@link #captureCountsBeforeBatch(UUID)} returned for this push
-     * @throws FairUseLimitReachedException naming the first cap in breach, checked in the order
-     *                                      profiles, workspaces, links per workspace
+     * @throws FreePlanLimitReachedException when the account is not premium and the batch grew
+     *                                       its profiles or workspaces past the free plan's
+     *                                       limit - checked before any Fair Use cap
+     * @throws FairUseLimitReachedException  naming the first cap in breach, checked in the order
+     *                                       profiles, workspaces, links per workspace
      */
     public void requireBatchDidNotGrowPastCaps(
             final UUID ownerId,
             final FairUseCounts countsBefore) {
 
         final FairUseCounts countsAfter = countEverything(ownerId);
+        if (freePlanLimitGuard.isHeldToFreePlanLimits(ownerId)) {
+            refuseGrowthPastFreePlanLimits(ownerId, countsBefore, countsAfter);
+        }
         refuseGrowthPastCap(FairUseLimit.PROFILES,
                 countsBefore.profileCount(), countsAfter.profileCount(), ownerId);
         refuseGrowthPastCap(FairUseLimit.WORKSPACES,
@@ -164,6 +192,25 @@ public class FairUseLimitGuard {
         countsAfter.linkCountsByWorkspaceId().forEach((workspaceId, linkCountAfter) ->
                 refuseGrowthPastCap(FairUseLimit.LINKS_PER_WORKSPACE,
                         countsBefore.linkCountOf(workspaceId), linkCountAfter, ownerId));
+    }
+
+    /**
+     * Refuses a batch that grew a free account's profiles or workspaces past the free plan.
+     *
+     * @param ownerId      identifier of the account
+     * @param countsBefore the counts before the batch
+     * @param countsAfter  the counts after it
+     * @throws FreePlanLimitReachedException naming the first limit in breach, profiles first
+     */
+    private void refuseGrowthPastFreePlanLimits(
+            final UUID ownerId,
+            final FairUseCounts countsBefore,
+            final FairUseCounts countsAfter) {
+
+        freePlanLimitGuard.refuseGrowthPastLimit(FreePlanLimit.PROFILES,
+                countsBefore.profileCount(), countsAfter.profileCount(), ownerId);
+        freePlanLimitGuard.refuseGrowthPastLimit(FreePlanLimit.WORKSPACES,
+                countsBefore.workspaceCount(), countsAfter.workspaceCount(), ownerId);
     }
 
     /**

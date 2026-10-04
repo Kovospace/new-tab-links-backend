@@ -181,6 +181,16 @@ Which file holds which concern, and which endpoint lives in which controller:
   fails whole with 409 only when it leaves a collection above its cap *and* larger than it
   started. Every check locks the `app_user` row for the transaction. Data over a cap is never
   deleted by the guard, and edits and deletions of it keep working.
+- **Free plan limits refuse growth the same way** (`FreePlanLimitGuard`): 2 workspaces,
+  1 profile and 5 synchronised installations for an account that is not premium *right now*
+  (`EntitlementStandingService.isAccountProNow`, never a stored flag); a premium account gets
+  the Fair Use caps instead. Profiles and workspaces are asked by `FairUseLimitGuard` before its
+  own caps (free wins, it is lower); 409 `FREE_PLAN_LIMIT_REACHED`, `limit`
+  `WORKSPACES`/`PROFILES`/`DEVICES`. A downgraded account keeps everything over a limit and can
+  edit, delete and sync it. A synchronised installation is a `user_device` row with an
+  `installation_id` - the website's sign-ins report none and are never counted; every way an
+  installation lands on a row (`UserDeviceService`: new installation, claim of a name-only row,
+  a take-over that adds one) is guarded, and a known installation always signs in again.
 - **The sync push accepts client-assigned identifiers**, the one place anything does. It is safe
   because every lookup is still ownership-scoped: an identifier already taken by another account
   is not an error but a remap, stored under a server-generated identifier and reported back.
@@ -289,7 +299,8 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   username as its subject; a user token carries neither. `AuthenticatedUserProvider` refuses a
   subject that is not a UUID, which is what stops an operator from acting *as* a user. Do not
   "fix" that by giving admin tokens a UUID subject.
-- **No device limit, and no general rate limiting.** Two things exist and neither is that: the
+- **No general rate limiting.** The only device limit is the free plan's (5 synchronised
+  installations, see Domain notes). Two other things exist and neither is rate limiting: the
   per-account failed-login counter (brute-force protection, unrelated to device counts — do not
   remove it), and the visitor token, which meters only registration and the username lookup.
   Deliberately **not** per IP address: carrier-grade NAT puts whole neighbourhoods behind one
@@ -327,9 +338,9 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
 - **Payments are Creem, behind one port, and in test mode only so far.** The webhook
   (`/api/v1/payments/webhooks/creem`) writes `user_entitlement`; it is read only for display -
   `premium` on the account DTO (so also `owner.premium` in the sync snapshot) and
-  `GET /api/v1/payments/subscription`. No plan limit is enforced (the free plan's 2 workspaces,
-  1 profile and 5 devices exist only on the website; the Fair Use caps apply to every plan
-  alike and are not plan limits), account deletion is not blocked by a
+  `GET /api/v1/payments/subscription`, and by `FreePlanLimitGuard`, which holds a non-premium
+  account to the free plan's 2 workspaces, 1 profile and 5 synchronised installations (the Fair
+  Use caps apply to every plan alike). Account deletion is not blocked by a
   live subscription, and there is no cancel or refund endpoint - which is
   why that endpoint's `cancellable`/`refundable` are always false. The rules the webhook code must keep
   are in the Javadoc of `CreemWebhookController`, `PaymentWebhookClaimStore` and

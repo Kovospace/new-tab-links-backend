@@ -3,7 +3,9 @@ package com.kovospace.newtablinks.user.services;
 import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
+import com.kovospace.newtablinks.common.exceptions.FreePlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.services.FreePlanLimitGuard;
 import com.kovospace.newtablinks.user.dtos.UserDeviceDto;
 import com.kovospace.newtablinks.user.models.UserDeviceEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
@@ -22,6 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The list of places an account has been used, and the ability to sign one of them out.
  *
+ * <p>A device carrying an installation identifier is a <em>synchronised installation</em> - an
+ * extension that reported who it is - and a free account may hold only as many of those as its
+ * plan allows ({@link FreePlanLimitGuard}). Every way an installation identifier lands on a row
+ * for the first time is guarded: a new installation, an installation claiming a row recorded by
+ * name, and a take-over that would leave one more installation than before. A device recorded
+ * without one - the website's own sign-in - is never counted and never refused.</p>
+ *
  * @since 0.0.3
  */
 @Service
@@ -32,19 +41,23 @@ public class UserDeviceService {
 
     private final UserDeviceRepository userDeviceRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final FreePlanLimitGuard freePlanLimitGuard;
 
     /**
      * Creates the service.
      *
      * @param userDeviceRepository   stores devices
      * @param refreshTokenRepository used to tell a live device from a historical one
+     * @param freePlanLimitGuard     refuses a free account an installation beyond its plan
      */
     public UserDeviceService(
             final UserDeviceRepository userDeviceRepository,
-            final RefreshTokenRepository refreshTokenRepository) {
+            final RefreshTokenRepository refreshTokenRepository,
+            final FreePlanLimitGuard freePlanLimitGuard) {
 
         this.userDeviceRepository = userDeviceRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.freePlanLimitGuard = freePlanLimitGuard;
     }
 
     /**
@@ -58,6 +71,9 @@ public class UserDeviceService {
      * @param account           account signing in
      * @param clientDescription where the sign-in is coming from
      * @return the managed device
+     * @throws FreePlanLimitReachedException when an installation new to a free account would
+     *                                       take it past its plan's device limit; the caller's
+     *                                       transaction rolls back and no tokens are issued
      */
     @Transactional
     public UserDeviceEntity recordDeviceUse(
@@ -84,10 +100,16 @@ public class UserDeviceService {
      * device recorded before installations were reported survives, rather than turning into a
      * duplicate beside itself. Or it is genuinely new.</p>
      *
+     * <p>The last two cases add a synchronised installation to the account, so both are refused
+     * to a free account already at its limit. The first is not: a known installation keeps
+     * signing in however many the account holds.</p>
+     *
      * @param account           account signing in
      * @param clientDescription where the sign-in is coming from, installation included
      * @param now               moment of this sign-in
      * @return the managed device
+     * @throws FreePlanLimitReachedException when the installation is new and a free account is
+     *                                       already at its device limit
      */
     private UserDeviceEntity findOrRecordByInstallation(
             final UserEntity account,
@@ -104,8 +126,10 @@ public class UserDeviceService {
             return device;
         }
 
-        final Optional<UserDeviceEntity> unclaimedMatch = findByName(account, clientDescription)
-                .filter(candidate -> candidate.getInstallationId() == null);
+        freePlanLimitGuard.requireRoomForAnotherSynchronisedInstallation(account.getId());
+
+        final Optional<UserDeviceEntity> unclaimedMatch =
+                findUnattributedByName(account, clientDescription);
 
         if (unclaimedMatch.isPresent()) {
             final UserDeviceEntity device = unclaimedMatch.get();
@@ -145,7 +169,7 @@ public class UserDeviceService {
             final ClientDescriptionDto clientDescription,
             final Instant now) {
 
-        return findByName(account, clientDescription).orElseGet(() -> {
+        return findUnattributedByName(account, clientDescription).orElseGet(() -> {
             LOGGER.info("Account {} signed in from a new device: {} / {}",
                     account.getId(),
                     clientDescription.deviceName(),
@@ -160,17 +184,20 @@ public class UserDeviceService {
     }
 
     /**
-     * Looks a device up by the pair of names a client sends.
+     * Looks up a device no installation has claimed, by the pair of names a client sends.
+     *
+     * <p>A row an installation holds is never matched by name: it belongs to that installation,
+     * and several of them may carry identical names.</p>
      *
      * @param account           account signing in
      * @param clientDescription where the sign-in is coming from
-     * @return the device, or an empty optional when no row carries those names
+     * @return the device, or an empty optional when no unattributed row carries those names
      */
-    private Optional<UserDeviceEntity> findByName(
+    private Optional<UserDeviceEntity> findUnattributedByName(
             final UserEntity account,
             final ClientDescriptionDto clientDescription) {
 
-        return userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
+        return userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
                 account.getId(),
                 clientDescription.deviceName(),
                 clientDescription.browserName());
@@ -253,8 +280,15 @@ public class UserDeviceService {
      *
      * @param targetDeviceId identifier of the device to take over
      * @param userId         identifier of the account that must own it
+     * <p>Normally the count of synchronised installations does not change: the taker's own row
+     * goes as the target gains its identifier. Only when the taker has no row of its own and
+     * the target carried no installation does the account gain one, and only then is the free
+     * plan's device limit asked.</p>
+     *
      * @param installationId installation making the request, taken from its header
-     * @throws ResourceNotFoundException when the target does not exist or is somebody else's
+     * @throws ResourceNotFoundException     when the target does not exist or is somebody else's
+     * @throws FreePlanLimitReachedException when the take-over would add an installation to a free
+     *                                       account already at its device limit
      */
     @Transactional
     public void takeOverDevice(
@@ -276,6 +310,10 @@ public class UserDeviceService {
 
         final Optional<UserDeviceEntity> takersOwnRow =
                 userDeviceRepository.findByUserIdAndInstallationId(userId, installationId);
+
+        if (takersOwnRow.isEmpty() && target.getInstallationId() == null) {
+            freePlanLimitGuard.requireRoomForAnotherSynchronisedInstallation(userId);
+        }
 
         refreshTokenRepository.revokeAllLiveTokensOfDevice(target.getId(), Instant.now());
 

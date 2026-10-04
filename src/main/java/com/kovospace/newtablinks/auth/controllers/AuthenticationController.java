@@ -248,6 +248,11 @@ public class AuthenticationController {
     @ApiResponse(responseCode = "200", description = "The issued token pair")
     @ApiResponse(responseCode = "401", description = "The credentials were refused",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "A free account already has as many "
+            + "synchronised installations as its plan allows, and this request came from an "
+            + "installation it does not know yet (X-Installation-Id); no tokens were issued. Code "
+            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto login(
             @Valid @RequestBody final LoginRequestDto loginRequest,
             @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
@@ -307,6 +312,11 @@ public class AuthenticationController {
     @ApiResponse(responseCode = "200", description = "The issued token pair")
     @ApiResponse(responseCode = "400", description = "The code is unknown, spent, or expired",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "A free account already has as many "
+            + "synchronised installations as its plan allows, and this request came from an "
+            + "installation it does not know yet (X-Installation-Id); no tokens were issued. Code "
+            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto exchangeSessionHandoffCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,
             @RequestHeader(value = DEVICE_NAME_HEADER, required = false) final String deviceName,
@@ -357,6 +367,11 @@ public class AuthenticationController {
                     + "Punctuation and letter case are ignored.")
     @ApiResponse(responseCode = "200", description = "The issued token pair")
     @ApiResponse(responseCode = "400", description = "The code is unknown, spent, or expired",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "A free account already has as many "
+            + "synchronised installations as its plan allows, and this request came from an "
+            + "installation it does not know yet (X-Installation-Id); no tokens were issued. Code "
+            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public TokenPairDto exchangeExtensionConnectCode(
             @Valid @RequestBody final SingleUseCodeRedemptionRequestDto redemptionRequest,

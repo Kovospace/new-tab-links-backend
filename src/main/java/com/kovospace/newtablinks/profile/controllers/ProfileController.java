@@ -93,8 +93,10 @@ public class ProfileController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The owning user does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "The account already has as many profiles as the Fair Use Policy allows - code FAIR_USE_LIMIT_REACHED, "
-            + "limit PROFILES, and the cap's maximum",
+    @ApiResponse(responseCode = "409", description = "The account already has as many profiles "
+            + "as it may: a free account as many as the free plan allows (code "
+            + "FREE_PLAN_LIMIT_REACHED), a premium one as many as the Fair Use Policy allows "
+            + "(code FAIR_USE_LIMIT_REACHED); limit PROFILES and the maximum either way",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<ProfileDto> createProfile(
             @Valid @RequestBody final ProfileSaveRequestDto saveRequest) {

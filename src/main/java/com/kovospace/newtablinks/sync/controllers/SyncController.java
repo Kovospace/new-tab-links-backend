@@ -86,7 +86,9 @@ public class SyncController {
                     + "something already gone does nothing. The Fair Use Policy is judged on "
                     + "the state after the whole batch: a batch that leaves profiles, workspaces "
                     + "or the links of one workspace above their cap and more numerous than "
-                    + "before is refused entirely with 409. Closed-tab history never refuses; "
+                    + "before is refused entirely with 409; for a free account the free plan's "
+                    + "lower profile and workspace limits are judged the same way, first. "
+                    + "Closed-tab history never refuses; "
                     + "its oldest entries beyond the cap are deleted.")
     @ApiResponse(responseCode = "200", description = "The batch was applied")
     @ApiResponse(responseCode = "400", description = "The batch was not well formed",
@@ -94,8 +96,10 @@ public class SyncController {
     @ApiResponse(responseCode = "401", description = "No valid access token was presented",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "409", description = "The batch would grow the account past a "
-            + "Fair Use Policy cap; nothing was applied. Code FAIR_USE_LIMIT_REACHED, limit "
-            + "PROFILES, WORKSPACES or LINKS_PER_WORKSPACE, and the cap's maximum",
+            + "cap; nothing was applied. A free account past the free plan: code "
+            + "FREE_PLAN_LIMIT_REACHED, limit PROFILES or WORKSPACES. Any account past the Fair "
+            + "Use Policy: code FAIR_USE_LIMIT_REACHED, limit PROFILES, WORKSPACES or "
+            + "LINKS_PER_WORKSPACE. The maximum either way",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public SyncPushResultDto pushMyChanges(
             @Valid @RequestBody final SyncPushRequestDto pushRequest) {

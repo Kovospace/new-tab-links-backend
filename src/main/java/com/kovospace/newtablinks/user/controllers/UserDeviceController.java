@@ -120,6 +120,11 @@ public class UserDeviceController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No such device belongs to this account",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The take-over would give a free account one "
+            + "more synchronised installation than its plan allows - only possible when this "
+            + "installation has no device of its own and the target carries none. Code "
+            + "FREE_PLAN_LIMIT_REACHED, limit DEVICES, and the plan's maximum",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> takeOverDevice(
             @PathVariable final UUID deviceId,
             @RequestHeader(value = ClientRequestHeaders.INSTALLATION_ID, required = false)
