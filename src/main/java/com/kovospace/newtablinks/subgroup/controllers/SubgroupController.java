@@ -95,6 +95,11 @@ public class SubgroupController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The owning group does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The group's workspace holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE), or the group already holds as many subgroups as the Fair Use Policy allows (limit SUBGROUPS_PER_GROUP). "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<SubgroupDto> createSubgroup(
             @Valid @RequestBody final SubgroupSaveRequestDto saveRequest) {
 
@@ -117,6 +122,11 @@ public class SubgroupController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No subgroup has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public SubgroupDto updateSubgroup(
             @PathVariable final UUID subgroupId,
             @Valid @RequestBody final SubgroupSaveRequestDto saveRequest) {
@@ -135,6 +145,11 @@ public class SubgroupController {
     @Operation(summary = "Delete a subgroup")
     @ApiResponse(responseCode = "204", description = "The subgroup was deleted")
     @ApiResponse(responseCode = "404", description = "No subgroup has that identifier",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteSubgroup(@PathVariable final UUID subgroupId) {
         subgroupService.deleteSubgroup(

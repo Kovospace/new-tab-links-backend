@@ -1,5 +1,10 @@
 package com.kovospace.newtablinks.sync.services;
 
+import com.kovospace.newtablinks.closedtab.services.ClosedTabSynchronizationService;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
+import com.kovospace.newtablinks.common.models.PlanLimit;
+import com.kovospace.newtablinks.common.models.PushLimitBaseline;
+import com.kovospace.newtablinks.common.services.SyncPushLimitGuard;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationDto;
 import com.kovospace.newtablinks.sync.dtos.SyncPushRequestDto;
@@ -33,6 +38,16 @@ import org.springframework.transaction.annotation.Transactional;
  * all-or-nothing at the level of the transaction, so a genuine failure leaves the account exactly
  * as it was.</p>
  *
+ * <p>The account's plan is judged on the batch as a whole, not per operation
+ * ({@link SyncPushLimitGuard}): the account is locked and its limits and container sizes recorded
+ * before the first operation, every profile and workspace an operation writes into is noted in
+ * the {@link SyncOperationContext}, and after the last operation a batch that wrote into a profile
+ * or workspace holding no slot, or grew a container past its cap, fails entirely with
+ * {@link PlanLimitReachedException} (HTTP 409), leaving the account as it was. Per operation would
+ * refuse a device that replaces a record at a limit, since a device sends its upserts before its
+ * deletions. Closed-tab history never fails a push: the oldest entries beyond the plan's limit
+ * are deleted instead.</p>
+ *
  * @since 0.0.6
  */
 @Service
@@ -44,20 +59,28 @@ public class SyncPushService {
             new EnumMap<>(SyncEntityKind.class);
 
     private final UserDataChangePublisher userDataChangePublisher;
+    private final SyncPushLimitGuard syncPushLimitGuard;
+    private final ClosedTabSynchronizationService closedTabSynchronizationService;
 
     /**
      * Creates the service.
      *
      * @param appliers                every applier Spring found, one per kind of record
-     * @param userDataChangePublisher announces the change to the user's other browsers
+     * @param userDataChangePublisher         announces the change to the user's other browsers
+     * @param syncPushLimitGuard              refuses a batch whose end state the plan forbids
+     * @param closedTabSynchronizationService trims closed-tab history to the plan's limit
      */
     public SyncPushService(
             final List<SyncOperationApplier> appliers,
-            final UserDataChangePublisher userDataChangePublisher) {
+            final UserDataChangePublisher userDataChangePublisher,
+            final SyncPushLimitGuard syncPushLimitGuard,
+            final ClosedTabSynchronizationService closedTabSynchronizationService) {
 
         appliers.forEach(applier ->
                 appliersByEntityKind.put(applier.supportedEntityKind(), applier));
         this.userDataChangePublisher = userDataChangePublisher;
+        this.syncPushLimitGuard = syncPushLimitGuard;
+        this.closedTabSynchronizationService = closedTabSynchronizationService;
     }
 
     /**
@@ -73,6 +96,9 @@ public class SyncPushService {
      * @param pushRequest the batch to apply
      * @param ownerId     identifier of the user it belongs to, taken from the access token
      * @return the identifiers that had to be remapped and the operations that were refused
+     * @throws PlanLimitReachedException when the batch wrote into a profile or workspace that
+     *                                   holds no slot at its end, or grew a container past its
+     *                                   cap; nothing is applied
      */
     @Transactional
     public SyncPushResultDto applyPushedOperations(
@@ -83,13 +109,19 @@ public class SyncPushService {
         final SyncOperationContext context = new SyncOperationContext(ownerId);
         final List<SyncRejectedOperationDto> rejectedOperations = new ArrayList<>();
 
-        if (!operations.isEmpty()) {
-            userDataChangePublisher.publishChangeFor(ownerId, pushRequest.originDeviceId());
+        if (operations.isEmpty()) {
+            return new SyncPushResultDto(Instant.now(), List.of(), List.of());
         }
+        userDataChangePublisher.publishChangeFor(ownerId, pushRequest.originDeviceId());
+        final PushLimitBaseline baseline = syncPushLimitGuard.captureBaselineBeforeBatch(ownerId);
 
         for (int index = 0; index < operations.size(); index++) {
             applyOneOperation(operations.get(index), index, context, rejectedOperations);
         }
+
+        closedTabSynchronizationService.trimHistoryToPlanLimit(ownerId,
+                baseline.limits().maximumFor(PlanLimit.CLOSED_TABS), baseline.closedTabCount());
+        syncPushLimitGuard.requireEndStateWithinLimits(ownerId, baseline, context.getFootprint());
 
         LOGGER.debug("Applied {} pushed operations for account {}, {} remapped, {} refused",
                 operations.size(), ownerId, context.getRemappings().size(),

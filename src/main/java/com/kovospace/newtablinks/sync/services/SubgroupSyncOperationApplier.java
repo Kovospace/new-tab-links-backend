@@ -67,6 +67,7 @@ public class SubgroupSyncOperationApplier implements SyncOperationApplier {
                 operation.color(),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
+        context.recordWriteIntoWorkspace(parentGroup.getEnvironment().getId());
         return subgroupSynchronizationService.upsertSubgroupFromPushedOperation(
                         context.resolveStoredIdentifier(operation.id()), parentGroup, values)
                 .getId();
@@ -80,8 +81,13 @@ public class SubgroupSyncOperationApplier implements SyncOperationApplier {
             final SyncOperationDto operation,
             final SyncOperationContext context) {
 
+        final UUID storedSubgroupId = context.resolveStoredIdentifier(operation.id());
+        subgroupSynchronizationService
+                .findSubgroupEntityForOwner(storedSubgroupId, context.getOwnerId())
+                .ifPresent(subgroup -> context.recordWriteIntoWorkspace(
+                        subgroup.getParentGroup().getEnvironment().getId()));
         subgroupSynchronizationService.deleteSubgroupFromPushedOperationIfPresent(
-                context.resolveStoredIdentifier(operation.id()), context.getOwnerId());
+                storedSubgroupId, context.getOwnerId());
     }
 
     /**

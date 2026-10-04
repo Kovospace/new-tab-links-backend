@@ -4,6 +4,7 @@ import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -48,4 +49,30 @@ public interface ProfileRepository extends JpaRepository<ProfileEntity, UUID> {
     @Query("select max(profile.position) from ProfileEntity profile "
             + "where profile.owner.id = :ownerId")
     Integer findHighestPositionByOwnerId(@Param("ownerId") UUID ownerId);
+
+    /**
+     * Counts an account's profiles.
+     *
+     * @param ownerId identifier of the owning user
+     * @return how many profiles the account has
+     * @since 0.0.16
+     */
+    long countByOwnerId(UUID ownerId);
+
+    /**
+     * Lists the identifiers of an account's first profiles, in synchronisation slot order: the
+     * order the server first stored them, ties broken by identifier.
+     *
+     * <p>The identifier tie-break compares as PostgreSQL orders {@code uuid} - byte by byte, the
+     * same order as the lowercase text form - which is what a client sorting the listed
+     * {@code createdAt} and {@code id} as strings reproduces.</p>
+     *
+     * @param ownerId   identifier of the owning user
+     * @param slotCount how many of the first profiles to return
+     * @return at most {@code slotCount} identifiers, first stored first
+     * @since 0.0.18
+     */
+    @Query("select profile.id from ProfileEntity profile where profile.owner.id = :ownerId "
+            + "order by profile.createdAt asc, profile.id asc")
+    List<UUID> findIdsOfOwnerInSlotOrder(@Param("ownerId") UUID ownerId, Limit slotCount);
 }

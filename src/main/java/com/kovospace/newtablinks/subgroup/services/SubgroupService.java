@@ -1,7 +1,9 @@
 package com.kovospace.newtablinks.subgroup.services;
 
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.common.services.HierarchyDeletionService;
+import com.kovospace.newtablinks.common.services.PlanLimitGuard;
 import com.kovospace.newtablinks.common.utils.DisplayPositionCalculator;
 import com.kovospace.newtablinks.group.models.GroupEntity;
 import com.kovospace.newtablinks.group.services.GroupService;
@@ -34,6 +36,7 @@ public class SubgroupService {
     private final GroupService groupService;
     private final UserDataChangePublisher userDataChangePublisher;
     private final HierarchyDeletionService hierarchyDeletionService;
+    private final PlanLimitGuard planLimitGuard;
 
     /**
      * Creates the service.
@@ -43,19 +46,22 @@ public class SubgroupService {
      * @param groupService             resolves the owning group
      * @param userDataChangePublisher  announces changes to the user's other browsers
      * @param hierarchyDeletionService removes a record together with everything beneath it
+     * @param planLimitGuard           refuses writes the account's plan does not allow
      */
     public SubgroupService(
             final SubgroupRepository subgroupRepository,
             final SubgroupMapper subgroupMapper,
             final GroupService groupService,
             final UserDataChangePublisher userDataChangePublisher,
-            final HierarchyDeletionService hierarchyDeletionService) {
+            final HierarchyDeletionService hierarchyDeletionService,
+            final PlanLimitGuard planLimitGuard) {
 
         this.subgroupRepository = subgroupRepository;
         this.subgroupMapper = subgroupMapper;
         this.groupService = groupService;
         this.userDataChangePublisher = userDataChangePublisher;
         this.hierarchyDeletionService = hierarchyDeletionService;
+        this.planLimitGuard = planLimitGuard;
     }
 
     /**
@@ -94,7 +100,10 @@ public class SubgroupService {
      * @param saveRequest the subgroup to create
      * @param ownerId     identifier of the user that must own the target group
      * @return the created subgroup, including its assigned identifier and position
-     * @throws ResourceNotFoundException when the group does not exist or is not theirs
+     * @throws ResourceNotFoundException  when the group does not exist or is not theirs
+     * @throws PlanLimitReachedException when the group's workspace holds no synchronisation
+     *                                    slot, or the group already holds as many subgroups as
+     *                                    the plan allows
      */
     @Transactional
     public SubgroupDto createSubgroup(
@@ -103,6 +112,8 @@ public class SubgroupService {
 
         final GroupEntity parentGroup =
                 groupService.getRequiredGroupEntity(saveRequest.parentGroupId(), ownerId);
+        planLimitGuard.requireRoomForAnotherSubgroup(
+                parentGroup.getEnvironment().toWorkspaceLocation(), parentGroup.getId());
 
         final int position = DisplayPositionCalculator.calculatePositionForAppendedItem(
                 subgroupRepository.findHighestPositionByGroupId(parentGroup.getId()));
@@ -130,6 +141,7 @@ public class SubgroupService {
      * @param ownerId     identifier of the user that must own it
      * @return the updated subgroup
      * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     * @throws PlanLimitReachedException when the workspace holds no synchronisation slot
      */
     @Transactional
     public SubgroupDto updateSubgroup(
@@ -138,6 +150,8 @@ public class SubgroupService {
             final UUID ownerId) {
 
         final SubgroupEntity existingSubgroup = getRequiredSubgroupEntity(subgroupId, ownerId);
+        planLimitGuard.requireWorkspaceHoldsSlot(
+                existingSubgroup.getParentGroup().getEnvironment().toWorkspaceLocation());
         existingSubgroup.setName(saveRequest.name());
         existingSubgroup.setDescription(saveRequest.description());
         existingSubgroup.setCollapsed(saveRequest.collapsed());
@@ -154,11 +168,14 @@ public class SubgroupService {
      * @param subgroupId identifier of the subgroup to delete
      * @param ownerId    identifier of the user that must own it
      * @throws ResourceNotFoundException when it does not exist or belongs to somebody else
+     * @throws PlanLimitReachedException when the workspace holds no synchronisation slot
      */
     @Transactional
     public void deleteSubgroup(final UUID subgroupId, final UUID ownerId) {
-        hierarchyDeletionService.deleteSubgroupWithDescendants(
-                getRequiredSubgroupEntity(subgroupId, ownerId));
+        final SubgroupEntity subgroup = getRequiredSubgroupEntity(subgroupId, ownerId);
+        planLimitGuard.requireWorkspaceHoldsSlot(
+                subgroup.getParentGroup().getEnvironment().toWorkspaceLocation());
+        hierarchyDeletionService.deleteSubgroupWithDescendants(subgroup);
         userDataChangePublisher.publishChangeFor(ownerId);
     }
 

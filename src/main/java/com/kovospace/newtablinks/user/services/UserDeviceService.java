@@ -3,6 +3,7 @@ package com.kovospace.newtablinks.user.services;
 import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.user.dtos.UserDeviceDto;
 import com.kovospace.newtablinks.user.models.UserDeviceEntity;
@@ -22,6 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The list of places an account has been used, and the ability to sign one of them out.
  *
+ * <p>A device carrying an installation identifier is an extension installation, and an account
+ * may have only as many of those signed in at once as its plan allows
+ * ({@link SignedInInstallationLimitService}): a sign-in of an installation not already signed in
+ * is refused past it. Device rows themselves are history and are never counted. A device
+ * recorded without an installation - the website's own sign-in - is never counted and never
+ * refused.</p>
+ *
  * @since 0.0.3
  */
 @Service
@@ -32,19 +40,27 @@ public class UserDeviceService {
 
     private final UserDeviceRepository userDeviceRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final SignedInInstallationLimitService signedInInstallationLimitService;
+    private final DeviceInventoryService deviceInventoryService;
 
     /**
      * Creates the service.
      *
      * @param userDeviceRepository   stores devices
      * @param refreshTokenRepository used to tell a live device from a historical one
+     * @param signedInInstallationLimitService refuses a sign-in beyond the plan's installations
+     * @param deviceInventoryService           summarises what each installation reported
      */
     public UserDeviceService(
             final UserDeviceRepository userDeviceRepository,
-            final RefreshTokenRepository refreshTokenRepository) {
+            final RefreshTokenRepository refreshTokenRepository,
+            final SignedInInstallationLimitService signedInInstallationLimitService,
+            final DeviceInventoryService deviceInventoryService) {
 
         this.userDeviceRepository = userDeviceRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.signedInInstallationLimitService = signedInInstallationLimitService;
+        this.deviceInventoryService = deviceInventoryService;
     }
 
     /**
@@ -58,6 +74,9 @@ public class UserDeviceService {
      * @param account           account signing in
      * @param clientDescription where the sign-in is coming from
      * @return the managed device
+     * @throws PlanLimitReachedException when an installation not signed in already would take the
+     *                                   account past its plan's signed-in installations; the
+     *                                   caller's transaction rolls back and no tokens are issued
      */
     @Transactional
     public UserDeviceEntity recordDeviceUse(
@@ -84,6 +103,12 @@ public class UserDeviceService {
      * device recorded before installations were reported survives, rather than turning into a
      * duplicate beside itself. Or it is genuinely new.</p>
      *
+     * <p>Each case then asks whether the installation may sign in at all: a known one through
+     * {@link SignedInInstallationLimitService#requireRoomToSignInAgain} (passes when it is in
+     * session already), the other two through
+     * {@link SignedInInstallationLimitService#requireRoomForNewInstallation} (always counted - a
+     * claimed row's live session is the website's).</p>
+     *
      * @param account           account signing in
      * @param clientDescription where the sign-in is coming from, installation included
      * @param now               moment of this sign-in
@@ -101,15 +126,17 @@ public class UserDeviceService {
         if (knownInstallation.isPresent()) {
             final UserDeviceEntity device = knownInstallation.get();
             device.relabel(clientDescription.deviceName(), clientDescription.browserName());
+            signedInInstallationLimitService.requireRoomToSignInAgain(device);
             return device;
         }
 
-        final Optional<UserDeviceEntity> unclaimedMatch = findByName(account, clientDescription)
-                .filter(candidate -> candidate.getInstallationId() == null);
+        final Optional<UserDeviceEntity> unclaimedMatch =
+                findUnattributedByName(account, clientDescription);
 
         if (unclaimedMatch.isPresent()) {
             final UserDeviceEntity device = unclaimedMatch.get();
             device.attributeToInstallation(clientDescription.installationId());
+            signedInInstallationLimitService.requireRoomForNewInstallation(device);
             LOGGER.info("Account {} claimed existing device {} for installation {}",
                     account.getId(), device.getId(), clientDescription.installationId());
             return device;
@@ -121,12 +148,14 @@ public class UserDeviceService {
                 clientDescription.deviceName(),
                 clientDescription.browserName());
 
-        return userDeviceRepository.save(new UserDeviceEntity(
+        final UserDeviceEntity newDevice = userDeviceRepository.save(new UserDeviceEntity(
                 account,
                 clientDescription.deviceName(),
                 clientDescription.browserName(),
                 clientDescription.installationId(),
                 now));
+        signedInInstallationLimitService.requireRoomForNewInstallation(newDevice);
+        return newDevice;
     }
 
     /**
@@ -145,7 +174,7 @@ public class UserDeviceService {
             final ClientDescriptionDto clientDescription,
             final Instant now) {
 
-        return findByName(account, clientDescription).orElseGet(() -> {
+        return findUnattributedByName(account, clientDescription).orElseGet(() -> {
             LOGGER.info("Account {} signed in from a new device: {} / {}",
                     account.getId(),
                     clientDescription.deviceName(),
@@ -160,17 +189,20 @@ public class UserDeviceService {
     }
 
     /**
-     * Looks a device up by the pair of names a client sends.
+     * Looks up a device no installation has claimed, by the pair of names a client sends.
+     *
+     * <p>A row an installation holds is never matched by name: it belongs to that installation,
+     * and several of them may carry identical names.</p>
      *
      * @param account           account signing in
      * @param clientDescription where the sign-in is coming from
-     * @return the device, or an empty optional when no row carries those names
+     * @return the device, or an empty optional when no unattributed row carries those names
      */
-    private Optional<UserDeviceEntity> findByName(
+    private Optional<UserDeviceEntity> findUnattributedByName(
             final UserEntity account,
             final ClientDescriptionDto clientDescription) {
 
-        return userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
+        return userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
                 account.getId(),
                 clientDescription.deviceName(),
                 clientDescription.browserName());
@@ -203,7 +235,9 @@ public class UserDeviceService {
                         device.getBrowserName(),
                         device.getCreatedAt(),
                         device.getLastUsedAt(),
-                        devicesWithLiveTokens.contains(device.getId())))
+                        devicesWithLiveTokens.contains(device.getId()),
+                        deviceInventoryService.summariseSyncOf(device),
+                        device.getInventoryReportedAt()))
                 .toList();
     }
 
@@ -251,6 +285,11 @@ public class UserDeviceService {
      * assigning it any earlier raises a duplicate key. That is what happens by default, because
      * Hibernate orders every update ahead of every delete when it flushes.</p>
      *
+     * <p>No plan limit is asked: a take-over cannot add a signed-in installation. The target's
+     * sessions are revoked, and the only ones it gains are the taker's own, moved from a row that
+     * was already counted. The target takes the taker's inventory report over, because a report
+     * describes an installation, not a row.</p>
+     *
      * @param targetDeviceId identifier of the device to take over
      * @param userId         identifier of the account that must own it
      * @param installationId installation making the request, taken from its header
@@ -278,6 +317,7 @@ public class UserDeviceService {
                 userDeviceRepository.findByUserIdAndInstallationId(userId, installationId);
 
         refreshTokenRepository.revokeAllLiveTokensOfDevice(target.getId(), Instant.now());
+        target.takeInventoryOver(takersOwnRow.orElse(null));
 
         takersOwnRow.ifPresent(surrendered -> {
             refreshTokenRepository.findAllByDeviceId(surrendered.getId())

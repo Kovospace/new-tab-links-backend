@@ -9,6 +9,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * One place a user has signed in from: a machine and a browser on it.
@@ -88,6 +90,19 @@ public class UserDeviceEntity extends AbstractAuditableEntity {
      */
     @Column(name = "last_used_at", nullable = false)
     private Instant lastUsedAt;
+
+    /**
+     * What the installation last reported holding, as JSON - profiles and workspaces with their
+     * names, sync states and counts; {@code null} until it reports. Written and read only through
+     * {@code DeviceInventoryService}, which validates it first.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "inventory")
+    private String inventoryJson;
+
+    /** When {@link #inventoryJson} was received; {@code null} exactly when it is. */
+    @Column(name = "inventory_reported_at")
+    private Instant inventoryReportedAt;
 
     /**
      * Required by JPA.
@@ -214,5 +229,53 @@ public class UserDeviceEntity extends AbstractAuditableEntity {
      */
     public void markUsedAt(final Instant lastUsedAt) {
         this.lastUsedAt = lastUsedAt;
+    }
+
+    /**
+     * Returns what the installation last reported holding, as the JSON it was stored as.
+     *
+     * @return the report, or {@code null} when it has never reported
+     * @since 0.0.18
+     */
+    public String getInventoryJson() {
+        return inventoryJson;
+    }
+
+    /**
+     * Returns when the installation last reported what it holds.
+     *
+     * @return the moment, or {@code null} when it has never reported
+     * @since 0.0.18
+     */
+    public Instant getInventoryReportedAt() {
+        return inventoryReportedAt;
+    }
+
+    /**
+     * Replaces the installation's inventory report with a newer one.
+     *
+     * @param newInventoryJson the report, already validated and serialised
+     * @param receivedAt       when it was received
+     * @since 0.0.18
+     */
+    public void replaceInventory(final String newInventoryJson, final Instant receivedAt) {
+        this.inventoryJson = newInventoryJson;
+        this.inventoryReportedAt = receivedAt;
+    }
+
+    /**
+     * Takes another row's inventory report over - or drops this one's when the other has none.
+     *
+     * <p>A report describes an installation, not a row: when an installation takes this row
+     * over, what the previous holder reported no longer describes it.</p>
+     *
+     * @param surrenderedRow the row whose installation now holds this one, or {@code null} when
+     *                       it had none
+     * @since 0.0.18
+     */
+    public void takeInventoryOver(final UserDeviceEntity surrenderedRow) {
+        this.inventoryJson = surrenderedRow == null ? null : surrenderedRow.inventoryJson;
+        this.inventoryReportedAt =
+                surrenderedRow == null ? null : surrenderedRow.inventoryReportedAt;
     }
 }

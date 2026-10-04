@@ -66,7 +66,9 @@ class ClosedTabSyncOperationApplierTest {
     private final SyncPushService syncPushService = new SyncPushService(
             List.of(new ClosedTabSyncOperationApplier(
                     closedTabSynchronizationService, profileSynchronizationService)),
-            mock(UserDataChangePublisher.class));
+            mock(UserDataChangePublisher.class),
+            PermissiveSyncPushLimitGuard.create(),
+            mock(ClosedTabSynchronizationService.class));
 
     @Test
     @DisplayName("stores the closing moment the client sent rather than a server clock")

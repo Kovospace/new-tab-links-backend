@@ -1,12 +1,15 @@
 package com.kovospace.newtablinks.sync.models;
 
+import com.kovospace.newtablinks.common.models.PushFootprint;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
 import com.kovospace.newtablinks.sync.dtos.SyncIdentifierRemapDto;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -27,6 +30,8 @@ public class SyncOperationContext {
     private final UUID ownerId;
     private final Map<UUID, UUID> serverIdentifiersByClientIdentifier = new HashMap<>();
     private final List<SyncIdentifierRemapDto> remaps = new ArrayList<>();
+    private final Set<UUID> profilesWrittenInto = new HashSet<>();
+    private final Set<UUID> workspacesWrittenInto = new HashSet<>();
 
     /**
      * Creates the context for one push.
@@ -90,5 +95,38 @@ public class SyncOperationContext {
      */
     public List<SyncIdentifierRemapDto> getRemappings() {
         return Collections.unmodifiableList(remaps);
+    }
+
+    /**
+     * Notes that an operation of this push wrote into a profile - an upsert of it, or the
+     * deletion of one of its workspaces.
+     *
+     * @param profileId identifier of the profile, as stored
+     * @since 0.0.18
+     */
+    public void recordWriteIntoProfile(final UUID profileId) {
+        profilesWrittenInto.add(profileId);
+    }
+
+    /**
+     * Notes that an operation of this push wrote into a workspace - an upsert of it, or an
+     * upsert or deletion of a group, subgroup or link in it.
+     *
+     * @param workspaceId identifier of the workspace (environment), as stored
+     * @since 0.0.18
+     */
+    public void recordWriteIntoWorkspace(final UUID workspaceId) {
+        workspacesWrittenInto.add(workspaceId);
+    }
+
+    /**
+     * Returns every profile and workspace this push wrote into, for the plan-limit check of its
+     * end state.
+     *
+     * @return an immutable copy
+     * @since 0.0.18
+     */
+    public PushFootprint getFootprint() {
+        return new PushFootprint(profilesWrittenInto, workspacesWrittenInto);
     }
 }

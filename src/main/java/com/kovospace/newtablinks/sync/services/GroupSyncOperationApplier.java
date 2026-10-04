@@ -61,6 +61,7 @@ public class GroupSyncOperationApplier implements SyncOperationApplier {
                 operation.description(),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
+        context.recordWriteIntoWorkspace(parentEnvironment.getId());
         return groupSynchronizationService.upsertGroupFromPushedOperation(
                         context.resolveStoredIdentifier(operation.id()), parentEnvironment, values)
                 .getId();
@@ -74,8 +75,12 @@ public class GroupSyncOperationApplier implements SyncOperationApplier {
             final SyncOperationDto operation,
             final SyncOperationContext context) {
 
+        final UUID storedGroupId = context.resolveStoredIdentifier(operation.id());
+        groupSynchronizationService.findGroupEntityForOwner(storedGroupId, context.getOwnerId())
+                .ifPresent(group ->
+                        context.recordWriteIntoWorkspace(group.getEnvironment().getId()));
         groupSynchronizationService.deleteGroupFromPushedOperationIfPresent(
-                context.resolveStoredIdentifier(operation.id()), context.getOwnerId());
+                storedGroupId, context.getOwnerId());
     }
 
     /**

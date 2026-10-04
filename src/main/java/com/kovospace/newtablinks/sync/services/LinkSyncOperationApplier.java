@@ -73,6 +73,7 @@ public class LinkSyncOperationApplier implements SyncOperationApplier {
                 operation.faviconUrl(),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
+        context.recordWriteIntoWorkspace(parentGroup.getEnvironment().getId());
         return linkSynchronizationService.upsertLinkFromPushedOperation(
                         context.resolveStoredIdentifier(operation.id()),
                         parentGroup,
@@ -89,8 +90,12 @@ public class LinkSyncOperationApplier implements SyncOperationApplier {
             final SyncOperationDto operation,
             final SyncOperationContext context) {
 
+        final UUID storedLinkId = context.resolveStoredIdentifier(operation.id());
+        linkSynchronizationService.findLinkEntityForOwner(storedLinkId, context.getOwnerId())
+                .ifPresent(link -> context.recordWriteIntoWorkspace(
+                        link.getParentGroup().getEnvironment().getId()));
         linkSynchronizationService.deleteLinkFromPushedOperationIfPresent(
-                context.resolveStoredIdentifier(operation.id()), context.getOwnerId());
+                storedLinkId, context.getOwnerId());
     }
 
     /**

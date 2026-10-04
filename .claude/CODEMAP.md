@@ -28,6 +28,13 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Sync snapshot (GET) | `sync/services/SyncSnapshotService.java`, `sync/services/EnvironmentSnapshotReader.java` |
 | Sync push (POST) | `sync/services/SyncPushService.java` → one `*SyncOperationApplier.java` per entity kind |
 | Why a pushed operation was refused | `sync/dtos/SyncRejectionReason.java` |
+| Plan limits - one config (`newtablinks.plan-limits.premium/free.*`), live standing, refusal code + `manageUrl` | `common/config/PlanLimitProperties.java`, `common/models/PlanLimit*.java`, `common/services/PlanLimitPolicy.java`, `common/exceptions/PlanLimitReachedException.java` (409 body in `ApiErrorResponseDto`) |
+| Synchronisation slots (first profiles / first workspaces per profile by `createdAt`, `id`) | `common/services/SynchronisationSlotReader.java` |
+| Slot + cap checks on REST writes (profile/environment/group/subgroup/link services) | `common/services/PlanLimitGuard.java` |
+| Slot + cap checks on the sync push, end state; what a push wrote into | `common/services/SyncPushLimitGuard.java`, `common/models/PushFootprint.java` (filled by the appliers through `SyncOperationContext`); closed tabs trimmed: `ClosedTabSynchronizationService.trimHistoryToPlanLimit` |
+| Signed-in installation limit (sign-in refusal, sign-out on refresh after a downgrade) | `user/services/SignedInInstallationLimitService.java`, called from `UserDeviceService.recordDeviceUse` and `AuthenticationService.refresh` |
+| Effective limits for clients (`GET /users/me/plan-limits`, `planLimits` on the snapshot) | `user/services/AccountPlanLimitsService.java`, `user/mappers/PlanLimitsMapper.java` |
+| Installation inventory report, device `syncSummary` | `user/services/DeviceInventoryService.java`, `user/utils/DeviceInventoryCodec.java`, `user/utils/DeviceSyncSummaryCalculator.java`, `user/dtos/DeviceInventory*.java`; column `user_device.inventory` |
 | Pushing a refresh to other devices | `sync/events/UserDataChangePublisher.java`, `sync/services/UserRefreshNotifier.java` (publishes), `sync/services/UserRefreshRelay.java` (delivers, in every pod), `sync/events/UserDataChangedMessage.java`, `common/config/WebSocketConfiguration.java`, `common/security/StompAuthenticationInterceptor.java` |
 | Messaging between replicas - the port, and which transport carries it | `common/messaging/MessagePublisher.java`, `MessageSubscriber.java`, `MessageTopic.java`, `MessageHandlerRegistry.java`, `MessagingConfiguration.java` (the switch) |
 | Messaging over PostgreSQL `NOTIFY`/`LISTEN` | `common/messaging/postgres/PostgresNotifyMessagePublisher.java`, `PostgresNotificationListener.java` |

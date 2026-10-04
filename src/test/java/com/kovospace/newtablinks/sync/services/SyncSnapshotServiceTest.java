@@ -16,6 +16,7 @@ import com.kovospace.newtablinks.profile.services.ProfileService;
 import com.kovospace.newtablinks.subgroup.mappers.SubgroupMapper;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.sync.dtos.SyncSnapshotDto;
+import com.kovospace.newtablinks.user.services.AccountPlanLimitsService;
 import com.kovospace.newtablinks.user.services.UserService;
 import java.time.Instant;
 import java.util.List;
@@ -53,7 +54,8 @@ class SyncSnapshotServiceTest {
             mock(LinkMapper.class),
             mock(EnvironmentSnapshotReader.class),
             new ClosedTabSnapshotReader(closedTabRepository, new ClosedTabMapperImpl()),
-            mock(ProfileService.class));
+            mock(ProfileService.class),
+            mock(AccountPlanLimitsService.class));
 
     @Test
     @DisplayName("returns the owner's closed tabs, newest first, with every field of each")

@@ -93,6 +93,11 @@ public class ProfileController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The owning user does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "Every profile slot of the account's plan is taken (limit PROFILES). "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<ProfileDto> createProfile(
             @Valid @RequestBody final ProfileSaveRequestDto saveRequest) {
 
@@ -114,6 +119,11 @@ public class ProfileController {
     @ApiResponse(responseCode = "400", description = "The request body failed validation",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No profile has that identifier",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ProfileDto updateProfile(
             @PathVariable final UUID profileId,

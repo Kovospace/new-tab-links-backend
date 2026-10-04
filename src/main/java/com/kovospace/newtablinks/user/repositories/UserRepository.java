@@ -1,11 +1,13 @@
 package com.kovospace.newtablinks.user.repositories;
 
 import com.kovospace.newtablinks.user.models.UserEntity;
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -84,4 +86,20 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
                OR LOWER(user.displayName) LIKE LOWER(CONCAT('%', :searchText, '%'))
             """)
     Page<UserEntity> searchAccounts(@Param("searchText") String searchText, Pageable pageable);
+
+    /**
+     * Loads an account and locks its row until the transaction ends.
+     *
+     * <p>The serialization point of every Fair Use Policy check: a write that counts an
+     * account's records and then adds one takes this lock first, so two parallel requests at one
+     * below a cap cannot both see room. The account row is used because every account has one -
+     * unlike the entitlement row, which a free account does not.</p>
+     *
+     * @param userId identifier of the account
+     * @return the account, or empty when it does not exist
+     * @since 0.0.16
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select appUser from UserEntity appUser where appUser.id = :userId")
+    Optional<UserEntity> findByIdForUpdate(@Param("userId") UUID userId);
 }

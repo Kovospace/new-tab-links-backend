@@ -84,4 +84,61 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
      * @return the device's tokens, empty when it has none
      */
     List<RefreshTokenEntity> findAllByDeviceId(UUID deviceId);
+
+    /**
+     * Tells whether one device holds a session right now - a refresh token neither revoked nor
+     * expired.
+     *
+     * @param deviceId identifier of the device
+     * @param now      the moment to judge expiry at
+     * @return {@code true} when the device is signed in
+     * @since 0.0.18
+     */
+    @Query("select count(refreshToken) > 0 from RefreshTokenEntity refreshToken "
+            + "where refreshToken.device.id = :deviceId and refreshToken.revokedAt is null "
+            + "and refreshToken.expiresAt > :now")
+    boolean existsLiveTokenOfDevice(@Param("deviceId") UUID deviceId, @Param("now") Instant now);
+
+    /**
+     * Counts an account's extension installations signed in right now, other than one.
+     *
+     * <p>An installation is a device that reported an installation identifier; signed in means
+     * it holds a refresh token neither revoked nor expired. The website's own sign-ins report no
+     * installation and are never counted.</p>
+     *
+     * @param userId          identifier of the account
+     * @param excludedDeviceId the device asking, left out of the count
+     * @param now             the moment to judge expiry at
+     * @return how many other installations are signed in
+     * @since 0.0.18
+     */
+    @Query("select count(distinct refreshToken.device.id) from RefreshTokenEntity refreshToken "
+            + "where refreshToken.user.id = :userId and refreshToken.revokedAt is null "
+            + "and refreshToken.expiresAt > :now "
+            + "and refreshToken.device.installationId is not null "
+            + "and refreshToken.device.id <> :excludedDeviceId")
+    long countSignedInInstallationsOtherThan(
+            @Param("userId") UUID userId,
+            @Param("excludedDeviceId") UUID excludedDeviceId,
+            @Param("now") Instant now);
+
+    /**
+     * Counts an account's extension installations signed in right now that first signed in
+     * before a given moment - the device rows recorded earlier.
+     *
+     * @param userId        identifier of the account
+     * @param firstSignedIn when the device asking was first recorded
+     * @param now           the moment to judge expiry at
+     * @return how many signed-in installations precede it
+     * @since 0.0.18
+     */
+    @Query("select count(distinct refreshToken.device.id) from RefreshTokenEntity refreshToken "
+            + "where refreshToken.user.id = :userId and refreshToken.revokedAt is null "
+            + "and refreshToken.expiresAt > :now "
+            + "and refreshToken.device.installationId is not null "
+            + "and refreshToken.device.createdAt < :firstSignedIn")
+    long countSignedInInstallationsFirstSignedInBefore(
+            @Param("userId") UUID userId,
+            @Param("firstSignedIn") Instant firstSignedIn,
+            @Param("now") Instant now);
 }

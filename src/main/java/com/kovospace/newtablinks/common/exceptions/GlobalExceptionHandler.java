@@ -7,10 +7,10 @@ import java.util.Comparator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.context.MessageSourceResolvable;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.method.MethodValidationException;
 import org.springframework.validation.method.MethodValidationResult;
@@ -384,6 +384,32 @@ public class GlobalExceptionHandler {
 
         LOGGER.info("Deferred a webhook redelivery: {}", exception.getMessage());
         return buildErrorResponse(HttpStatus.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    /**
+     * Renders a request refused by a plan limit as HTTP 409, carrying {@code code}
+     * ({@code FREE_PLAN_LIMIT_REACHED} or {@code FAIR_USE_LIMIT_REACHED}), {@code limit},
+     * {@code maximum} and {@code manageUrl} at the top level of the body.
+     *
+     * @param exception the exception that was thrown
+     * @return a 409 response carrying the uniform error body with the plan-limit fields filled in
+     * @since 0.0.18
+     */
+    @ExceptionHandler(PlanLimitReachedException.class)
+    public ResponseEntity<ApiErrorResponseDto> handlePlanLimitReached(
+            final PlanLimitReachedException exception) {
+
+        final HttpStatus status = HttpStatus.CONFLICT;
+        return ResponseEntity.status(status).body(new ApiErrorResponseDto(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                exception.getMessage(),
+                List.of(),
+                exception.getCode().name(),
+                exception.getLimit().name(),
+                exception.getMaximum(),
+                exception.getManageUrl()));
     }
 
     /**

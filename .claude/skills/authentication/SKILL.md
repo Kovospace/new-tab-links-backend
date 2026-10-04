@@ -88,7 +88,18 @@ Two behaviours worth not breaking, both covered by the live checks:
   mid-session would otherwise silently create a second device on every refresh.
 - **Signing a device out keeps the row** and only revokes its tokens.
 
-There is **no device limit**, deliberately, and none should be added.
+**The plan limits signed-in installations** (5 free / 100 premium,
+`SignedInInstallationLimitService`): counted are devices with an installation identifier *and* a
+live refresh token - never rows. A known installation already in session always signs in again;
+a new installation, or one claiming a name-only row (whose live session is the website's), is
+counted. The refusal (409 DEVICES with `manageUrl`) rolls the sign-in back - no tokens, a connect
+code stays unspent. When the limit drops below the number in session (premium ended), the
+installations beyond it in device `createdAt` order are signed out **at their next refresh**:
+tokens revoked, refresh answers 409 DEVICES; `refresh` is `noRollbackFor` that exception so the
+revocation commits. A take-over asks no limit (it cannot add a session) and moves the taker's
+inventory report onto the target. The website (no `X-Installation-Id`) is never counted.
+A name lookup searches **unattributed rows only**: installations may share names, and including
+their rows made the third same-named installation fail with a non-unique result.
 
 ## Websockets
 
@@ -253,8 +264,8 @@ Not oversights. Do not add them without being asked:
 
 - **Changing your email address** - the owner decided users may not do this at all.
 - **Rate limiting beyond the per-account failed-login counter.** That counter is brute-force
-  protection and has nothing to do with device counts; there is no device limit and none is
-  wanted. Removing the counter would let anyone grind passwords against an account forever.
+  protection and has nothing to do with device counts (the only device limit is the free
+  plan's, above). Removing the counter would let anyone grind passwords against an account forever.
 
 Genuinely still missing: pruning spent tokens (`emailed_token`, `single_use_code` and revoked
 `refresh_token` rows accumulate forever), and `origin` on the refresh notification is always

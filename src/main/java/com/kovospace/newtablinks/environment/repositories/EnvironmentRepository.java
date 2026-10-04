@@ -4,6 +4,7 @@ import com.kovospace.newtablinks.environment.models.EnvironmentEntity;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -60,4 +61,37 @@ public interface EnvironmentRepository extends JpaRepository<EnvironmentEntity, 
             "select max(environment.position) from EnvironmentEntity environment "
                     + "where environment.owner.id = :ownerId")
     Integer findHighestPositionByOwnerId(@Param("ownerId") UUID ownerId);
+
+    /**
+     * Counts an account's environments, across all of its profiles.
+     *
+     * @param ownerId identifier of the owning user
+     * @return how many environments the account has
+     * @since 0.0.16
+     */
+    long countByOwnerId(UUID ownerId);
+
+    /**
+     * Lists the identifiers of a profile's first environments, in synchronisation slot order:
+     * the order the server first stored them, ties broken by identifier.
+     *
+     * @param profileId identifier of the profile, already resolved for its owner
+     * @param slotCount how many of the first environments to return
+     * @return at most {@code slotCount} identifiers, first stored first
+     * @since 0.0.18
+     */
+    @Query("select environment.id from EnvironmentEntity environment "
+            + "where environment.profile.id = :profileId "
+            + "order by environment.createdAt asc, environment.id asc")
+    List<UUID> findIdsOfProfileInSlotOrder(
+            @Param("profileId") UUID profileId, Limit slotCount);
+
+    /**
+     * Counts the environments filed under one profile.
+     *
+     * @param profileId identifier of the profile, already resolved for its owner
+     * @return how many environments the profile holds
+     * @since 0.0.18
+     */
+    long countByProfileId(UUID profileId);
 }

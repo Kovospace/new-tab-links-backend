@@ -1,6 +1,7 @@
 package com.kovospace.newtablinks.environment.models;
 
 import com.kovospace.newtablinks.common.models.AbstractAuditableEntity;
+import com.kovospace.newtablinks.common.models.WorkspaceLocation;
 import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import jakarta.persistence.Column;
@@ -98,6 +99,16 @@ public class EnvironmentEntity extends AbstractAuditableEntity {
      */
     public UserEntity getOwner() {
         return owner;
+    }
+
+    /**
+     * Returns where this environment sits, for a plan-limit check.
+     *
+     * @return the account, profile and environment identifiers
+     * @since 0.0.18
+     */
+    public WorkspaceLocation toWorkspaceLocation() {
+        return new WorkspaceLocation(owner.getId(), profile.getId(), getId());
     }
 
     /**

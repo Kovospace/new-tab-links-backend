@@ -8,6 +8,7 @@ import com.kovospace.newtablinks.profile.services.ProfileService;
 import com.kovospace.newtablinks.subgroup.mappers.SubgroupMapper;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.sync.dtos.SyncSnapshotDto;
+import com.kovospace.newtablinks.user.services.AccountPlanLimitsService;
 import com.kovospace.newtablinks.user.services.UserService;
 import java.time.Instant;
 import java.util.UUID;
@@ -41,6 +42,7 @@ public class SyncSnapshotService {
     private final EnvironmentSnapshotReader environmentSnapshotReader;
     private final ClosedTabSnapshotReader closedTabSnapshotReader;
     private final ProfileService profileService;
+    private final AccountPlanLimitsService accountPlanLimitsService;
 
     /**
      * Creates the service.
@@ -55,6 +57,7 @@ public class SyncSnapshotService {
      * @param environmentSnapshotReader reads the owner's environments
      * @param closedTabSnapshotReader   reads the owner's closed tabs
      * @param profileService            reads the owner's profiles
+     * @param accountPlanLimitsService  reads the limits that hold for the owner
      */
     public SyncSnapshotService(
             final UserService userService,
@@ -66,7 +69,8 @@ public class SyncSnapshotService {
             final LinkMapper linkMapper,
             final EnvironmentSnapshotReader environmentSnapshotReader,
             final ClosedTabSnapshotReader closedTabSnapshotReader,
-            final ProfileService profileService) {
+            final ProfileService profileService,
+            final AccountPlanLimitsService accountPlanLimitsService) {
 
         this.userService = userService;
         this.groupRepository = groupRepository;
@@ -78,6 +82,7 @@ public class SyncSnapshotService {
         this.environmentSnapshotReader = environmentSnapshotReader;
         this.closedTabSnapshotReader = closedTabSnapshotReader;
         this.profileService = profileService;
+        this.accountPlanLimitsService = accountPlanLimitsService;
     }
 
     /**
@@ -98,6 +103,7 @@ public class SyncSnapshotService {
                 subgroupMapper.toDtoList(subgroupRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
                 linkMapper.toDtoList(linkRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
                 closedTabSnapshotReader.readClosedTabsOfOwner(ownerId),
-                Instant.now());
+                Instant.now(),
+                accountPlanLimitsService.findPlanLimitsOf(ownerId));
     }
 }

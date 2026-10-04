@@ -2,8 +2,10 @@ package com.kovospace.newtablinks.user.controllers;
 
 import com.kovospace.newtablinks.common.exceptions.ApiErrorResponseDto;
 import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
+import com.kovospace.newtablinks.user.dtos.PlanLimitsDto;
 import com.kovospace.newtablinks.user.dtos.UserDto;
 import com.kovospace.newtablinks.user.dtos.UserProfileUpdateRequestDto;
+import com.kovospace.newtablinks.user.services.AccountPlanLimitsService;
 import com.kovospace.newtablinks.user.services.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -35,19 +37,44 @@ public class UserController {
 
     private final UserService userService;
     private final AuthenticatedUserProvider authenticatedUserProvider;
+    private final AccountPlanLimitsService accountPlanLimitsService;
 
     /**
      * Creates the controller.
      *
      * @param userService               service holding the business logic
      * @param authenticatedUserProvider identifies the user the request is authenticated as
+     * @param accountPlanLimitsService  tells which limits hold for the account
      */
     public UserController(
             final UserService userService,
-            final AuthenticatedUserProvider authenticatedUserProvider) {
+            final AuthenticatedUserProvider authenticatedUserProvider,
+            final AccountPlanLimitsService accountPlanLimitsService) {
 
         this.userService = userService;
         this.authenticatedUserProvider = authenticatedUserProvider;
+        this.accountPlanLimitsService = accountPlanLimitsService;
+    }
+
+    /**
+     * Returns the plan limits that hold for the signed-in user's account right now.
+     *
+     * @return the account's standing and limits
+     * @since 0.0.18
+     */
+    @GetMapping("/me/plan-limits")
+    @Operation(summary = "Return the plan limits that hold for the account right now",
+            description = "Judged from the live entitlement: the free plan's limits while the "
+                    + "account is not premium, the Fair Use Policy's while it is. The extension "
+                    + "applies these instead of its compiled defaults, so a limit can change "
+                    + "without an extension release. The same object is `planLimits` on the sync "
+                    + "snapshot.")
+    @ApiResponse(responseCode = "200", description = "The account's standing and limits")
+    @ApiResponse(responseCode = "401", description = "No valid access token was presented",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    public PlanLimitsDto getMyPlanLimits() {
+        return accountPlanLimitsService.findPlanLimitsOf(
+                authenticatedUserProvider.getAuthenticatedUserId());
     }
 
     /**

@@ -83,11 +83,25 @@ public class SyncController {
                     + "given, so the caller must order parents before their children and delete "
                     + "children before their parents. Applying the same batch twice is harmless: "
                     + "an upsert of something that already exists updates it, and a delete of "
-                    + "something already gone does nothing.")
+                    + "something already gone does nothing. The account's plan is judged on the "
+                    + "state after the whole batch: it is refused entirely with 409 when it wrote "
+                    + "into a profile or workspace that holds no synchronisation slot at the end "
+                    + "(the account's first profiles, and the first workspaces of each, in the "
+                    + "order the server first stored them) - which includes creating one beyond "
+                    + "the slots - or left a workspace's groups or links, or a group's subgroups, "
+                    + "above their cap and more numerous than before. Deleting a profile, or a "
+                    + "workspace of a slot-holding profile, is always allowed. Closed-tab history "
+                    + "never refuses; its oldest entries beyond the plan's limit are deleted, never "
+                    + "more than the batch added.")
     @ApiResponse(responseCode = "200", description = "The batch was applied")
     @ApiResponse(responseCode = "400", description = "The batch was not well formed",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "401", description = "No valid access token was presented",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The batch wrote into a profile or workspace without a slot, or grew a container past its cap; nothing was applied. Limit PROFILES, WORKSPACES_PER_PROFILE, GROUPS_PER_WORKSPACE, SUBGROUPS_PER_GROUP or LINKS_PER_WORKSPACE. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public SyncPushResultDto pushMyChanges(
             @Valid @RequestBody final SyncPushRequestDto pushRequest) {

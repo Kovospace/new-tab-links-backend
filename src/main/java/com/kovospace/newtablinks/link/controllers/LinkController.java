@@ -109,6 +109,11 @@ public class LinkController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The named group or subgroup does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The workspace holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE), or already holds as many links as the Fair Use Policy allows (limit LINKS_PER_WORKSPACE). "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<LinkDto> createLink(@Valid @RequestBody final LinkSaveRequestDto saveRequest) {
         return ResponseEntity.status(HttpStatus.CREATED).body(linkService.createLink(
                 saveRequest, authenticatedUserProvider.getAuthenticatedUserId()));
@@ -128,6 +133,11 @@ public class LinkController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The link, or the named subgroup, does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public LinkDto updateLink(
             @PathVariable final UUID linkId,
             @Valid @RequestBody final LinkSaveRequestDto saveRequest) {
@@ -146,6 +156,11 @@ public class LinkController {
     @Operation(summary = "Delete a link")
     @ApiResponse(responseCode = "204", description = "The link was deleted")
     @ApiResponse(responseCode = "404", description = "No link has that identifier",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteLink(@PathVariable final UUID linkId) {
         linkService.deleteLink(linkId, authenticatedUserProvider.getAuthenticatedUserId());

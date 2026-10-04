@@ -61,9 +61,12 @@ public class EnvironmentSyncOperationApplier implements SyncOperationApplier {
                 operation.description(),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
-        return environmentSynchronizationService.upsertEnvironmentFromPushedOperation(
+        final UUID storedEnvironmentId = environmentSynchronizationService
+                .upsertEnvironmentFromPushedOperation(
                         context.resolveStoredIdentifier(operation.id()), parentProfile, values)
                 .getId();
+        context.recordWriteIntoWorkspace(storedEnvironmentId);
+        return storedEnvironmentId;
     }
 
     /**
@@ -74,8 +77,13 @@ public class EnvironmentSyncOperationApplier implements SyncOperationApplier {
             final SyncOperationDto operation,
             final SyncOperationContext context) {
 
+        final UUID storedEnvironmentId = context.resolveStoredIdentifier(operation.id());
+        environmentSynchronizationService
+                .findEnvironmentEntityForOwner(storedEnvironmentId, context.getOwnerId())
+                .ifPresent(environment ->
+                        context.recordWriteIntoProfile(environment.getProfile().getId()));
         environmentSynchronizationService.deleteEnvironmentFromPushedOperationIfPresent(
-                context.resolveStoredIdentifier(operation.id()), context.getOwnerId());
+                storedEnvironmentId, context.getOwnerId());
     }
 
     /**

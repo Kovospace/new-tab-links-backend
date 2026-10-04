@@ -1,5 +1,6 @@
 package com.kovospace.newtablinks.subgroup.repositories;
 
+import com.kovospace.newtablinks.common.models.ContainerItemCount;
 import com.kovospace.newtablinks.subgroup.models.SubgroupEntity;
 import java.util.List;
 import java.util.Optional;
@@ -72,4 +73,26 @@ public interface SubgroupRepository extends JpaRepository<SubgroupEntity, UUID> 
     @Query("select max(subgroup.position) from SubgroupEntity subgroup "
             + "where subgroup.parentGroup.id = :groupId")
     Integer findHighestPositionByGroupId(@Param("groupId") UUID groupId);
+
+    /**
+     * Counts the subgroups of one group.
+     *
+     * @param groupId identifier of the group, already resolved for its owner
+     * @return how many subgroups the group holds
+     * @since 0.0.18
+     */
+    long countByParentGroupId(UUID groupId);
+
+    /**
+     * Counts the subgroups of every group of an account that holds at least one.
+     *
+     * @param ownerId identifier of the owning user
+     * @return one entry per group with subgroups; a group without any is absent
+     * @since 0.0.18
+     */
+    @Query("select new com.kovospace.newtablinks.common.models.ContainerItemCount("
+            + "subgroup.parentGroup.id, count(subgroup)) from SubgroupEntity subgroup "
+            + "where subgroup.parentGroup.environment.owner.id = :ownerId "
+            + "group by subgroup.parentGroup.id")
+    List<ContainerItemCount> countSubgroupsPerGroupOfOwner(@Param("ownerId") UUID ownerId);
 }

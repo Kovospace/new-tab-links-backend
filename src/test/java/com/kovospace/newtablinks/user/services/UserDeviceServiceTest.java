@@ -4,17 +4,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.kovospace.newtablinks.auth.dtos.ClientDescriptionDto;
 import com.kovospace.newtablinks.auth.models.RefreshTokenEntity;
 import com.kovospace.newtablinks.auth.repositories.RefreshTokenRepository;
+import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
+import com.kovospace.newtablinks.common.models.PlanLimit;
+import com.kovospace.newtablinks.common.models.PlanLimitRefusalCode;
 import com.kovospace.newtablinks.user.models.UserDeviceEntity;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserDeviceRepository;
@@ -52,8 +58,15 @@ class UserDeviceServiceTest {
     private final RefreshTokenRepository refreshTokenRepository =
             mock(RefreshTokenRepository.class);
 
-    private final UserDeviceService userDeviceService =
-            new UserDeviceService(userDeviceRepository, refreshTokenRepository);
+    private final SignedInInstallationLimitService signedInInstallationLimitService =
+            mock(SignedInInstallationLimitService.class);
+
+    private final DeviceInventoryService deviceInventoryService =
+            mock(DeviceInventoryService.class);
+
+    private final UserDeviceService userDeviceService = new UserDeviceService(
+            userDeviceRepository, refreshTokenRepository, signedInInstallationLimitService,
+            deviceInventoryService);
 
     private final UserEntity account = mock(UserEntity.class);
 
@@ -74,12 +87,10 @@ class UserDeviceServiceTest {
         final UserDeviceEntity firstDevice =
                 userDeviceService.recordDeviceUse(account, chromiumInstall(firstInstallation));
 
-        // The first one is now on record, and the second one finds it by name - but must not
-        // take it, because that row already belongs to somebody.
+        // The first one is now on record under the same names, but it belongs to an
+        // installation, so the name lookup - which searches unattributed rows only - must not
+        // offer it to the second.
         when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, firstInstallation))
-                .thenReturn(Optional.of(firstDevice));
-        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
-                ACCOUNT_ID, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME))
                 .thenReturn(Optional.of(firstDevice));
 
         final UserDeviceEntity secondDevice =
@@ -136,7 +147,7 @@ class UserDeviceServiceTest {
 
         when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, installation))
                 .thenReturn(Optional.empty());
-        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
+        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
                 ACCOUNT_ID, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME))
                 .thenReturn(Optional.of(legacy));
 
@@ -155,7 +166,7 @@ class UserDeviceServiceTest {
         final UserDeviceEntity website = new UserDeviceEntity(
                 account, "NewTabLinks (production)", "Firefox", null, Instant.now());
 
-        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserName(
+        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
                 ACCOUNT_ID, "NewTabLinks (production)", "Firefox"))
                 .thenReturn(Optional.of(website));
 
@@ -350,6 +361,100 @@ class UserDeviceServiceTest {
 
         verify(userDeviceRepository, never()).delete(any(UserDeviceEntity.class));
         verify(refreshTokenRepository, never()).deleteAll(anyIterable());
+    }
+
+    @Test
+    @DisplayName("asks the installation limit about the device a new installation signs in "
+            + "from, and lets its refusal end the sign-in")
+    void asksTheInstallationLimitAboutANewInstallation() {
+
+        final UUID installation = UUID.randomUUID();
+        doThrow(new PlanLimitReachedException(PlanLimitRefusalCode.FREE_PLAN_LIMIT_REACHED,
+                PlanLimit.DEVICES, 5, "https://tabilinks.example/devices"))
+                .when(signedInInstallationLimitService).requireRoomForNewInstallation(any());
+
+        assertThatThrownBy(() ->
+                userDeviceService.recordDeviceUse(account, chromiumInstall(installation)))
+                .isInstanceOfSatisfying(PlanLimitReachedException.class, refusal ->
+                        assertThat(refusal.getLimit()).isEqualTo(PlanLimit.DEVICES));
+
+        verify(signedInInstallationLimitService).requireRoomForNewInstallation(
+                argThat(device -> installation.equals(device.getInstallationId())));
+    }
+
+    @Test
+    @DisplayName("counts an installation claiming a row the website recorded by name as new, "
+            + "although that row may hold the website's live session")
+    void countsAnInstallationClaimingAnUnattributedRowAsNew() {
+
+        final UUID installation = UUID.randomUUID();
+        final UserDeviceEntity websiteRow = new UserDeviceEntity(
+                account, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME, null, Instant.now());
+        when(userDeviceRepository.findByUserIdAndDeviceNameAndBrowserNameAndInstallationIdIsNull(
+                ACCOUNT_ID, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME))
+                .thenReturn(Optional.of(websiteRow));
+
+        userDeviceService.recordDeviceUse(account, chromiumInstall(installation));
+
+        verify(signedInInstallationLimitService).requireRoomForNewInstallation(websiteRow);
+        verify(signedInInstallationLimitService, never()).requireRoomToSignInAgain(any());
+    }
+
+    @Test
+    @DisplayName("asks the installation limit about a known installation too - a signed-out "
+            + "installation counts again when it signs back in")
+    void asksTheInstallationLimitAboutAKnownInstallation() {
+
+        final UUID installation = UUID.randomUUID();
+        final UserDeviceEntity known =
+                deviceOf(installation, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME);
+        when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, installation))
+                .thenReturn(Optional.of(known));
+
+        userDeviceService.recordDeviceUse(account, chromiumInstall(installation));
+
+        verify(signedInInstallationLimitService).requireRoomToSignInAgain(known);
+    }
+
+    @Test
+    @DisplayName("a take-over asks no plan limit - it cannot add a signed-in installation - and "
+            + "the target takes the taker's inventory report over")
+    void takesTheInventoryOverWithoutAskingTheInstallationLimit() {
+
+        final UUID taker = UUID.randomUUID();
+        final UserDeviceEntity target = deviceOf(null, "Work desktop", "Firefox");
+        target.replaceInventory("[{\"stale\":true}]", Instant.parse("2026-01-01T00:00:00Z"));
+        final UserDeviceEntity takersOwn = deviceOf(taker, SHARED_DEVICE_NAME, SHARED_BROWSER_NAME);
+        final Instant reportedAt = Instant.parse("2026-10-01T00:00:00Z");
+        takersOwn.replaceInventory("[]", reportedAt);
+        when(userDeviceRepository.findByIdAndUserId(target.getId(), ACCOUNT_ID))
+                .thenReturn(Optional.of(target));
+        when(userDeviceRepository.findByUserIdAndInstallationId(ACCOUNT_ID, taker))
+                .thenReturn(Optional.of(takersOwn));
+
+        userDeviceService.takeOverDevice(target.getId(), ACCOUNT_ID, taker);
+
+        verifyNoInteractions(signedInInstallationLimitService);
+        assertThat(target.getInstallationId()).isEqualTo(taker);
+        assertThat(target.getInventoryJson()).isEqualTo("[]");
+        assertThat(target.getInventoryReportedAt()).isEqualTo(reportedAt);
+    }
+
+    @Test
+    @DisplayName("a take-over by an installation without a row of its own drops the target's "
+            + "report, which described the installation that held it")
+    void dropsTheTargetsInventoryWhenTheTakerHasNoRow() {
+
+        final UUID taker = UUID.randomUUID();
+        final UserDeviceEntity target = deviceOf(UUID.randomUUID(), "Work desktop", "Firefox");
+        target.replaceInventory("[]", Instant.now());
+        when(userDeviceRepository.findByIdAndUserId(target.getId(), ACCOUNT_ID))
+                .thenReturn(Optional.of(target));
+
+        userDeviceService.takeOverDevice(target.getId(), ACCOUNT_ID, taker);
+
+        assertThat(target.getInventoryJson()).isNull();
+        assertThat(target.getInventoryReportedAt()).isNull();
     }
 
     /** A stored device with an identifier of its own, which take-over needs to tell rows apart. */

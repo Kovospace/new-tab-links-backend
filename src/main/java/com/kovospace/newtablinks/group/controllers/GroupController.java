@@ -95,6 +95,11 @@ public class GroupController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "The owning environment does not exist",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The workspace holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE), or already holds as many groups as the Fair Use Policy allows (limit GROUPS_PER_WORKSPACE). "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<GroupDto> createGroup(@Valid @RequestBody final GroupSaveRequestDto saveRequest) {
         return ResponseEntity.status(HttpStatus.CREATED).body(groupService.createGroup(
                 saveRequest, authenticatedUserProvider.getAuthenticatedUserId()));
@@ -114,6 +119,11 @@ public class GroupController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     @ApiResponse(responseCode = "404", description = "No group has that identifier",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public GroupDto updateGroup(
             @PathVariable final UUID groupId,
             @Valid @RequestBody final GroupSaveRequestDto saveRequest) {
@@ -132,6 +142,11 @@ public class GroupController {
     @Operation(summary = "Delete a group")
     @ApiResponse(responseCode = "204", description = "The group was deleted")
     @ApiResponse(responseCode = "404", description = "No group has that identifier",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "The record lies in a profile or workspace that holds no synchronisation slot (limit PROFILES or WORKSPACES_PER_PROFILE); the plan keeps it, but it no longer synchronises. "
+            + "Code FREE_PLAN_LIMIT_REACHED (a free account, and upgrading would allow it) or "
+            + "FAIR_USE_LIMIT_REACHED, with limit, maximum and manageUrl (the website's "
+            + "devices page)",
             content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
     public ResponseEntity<Void> deleteGroup(@PathVariable final UUID groupId) {
         groupService.deleteGroup(groupId, authenticatedUserProvider.getAuthenticatedUserId());
