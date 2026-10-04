@@ -160,7 +160,7 @@ discloses whether an account exists, so it is not offered to the open internet.
 
 | Variable | Default | Required | Notes |
 |---|---|:--:|---|
-| `NEWTABLINKS_SECURITY_ALLOWED_CORS_ORIGINS` | `http://localhost:5173,chrome-extension://*` | ✅ | Comma-separated. Tighten `chrome-extension://*` to the published extension id |
+| `NEWTABLINKS_SECURITY_ALLOWED_CORS_ORIGINS` | `http://localhost:5173,chrome-extension://*,moz-extension://*` | ✅ | Comma-separated. `chrome-extension://*` can be tightened to the published extension id; `moz-extension://*` cannot - Firefox gives every installation its own uuid |
 
 ### Mail
 
@@ -220,7 +220,7 @@ locally, under *Payments* below.
 | `SPRINGDOC_SWAGGER_UI_TAGS_SORTER` | `alpha` | |
 | `NEWTABLINKS_WEBSOCKET_ENDPOINT_PATH` | `/ws` | |
 | `NEWTABLINKS_WEBSOCKET_USER_DESTINATION_PREFIX` | `/user` | |
-| `NEWTABLINKS_WEBSOCKET_ALLOWED_ORIGIN_PATTERNS` | `chrome-extension://*` | |
+| `NEWTABLINKS_WEBSOCKET_ALLOWED_ORIGIN_PATTERNS` | `chrome-extension://*,moz-extension://*` | |
 | `MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE` | `health,info` | |
 | `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED` | `true` | |
 | `MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS` | `never` | `always` is useful when debugging a DOWN health |

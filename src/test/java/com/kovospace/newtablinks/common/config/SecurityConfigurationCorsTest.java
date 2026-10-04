@@ -45,6 +45,13 @@ class SecurityConfigurationCorsTest {
     /** Origin of the packed Chrome extension, matched by the {@code chrome-extension://*} pattern. */
     private static final String EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
 
+    /**
+     * Origin of the extension installed in Firefox, matched by the {@code moz-extension://*}
+     * pattern. The uuid differs on every installation, which is why only a pattern can name it.
+     */
+    private static final String FIREFOX_EXTENSION_ORIGIN =
+            "moz-extension://0f3a9c4e-6d2b-4b8a-9e1f-2c7d5a8b3e61";
+
     /** A path that issues tokens, and therefore reads the device-name header. */
     private static final String LOGIN_PATH = "/api/v1/auth/login";
 
@@ -83,6 +90,19 @@ class SecurityConfigurationCorsTest {
                 sendPreflight(EXTENSION_ORIGIN, DEVICE_NAME_PREFLIGHT_HEADERS);
 
         assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
+        assertThat(allowedRequestHeadersIn(response))
+                .contains(ClientRequestHeaders.DEVICE_NAME.toLowerCase(Locale.ROOT));
+    }
+
+    @Test
+    @DisplayName("the extension installed in Firefox gets the same answer as in Chrome")
+    void shouldAllowTheDeviceNameHeaderForTheFirefoxExtensionOrigin() throws IOException {
+        final MockHttpServletResponse response =
+                sendPreflight(FIREFOX_EXTENSION_ORIGIN, DEVICE_NAME_PREFLIGHT_HEADERS);
+
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN))
+                .isEqualTo(FIREFOX_EXTENSION_ORIGIN);
         assertThat(allowedRequestHeadersIn(response))
                 .contains(ClientRequestHeaders.DEVICE_NAME.toLowerCase(Locale.ROOT));
     }
@@ -218,7 +238,7 @@ class SecurityConfigurationCorsTest {
      * @return the allowed origin patterns
      */
     private static String[] allowedOrigins() {
-        return new String[] {WEBSITE_ORIGIN, "chrome-extension://*"};
+        return new String[] {WEBSITE_ORIGIN, "chrome-extension://*", "moz-extension://*"};
     }
 
     /**
