@@ -4,6 +4,7 @@ import com.kovospace.newtablinks.common.exceptions.PaidEntitlementRevocationExce
 import com.kovospace.newtablinks.common.exceptions.RegistrationConflictException;
 import com.kovospace.newtablinks.common.exceptions.ResourceNotFoundException;
 import com.kovospace.newtablinks.entitlement.models.OperatorProDecisionOutcome;
+import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.entitlement.models.ProStanding;
 import com.kovospace.newtablinks.entitlement.services.EntitlementGrantService;
 import com.kovospace.newtablinks.entitlement.services.EntitlementStandingService;
@@ -137,8 +138,8 @@ public class UserAdministrationService {
     /**
      * Creates an account without going through registration.
      *
-     * <p>When the request asks for premium, the account is given an operator grant in the same
-     * transaction.</p>
+     * <p>When the request asks for premium, the account is given an operator grant of the
+     * requested term - lifetime when none is named - in the same transaction.</p>
      *
      * @param createRequest the account to create
      * @return the created account
@@ -170,7 +171,8 @@ public class UserAdministrationService {
                 createdAccount.getId(), createdAccount.getUsername(), createdAccount.getStatus());
 
         if (createRequest.premium()) {
-            applyPremiumDecision(createdAccount, true, CREATE_ACTION);
+            applyPremiumDecision(
+                    createdAccount, true, createRequest.premiumGrantTerm(), CREATE_ACTION);
         }
         return toAdminUserDto(createdAccount);
     }
@@ -178,7 +180,9 @@ public class UserAdministrationService {
     /**
      * Replaces the fields an operator may change, and grants or revokes operator-given pro.
      *
-     * <p>A {@code premium} of {@code null} leaves pro as it is. The premium decision is taken
+     * <p>A {@code premium} of {@code null} leaves pro as it is, and so does {@code true} without a
+     * {@code premiumGrantTerm} on an account already pro; a term re-applies an operator grant
+     * from now. The premium decision is taken
      * before anything else changes, and in the same transaction, so a refusal changes nothing.</p>
      *
      * @param userId        identifier of the account
@@ -203,7 +207,8 @@ public class UserAdministrationService {
             throw new RegistrationConflictException("That email address is already registered");
         }
         if (updateRequest.premium() != null) {
-            applyPremiumDecision(account, updateRequest.premium(), UPDATE_ACTION);
+            applyPremiumDecision(account, updateRequest.premium(),
+                    updateRequest.premiumGrantTerm(), UPDATE_ACTION);
         }
 
         account.setEmail(updateRequest.email());
@@ -282,16 +287,19 @@ public class UserAdministrationService {
      *
      * @param account          the account, already persisted
      * @param shouldBePremium  {@code true} to grant, {@code false} to revoke
+     * @param grantTerm        how long a grant lasts, or {@code null}; see
+     *                         {@link EntitlementGrantService#grantPro}. Ignored when revoking
      * @param operatorAction   the admin action this is part of, for the log line
      * @throws PaidEntitlementRevocationException when asked to revoke pro that was paid for
      */
     private void applyPremiumDecision(
             final UserEntity account,
             final boolean shouldBePremium,
+            final PremiumGrantTerm grantTerm,
             final String operatorAction) {
 
         final OperatorProDecisionOutcome outcome = shouldBePremium
-                ? entitlementGrantService.grantProUnlessAlreadyPro(account)
+                ? entitlementGrantService.grantPro(account, grantTerm)
                 : entitlementGrantService.revokeGrantedPro(account);
 
         if (outcome.changedStanding()) {

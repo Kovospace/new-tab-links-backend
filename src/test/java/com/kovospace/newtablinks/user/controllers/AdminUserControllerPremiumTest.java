@@ -18,6 +18,7 @@ import com.kovospace.newtablinks.common.config.ApiEndpointPaths;
 import com.kovospace.newtablinks.common.config.SecurityConfiguration;
 import com.kovospace.newtablinks.common.exceptions.PaidEntitlementRevocationException;
 import com.kovospace.newtablinks.common.security.AuthenticatedUserProvider;
+import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.user.dtos.AdminUserUpdateRequestDto;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.services.UserAdministrationService;
@@ -81,7 +82,7 @@ class AdminUserControllerPremiumTest {
                 .andExpect(jsonPath("$.message").value("This account is premium through a payment."));
 
         verify(userAdministrationService).updateAccount(ACCOUNT_ID, new AdminUserUpdateRequestDto(
-                "buyer@example.com", "Buyer", UserAccountStatus.ACTIVE, false));
+                "buyer@example.com", "Buyer", UserAccountStatus.ACTIVE, false, null));
     }
 
     @Test
@@ -98,6 +99,24 @@ class AdminUserControllerPremiumTest {
                 .andExpect(status().isOk());
 
         verify(userAdministrationService).updateAccount(ACCOUNT_ID, new AdminUserUpdateRequestDto(
-                "buyer@example.com", "Buyer", UserAccountStatus.ACTIVE, null));
+                "buyer@example.com", "Buyer", UserAccountStatus.ACTIVE, null, null));
+    }
+
+    @Test
+    @DisplayName("a grant term in the body reaches the service as the enum value it names")
+    void shouldPassTheGrantTermThrough() throws Exception {
+        mockMvc.perform(put(ACCOUNT_PATH)
+                        .with(jwt().authorities(
+                                new SimpleGrantedAuthority(AdminAccessTokenIssuer.ADMIN_AUTHORITY)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"given@example.com","displayName":"Given",
+                                 "status":"ACTIVE","premium":true,"premiumGrantTerm":"ONE_YEAR"}
+                                """))
+                .andExpect(status().isOk());
+
+        verify(userAdministrationService).updateAccount(ACCOUNT_ID, new AdminUserUpdateRequestDto(
+                "given@example.com", "Given", UserAccountStatus.ACTIVE, true,
+                PremiumGrantTerm.ONE_YEAR));
     }
 }

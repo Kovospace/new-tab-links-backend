@@ -15,8 +15,8 @@ import java.util.UUID;
  * rather than more fields on the first.</p>
  *
  * <p>It also says whether the account is pro and, while it is, through what - so the operator
- * can tell an account that paid from one they gave pro to, and knows which of the two the
- * premium checkbox can take back.</p>
+ * can tell an account that paid from one they gave pro to, knows which of the two the
+ * premium checkbox can take back, and sees when it runs out.</p>
  *
  * <p>What is <strong>not</strong> here is the password hash. An operator can give an account a
  * new password; nobody needs to see the old one, and a hash on a screen is a hash in a log.</p>
@@ -34,6 +34,9 @@ import java.util.UUID;
  *                            {@code premium} on {@link UserDto}
  * @param premiumSource       where the pro entitlement came from while {@code premium} is true;
  *                            {@code null} whenever it is false
+ * @param premiumUntil        when pro ends while {@code premium} is true - the end of a paid
+ *                            period or of a one-year operator grant; {@code null} for lifetime
+ *                            pro and whenever {@code premium} is false. Since 0.0.15.
  * @since 0.0.6
  */
 @Schema(description = "A user account, as the operator sees it")
@@ -52,5 +55,9 @@ public record AdminUserDto(
         @Schema(description = "Where the pro entitlement came from - paid (LIFETIME, "
                 + "SUBSCRIPTION) or given by the operator (GRANT); null when not pro",
                 example = "GRANT", nullable = true)
-        EntitlementSource premiumSource) {
+        EntitlementSource premiumSource,
+        @Schema(description = "When pro ends while premium is true - the end of a paid period "
+                + "or of a one-year operator grant; null for lifetime pro and when not pro",
+                example = "2027-10-04T12:00:00Z", nullable = true)
+        Instant premiumUntil) {
 }

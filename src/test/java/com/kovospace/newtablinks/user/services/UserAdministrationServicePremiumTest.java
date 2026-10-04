@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -19,6 +20,7 @@ import com.kovospace.newtablinks.entitlement.models.EntitlementSource;
 import com.kovospace.newtablinks.entitlement.models.EntitlementStatus;
 import com.kovospace.newtablinks.entitlement.models.OperatorProDecisionOutcome;
 import com.kovospace.newtablinks.entitlement.models.PaymentProvider;
+import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.entitlement.models.ProviderPurchaseReferences;
 import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.entitlement.services.EntitlementGrantService;
@@ -31,6 +33,8 @@ import com.kovospace.newtablinks.user.mappers.AdminUserMapperImpl;
 import com.kovospace.newtablinks.user.models.UserAccountStatus;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -102,7 +106,7 @@ class UserAdministrationServicePremiumTest {
         final AdminUserDto updated = administrationService.updateAccount(
                 GRANTED_ACCOUNT_ID, updateRequest("granted", null));
 
-        verify(entitlementGrantService, never()).grantProUnlessAlreadyPro(any());
+        verify(entitlementGrantService, never()).grantPro(any(), any());
         verify(entitlementGrantService, never()).revokeGrantedPro(any());
         assertThat(updated.premium()).isTrue();
         assertThat(updated.premiumSource()).isEqualTo(EntitlementSource.GRANT);
@@ -112,7 +116,7 @@ class UserAdministrationServicePremiumTest {
     @DisplayName("an update with premium true asks for a grant and answers the new standing")
     void shouldGrantWhenTheUpdateAsksForPremium() {
         final UserEntity plainAccount = storedAccount(PLAIN_ACCOUNT_ID, "plain");
-        when(entitlementGrantService.grantProUnlessAlreadyPro(plainAccount))
+        when(entitlementGrantService.grantPro(plainAccount, null))
                 .thenReturn(OperatorProDecisionOutcome.GRANTED);
         when(entitlementRepository.findByOwnerId(PLAIN_ACCOUNT_ID))
                 .thenReturn(Optional.of(grantOf(plainAccount)));
@@ -120,9 +124,46 @@ class UserAdministrationServicePremiumTest {
         final AdminUserDto updated = administrationService.updateAccount(
                 PLAIN_ACCOUNT_ID, updateRequest("plain", true));
 
-        verify(entitlementGrantService).grantProUnlessAlreadyPro(plainAccount);
+        verify(entitlementGrantService).grantPro(plainAccount, null);
         assertThat(updated.premium()).isTrue();
         assertThat(updated.premiumSource()).isEqualTo(EntitlementSource.GRANT);
+        assertThat(updated.premiumUntil()).isNull();
+    }
+
+    @Test
+    @DisplayName("an update naming a grant term passes it on and answers the grant's end")
+    void shouldPassTheGrantTermOnAndAnswerTheGrantsEnd() {
+        final UserEntity grantedAccount = storedAccount(GRANTED_ACCOUNT_ID, "granted");
+        final Instant grantedUntil = Instant.now().plus(Duration.ofDays(365));
+        final EntitlementEntity oneYearGrant = new EntitlementEntity(grantedAccount);
+        oneYearGrant.becomeOperatorGrant(grantedUntil);
+        when(entitlementGrantService.grantPro(grantedAccount, PremiumGrantTerm.ONE_YEAR))
+                .thenReturn(OperatorProDecisionOutcome.GRANT_TERM_REAPPLIED);
+        when(entitlementRepository.findByOwnerId(GRANTED_ACCOUNT_ID))
+                .thenReturn(Optional.of(oneYearGrant));
+
+        final AdminUserDto updated = administrationService.updateAccount(GRANTED_ACCOUNT_ID,
+                new AdminUserUpdateRequestDto("granted@example.com", "granted",
+                        UserAccountStatus.ACTIVE, true, PremiumGrantTerm.ONE_YEAR));
+
+        verify(entitlementGrantService).grantPro(grantedAccount, PremiumGrantTerm.ONE_YEAR);
+        assertThat(updated.premiumSource()).isEqualTo(EntitlementSource.GRANT);
+        assertThat(updated.premiumUntil()).isEqualTo(grantedUntil);
+    }
+
+    @Test
+    @DisplayName("a grant term sent with premium false is ignored: only a revocation is asked for")
+    void shouldIgnoreTheGrantTermWhenRevoking() {
+        final UserEntity grantedAccount = storedAccount(GRANTED_ACCOUNT_ID, "granted");
+        when(entitlementGrantService.revokeGrantedPro(grantedAccount))
+                .thenReturn(OperatorProDecisionOutcome.REVOKED);
+
+        administrationService.updateAccount(GRANTED_ACCOUNT_ID,
+                new AdminUserUpdateRequestDto("granted@example.com", "granted",
+                        UserAccountStatus.ACTIVE, false, PremiumGrantTerm.ONE_YEAR));
+
+        verify(entitlementGrantService).revokeGrantedPro(grantedAccount);
+        verify(entitlementGrantService, never()).grantPro(any(), any());
     }
 
     @Test
@@ -134,7 +175,7 @@ class UserAdministrationServicePremiumTest {
 
         assertThatThrownBy(() -> administrationService.updateAccount(
                 LIFETIME_ACCOUNT_ID, new AdminUserUpdateRequestDto(
-                        "changed@example.com", "Changed", UserAccountStatus.DISABLED, false)))
+                        "changed@example.com", "Changed", UserAccountStatus.DISABLED, false, null)))
                 .isInstanceOf(PaidEntitlementRevocationException.class);
 
         assertThat(lifetimeAccount.getEmail()).isEqualTo("lifetime@example.com");
@@ -150,15 +191,21 @@ class UserAdministrationServicePremiumTest {
             saved.setId(UUID.randomUUID());
             return saved;
         });
-        when(entitlementGrantService.grantProUnlessAlreadyPro(any()))
+        when(entitlementGrantService.grantPro(any(), any()))
                 .thenReturn(OperatorProDecisionOutcome.GRANTED);
 
         administrationService.createAccount(createRequest("withpro", true));
         administrationService.createAccount(createRequest("withoutpro", false));
+        administrationService.createAccount(new AdminUserCreateRequestDto("withayear",
+                "withayear@example.com", "withayear", null, UserAccountStatus.ACTIVE, true,
+                PremiumGrantTerm.ONE_YEAR));
 
-        verify(entitlementGrantService, times(1)).grantProUnlessAlreadyPro(
-                argThat(created ->
-                        "withpro".equals(created.getUsername())));
+        verify(entitlementGrantService, times(1)).grantPro(
+                argThat(created -> "withpro".equals(created.getUsername())), isNull());
+        verify(entitlementGrantService, times(1)).grantPro(
+                argThat(created -> "withayear".equals(created.getUsername())),
+                eq(PremiumGrantTerm.ONE_YEAR));
+        verify(entitlementGrantService, times(2)).grantPro(any(), any());
         verify(entitlementGrantService, never()).revokeGrantedPro(any());
     }
 
@@ -200,7 +247,7 @@ class UserAdministrationServicePremiumTest {
             final String username, final Boolean premium) {
 
         return new AdminUserUpdateRequestDto(
-                username + "@example.com", username, UserAccountStatus.ACTIVE, premium);
+                username + "@example.com", username, UserAccountStatus.ACTIVE, premium, null);
     }
 
     /**
@@ -214,7 +261,7 @@ class UserAdministrationServicePremiumTest {
             final String username, final boolean premium) {
 
         return new AdminUserCreateRequestDto(username, username + "@example.com", username,
-                null, UserAccountStatus.ACTIVE, premium);
+                null, UserAccountStatus.ACTIVE, premium, null);
     }
 
     /**
@@ -250,7 +297,7 @@ class UserAdministrationServicePremiumTest {
      */
     private static EntitlementEntity grantOf(final UserEntity owner) {
         final EntitlementEntity entitlement = new EntitlementEntity(owner);
-        entitlement.becomeOperatorGrant();
+        entitlement.becomeOperatorGrant(null);
         return entitlement;
     }
 }

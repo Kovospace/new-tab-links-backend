@@ -325,9 +325,14 @@ Deliberately not built yet. Do not treat any of these as oversights to quietly f
   are in the Javadoc of `CreemWebhookController`, `PaymentWebhookClaimStore` and
   `EntitlementTransitionPolicy`: body bound as `byte[]`, explicit security exemption, claim in
   its own `REQUIRES_NEW` transaction, older events refused, past-due marks and never revokes.
-  **The operator grants pro through the admin user endpoints** (`premium` on create/update,
-  `EntitlementGrantService`): a GRANT row only where nothing grants, only a GRANT can be revoked
-  (a paid one answers 409), and a later payment takes a GRANT over through the ordinary policy.
+  **The operator grants pro through the admin user endpoints** (`premium` + optional
+  `premiumGrantTerm` `ONE_YEAR`/`LIFETIME` on create/update, `EntitlementGrantService`): a GRANT
+  row where nothing grants (no term = lifetime), re-applied from now over an existing GRANT only
+  when a term is named - the admin form sends `premium` on every save, so a null term must never
+  extend a year - never over a paid row; only a GRANT can be revoked (a paid one answers 409),
+  and a later payment takes a GRANT over through the ordinary policy. A one-year grant is just a
+  GRANT with `paid_until`; it reads as plan `YEARLY_RECURRING` (no end: `LIFETIME`) with
+  `grantedByOperator=true` on `/payments/subscription`, and as `premiumUntil` on the admin DTO.
   **Do not add a filter that reads the request body** - none does today, which is why no
   `ContentCachingRequestWrapper` is needed. `payment_webhook_event` is never pruned; Creem stops
   retrying after 24 hours, so rows older than that could go.

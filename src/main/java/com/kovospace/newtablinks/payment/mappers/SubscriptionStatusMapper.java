@@ -38,7 +38,8 @@ public class SubscriptionStatusMapper {
      */
     public SubscriptionStatusDto toDtoForAccountWithoutEntitlement() {
         return new SubscriptionStatusDto(
-                null, SubscriptionState.NONE, null, null, null, null, false, false, null, null);
+                null, SubscriptionState.NONE, null, null, null, null, false, false, null, null,
+                false);
     }
 
     /**
@@ -49,7 +50,7 @@ public class SubscriptionStatusMapper {
      */
     public SubscriptionStatusDto toDto(final EntitlementEntity entitlement) {
         return new SubscriptionStatusDto(
-                toPlan(entitlement.getSource()),
+                toPlan(entitlement),
                 toState(entitlement.getStatus()),
                 entitlement.getCreatedAt(),
                 entitlement.getPaidUntil(),
@@ -58,23 +59,29 @@ public class SubscriptionStatusMapper {
                 false,
                 false,
                 null,
-                null);
+                null,
+                entitlement.isOperatorGrant());
     }
 
     /**
-     * Names the plan an entitlement source stands for.
+     * Names the plan an entitlement stands for.
      *
-     * <p>A grant is pro given by the operator, not a plan anyone bought, so it has no plan name;
-     * the website sees {@code null} and the state alongside it.</p>
+     * <p>A grant is pro given by the operator, not a plan anyone bought, but the website shows
+     * it the way it shows the plan it resembles: a grant without an end as {@code LIFETIME}, a
+     * one-year grant as {@code YEARLY_RECURRING}. {@code grantedByOperator} on the same DTO is
+     * what tells the two apart from a purchase, and {@code renewsAt} stays {@code null}, because
+     * a grant renews only when the operator renews it.</p>
      *
-     * @param source where the entitlement came from
-     * @return the plan, or {@code null} for a grant
+     * @param entitlement the account's entitlement row
+     * @return the plan
      */
-    static SubscriptionPlan toPlan(final EntitlementSource source) {
-        return switch (source) {
+    static SubscriptionPlan toPlan(final EntitlementEntity entitlement) {
+        return switch (entitlement.getSource()) {
             case SUBSCRIPTION -> SubscriptionPlan.YEARLY_RECURRING;
             case LIFETIME -> SubscriptionPlan.LIFETIME;
-            case GRANT -> null;
+            case GRANT -> entitlement.getPaidUntil() == null
+                    ? SubscriptionPlan.LIFETIME
+                    : SubscriptionPlan.YEARLY_RECURRING;
         };
     }
 

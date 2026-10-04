@@ -3,6 +3,7 @@ package com.kovospace.newtablinks.entitlement.services;
 import com.kovospace.newtablinks.common.exceptions.PaidEntitlementRevocationException;
 import com.kovospace.newtablinks.entitlement.models.EntitlementEntity;
 import com.kovospace.newtablinks.entitlement.models.OperatorProDecisionOutcome;
+import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import java.time.Instant;
@@ -19,10 +20,17 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>The rules:</p>
  * <ul>
- *   <li><strong>Granting an account that is already pro does nothing</strong>, whatever it is pro
- *       through. A paid entitlement is never downgraded to a grant.</li>
- *   <li><strong>Granting an account that is not pro</strong> writes a grant - into a new row, or
- *       over a lapsed one in place, since an account has one row at most.</li>
+ *   <li><strong>A paid entitlement is never touched</strong> by a grant, whatever term is named;
+ *       it is never downgraded to a grant.</li>
+ *   <li><strong>Granting an account already pro through a grant, without naming a term</strong>,
+ *       does nothing. The admin form sends {@code premium} on every save, so this is what keeps
+ *       an unrelated edit from silently pushing a one-year grant's end further out.</li>
+ *   <li><strong>Granting an account already pro through a grant, naming a term</strong>,
+ *       re-applies the grant with that term counted from now: the operator switches between one
+ *       year and lifetime, or renews a year.</li>
+ *   <li><strong>Granting an account that is not pro</strong> writes a grant of the named term,
+ *       lifetime when none is named - into a new row, or over a lapsed one in place, since an
+ *       account has one row at most.</li>
  *   <li><strong>Revoking a paid entitlement is refused.</strong> That is a refund or a
  *       cancellation at the provider, not something to switch off here.</li>
  *   <li><strong>Revoking a grant</strong> deletes the row, so the account reads as never having
@@ -58,26 +66,61 @@ public class EntitlementGrantService {
     }
 
     /**
-     * Makes an account pro through an operator grant, unless it is pro already.
+     * Makes an account pro through an operator grant of the given term, following the rules in
+     * the class description.
      *
      * <p>Joins the caller's transaction and locks the account's entitlement row until it ends.</p>
      *
-     * @param owner the account, already persisted
-     * @return {@link OperatorProDecisionOutcome#GRANTED}, or
-     *         {@link OperatorProDecisionOutcome#ALREADY_PRO} when nothing was changed
+     * @param owner     the account, already persisted
+     * @param grantTerm how long the grant lasts; {@code null} leaves an existing grant as it is
+     *                  and makes a new one {@link PremiumGrantTerm#DEFAULT_TERM}
+     * @return {@link OperatorProDecisionOutcome#GRANTED} for a new grant,
+     *         {@link OperatorProDecisionOutcome#GRANT_TERM_REAPPLIED} for an existing grant given
+     *         a new term, or {@link OperatorProDecisionOutcome#ALREADY_PRO} when nothing was
+     *         changed
+     * @since 0.0.15
      */
     @Transactional
-    public OperatorProDecisionOutcome grantProUnlessAlreadyPro(final UserEntity owner) {
+    public OperatorProDecisionOutcome grantPro(
+            final UserEntity owner,
+            final PremiumGrantTerm grantTerm) {
+
+        final Instant now = Instant.now();
         final Optional<EntitlementEntity> existing =
                 entitlementRepository.findByOwnerIdForUpdate(owner.getId());
-        if (existing.isPresent() && existing.get().grantsProAt(Instant.now())) {
-            return OperatorProDecisionOutcome.ALREADY_PRO;
+        if (existing.isPresent() && existing.get().grantsProAt(now)) {
+            return reapplyStandingGrantWhenTermNamed(existing.get(), grantTerm, now);
         }
 
         final EntitlementEntity entitlement = existing.orElseGet(() -> new EntitlementEntity(owner));
-        entitlement.becomeOperatorGrant();
+        final PremiumGrantTerm effectiveTerm =
+                grantTerm == null ? PremiumGrantTerm.DEFAULT_TERM : grantTerm;
+        entitlement.becomeOperatorGrant(effectiveTerm.grantedUntilWhenGrantedAt(now));
         entitlementRepository.save(entitlement);
         return OperatorProDecisionOutcome.GRANTED;
+    }
+
+    /**
+     * Gives a standing grant the named term from now; leaves a purchase, or a grant when no term
+     * is named, exactly as it is.
+     *
+     * @param entitlement the locked entitlement, which grants pro at {@code now}
+     * @param grantTerm   the term the operator named, or {@code null}
+     * @param now         the moment the term is counted from
+     * @return {@link OperatorProDecisionOutcome#GRANT_TERM_REAPPLIED} or
+     *         {@link OperatorProDecisionOutcome#ALREADY_PRO}
+     */
+    private OperatorProDecisionOutcome reapplyStandingGrantWhenTermNamed(
+            final EntitlementEntity entitlement,
+            final PremiumGrantTerm grantTerm,
+            final Instant now) {
+
+        if (grantTerm == null || !entitlement.isOperatorGrant()) {
+            return OperatorProDecisionOutcome.ALREADY_PRO;
+        }
+        entitlement.becomeOperatorGrant(grantTerm.grantedUntilWhenGrantedAt(now));
+        entitlementRepository.save(entitlement);
+        return OperatorProDecisionOutcome.GRANT_TERM_REAPPLIED;
     }
 
     /**

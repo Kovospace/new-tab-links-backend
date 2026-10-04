@@ -21,7 +21,7 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Mail | `auth/services/SmtpAccountEmailSender.java` |
 | Devices, installation id, take-over | `user/services/UserDeviceService.java` |
 | Account read/update | `user/services/UserService.java` |
-| Operator-granted pro (admin `premium` checkbox) | `entitlement/services/EntitlementGrantService.java`, called from `user/services/UserAdministrationService.java` |
+| Operator-granted pro (admin `premium` checkbox, `premiumGrantTerm` one year / lifetime) | `entitlement/services/EntitlementGrantService.java`, `entitlement/models/PremiumGrantTerm.java`, called from `user/services/UserAdministrationService.java`; shown as `premiumUntil` (`AdminUserDto`) and `grantedByOperator` (`payment/mappers/SubscriptionStatusMapper.java`) |
 | Account deletion (user and admin paths) | `common/services/AccountDeletionService.java`, `user/services/UserAdministrationService.java` |
 | Deleting a subtree of the hierarchy | `common/services/HierarchyDeletionService.java` |
 | Operator sign-in and lockout (shared by every replica) | `admin/services/AdminSignInService.java`, `admin/services/AdminSignInAttemptTracker.java`, `admin/repositories/AdminSignInLockRepository.java` (the atomic SQL) |
