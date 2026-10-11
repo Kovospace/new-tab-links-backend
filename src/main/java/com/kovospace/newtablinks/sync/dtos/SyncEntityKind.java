@@ -21,7 +21,8 @@ import java.util.Arrays;
  * @since 0.0.6
  */
 @Schema(description = "The kind of record an operation is about",
-        allowableValues = {"profile", "environment", "group", "subgroup", "link", "closedTab"})
+        allowableValues = {"profile", "environment", "group", "subgroup", "link", "closedTab",
+                "visit"})
 public enum SyncEntityKind {
 
     /** A profile: the top of the hierarchy. */
@@ -40,7 +41,10 @@ public enum SyncEntityKind {
     LINK("link"),
 
     /** A tab the user closed, on the list of one profile. */
-    CLOSED_TAB("closedTab");
+    CLOSED_TAB("closedTab"),
+
+    /** A page the user visited, in the browsing history of one profile. */
+    VISIT("visit");
 
     /** The name this kind travels under, exactly as the extension spells it. */
     private final String wireName;

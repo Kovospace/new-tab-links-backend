@@ -103,6 +103,8 @@ com.kovospace.newtablinks
 ├── subgroup/      collapsible sections, owned by a group
 ├── link/          the bookmarks themselves
 ├── closedtab/     recently closed browser tabs, a capped log hanging off a profile
+├── visit/         browsing history - visited pages, a capped log hanging off a profile, built
+│                  exactly like closedtab/
 ├── profile/       named sets of environments, the top of the hierarchy and the extension's own
 ├── sync/          whole-account snapshot, the pushed change batch, and the change event that
 │                  drives websocket pushes
@@ -177,8 +179,9 @@ Which file holds which concern, and which endpoint lives in which controller:
 - **Plan limits are slots, judged live** (`common/services/PlanLimitPolicy`, numbers only in
   `newtablinks.plan-limits.{premium,free}.*`): premium = the Fair Use Policy (50 profiles,
   50 workspaces *per profile*, 25 groups/workspace, 25 subgroups/group, 500 links/workspace,
-  500 closed tabs, 100 signed-in installations); free = 1 profile, 2 workspaces per profile,
-  25 closed tabs, 5 installations, premium numbers elsewhere. Premium is
+  500 closed tabs, 1000 browsing history entries, 100 signed-in installations); free = 1 profile,
+  2 workspaces per profile, 25 closed tabs, 50 browsing history entries, 5 installations,
+  premium numbers elsewhere. Premium is
   `EntitlementStandingService.isAccountProNow`, never a stored flag. **Slots:** the account's
   first N profiles and the first M workspaces of each slot-holding profile, ordered by
   `createdAt` then `id` (`SynchronisationSlotReader`). Refused (409 `PlanLimitReachedException`,
@@ -193,12 +196,21 @@ Which file holds which concern, and which endpoint lives in which controller:
   Known gap: a record *moved out of* a slot-less container is recorded only under its new one.
 - **Closed tabs never refuse:** after every push the oldest beyond the plan's limit are deleted,
   but never more than the push added (`max(limit, size before push)`), so a downgrade does not
-  cut 500 to 25 at once.
+  cut 500 to 25 at once. **Visits (browsing history) follow the identical rule** - limit
+  `BROWSING_HISTORY`, JSON `browsingHistory`, `VisitSynchronizationService.trimHistoryToPlanLimit`.
+- **A visit is a closed tab's twin** (`visit/`, V18, sync kind `"visit"`, snapshot `visits`):
+  same columns with `visitedAt` for `closedAt` (client clock, refused when absent, never stamped),
+  same lengths, no position, no uniqueness on `url` (the extension keeps one per page per local
+  day per device). The snapshot always carries `visits`, empty when none: the extension reads its
+  presence as "this server keeps history" and sends no `visit` operation otherwise.
 - **`profile.record_closed_tabs` is the one profile setting an upsert does not replace when
   absent** (V17, default true). Every other flag reads absent as false; this one is on by
   default, so absent - an extension build from before it - keeps the stored value, or true for a
   new row (`ProfileEntity.setRecordClosedTabsWhenSupplied`). Turning it off deletes nothing
   here; the extension pushes the deletions of its closed tabs itself.
+- **`profile.record_browsing_history` follows the same "absent keeps what is stored" rule**
+  (V18), but defaults to **false** - recording a browsing history is opt-in, so a new profile
+  does not (`setRecordBrowsingHistoryWhenSupplied`). Turning it off deletes no visits here.
 - **Installations are counted while signed in, never as rows** (`SignedInInstallationLimitService`):
   a device with `installation_id` and a live refresh token. A sign-in past the limit is refused
   (a known installation already in session always passes; a new one, or one claiming a

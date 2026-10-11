@@ -12,8 +12,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p>Profiles and workspaces are <em>slots</em>: the account's first ones, in the order the
  * server first stored them, synchronise, and nothing else does (see {@code SynchronisationSlotReader}).
- * Groups, subgroups and links are caps on their container and refuse growth only. Closed tabs
- * never refuse: the oldest are trimmed. Devices count signed-in extension installations.</p>
+ * Groups, subgroups and links are caps on their container and refuse growth only. Closed tabs and
+ * browsing history never refuse: the oldest are trimmed. Devices count signed-in extension installations.</p>
  *
  * @since 0.0.18
  */
@@ -41,6 +41,16 @@ public enum PlanLimit {
      * <p>Never sent in a refusal: the oldest entries beyond it are deleted instead.</p>
      */
     CLOSED_TABS,
+
+    /**
+     * Browsing history entries (visits) of one account, across all of its profiles.
+     *
+     * <p>Never sent in a refusal: like {@link #CLOSED_TABS}, the oldest entries beyond it are
+     * deleted instead.</p>
+     *
+     * @since 0.0.19
+     */
+    BROWSING_HISTORY,
 
     /** Extension installations of one account signed in at the same time. */
     DEVICES

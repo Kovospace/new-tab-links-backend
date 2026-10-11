@@ -15,6 +15,7 @@ import java.util.UUID;
  * @param subgroupCountsByGroupId    subgroups per group; an absent one counts as zero
  * @param linkCountsByWorkspaceId    links per environment; an absent one counts as zero
  * @param closedTabCount             the account's closed-tab history entries
+ * @param visitCount                 the account's browsing history entries
  * @since 0.0.18
  */
 public record PushLimitBaseline(
@@ -22,7 +23,8 @@ public record PushLimitBaseline(
         Map<UUID, Long> groupCountsByWorkspaceId,
         Map<UUID, Long> subgroupCountsByGroupId,
         Map<UUID, Long> linkCountsByWorkspaceId,
-        long closedTabCount) {
+        long closedTabCount,
+        long visitCount) {
 
     /**
      * Copies the maps, so that a baseline cannot change after it was taken.

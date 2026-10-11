@@ -21,6 +21,8 @@ import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.profile.repositories.ProfileRepository;
 import com.kovospace.newtablinks.subgroup.models.SubgroupEntity;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
+import com.kovospace.newtablinks.visit.models.VisitEntity;
+import com.kovospace.newtablinks.visit.repositories.VisitRepository;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -44,10 +46,11 @@ class HierarchyDeletionServiceTest {
     private final SubgroupRepository subgroupRepository = mock(SubgroupRepository.class);
     private final LinkRepository linkRepository = mock(LinkRepository.class);
     private final ClosedTabRepository closedTabRepository = mock(ClosedTabRepository.class);
+    private final VisitRepository visitRepository = mock(VisitRepository.class);
 
     private final HierarchyDeletionService hierarchyDeletionService = new HierarchyDeletionService(
             profileRepository, environmentRepository, groupRepository, subgroupRepository,
-            linkRepository, closedTabRepository);
+            linkRepository, closedTabRepository, visitRepository);
 
     @Test
     @DisplayName("empties a profile from the links upwards before removing the profile itself")
@@ -150,6 +153,22 @@ class HierarchyDeletionServiceTest {
     }
 
     @Test
+    @DisplayName("clears a profile's visits before removing the profile itself")
+    void clearsTheVisitsOfAProfileBeforeTheProfile() {
+
+        final ProfileEntity profile = entity(mock(ProfileEntity.class));
+        final VisitEntity visit = mock(VisitEntity.class);
+
+        when(visitRepository.findAllByProfileId(profile.getId())).thenReturn(List.of(visit));
+
+        hierarchyDeletionService.deleteProfileWithDescendants(profile);
+
+        final InOrder order = inOrder(visitRepository, profileRepository);
+        order.verify(visitRepository).deleteAll(List.of(visit));
+        order.verify(profileRepository).delete(profile);
+    }
+
+    @Test
     @DisplayName("leaves closed tabs alone when something below a profile is deleted")
     void doesNotTouchClosedTabsWhenDeletingAnEnvironment() {
 
@@ -159,6 +178,7 @@ class HierarchyDeletionServiceTest {
                 entity(mock(EnvironmentEntity.class)));
 
         verify(closedTabRepository, never()).deleteAll(anyList());
+        verify(visitRepository, never()).deleteAll(anyList());
     }
 
     /** Gives a mocked entity an identifier, which is all this service reads off one. */

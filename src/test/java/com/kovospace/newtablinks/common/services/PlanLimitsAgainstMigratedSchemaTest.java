@@ -58,7 +58,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * lower limits and their refusal on the wire, workspaces counted per profile, a premium account
  * held to the Fair Use Policy instead, writes into a profile or workspace without a slot refused
  * - on the REST endpoints and in the sync push alike - while that data is kept and can be
- * deleted, the closed-tab history trimmed gently after a downgrade, and the effective limits
+ * deleted, the closed-tab and browsing histories trimmed gently after a downgrade, and the effective limits
  * as the extension reads them.
  *
  * <p>The limits are set small so that they are reachable; the Fair Use caps sit just above the
@@ -75,6 +75,8 @@ class PlanLimitsAgainstMigratedSchemaTest {
     private static final int PREMIUM_PROFILES = 3;
     private static final int PREMIUM_WORKSPACES_PER_PROFILE = 3;
     private static final int PREMIUM_CLOSED_TABS = 5;
+    private static final int FREE_BROWSING_HISTORY = 2;
+    private static final int PREMIUM_BROWSING_HISTORY = 6;
     private static final String WEBSITE = "https://tabilinks.example";
 
     private static MigratedPostgresDatabase database;
@@ -141,6 +143,9 @@ class PlanLimitsAgainstMigratedSchemaTest {
         registry.add("newtablinks.plan-limits.premium.workspaces-per-profile",
                 () -> PREMIUM_WORKSPACES_PER_PROFILE);
         registry.add("newtablinks.plan-limits.premium.closed-tabs", () -> PREMIUM_CLOSED_TABS);
+        registry.add("newtablinks.plan-limits.free.browsing-history", () -> FREE_BROWSING_HISTORY);
+        registry.add("newtablinks.plan-limits.premium.browsing-history",
+                () -> PREMIUM_BROWSING_HISTORY);
         registry.add("newtablinks.web.base-url", () -> WEBSITE);
     }
 
@@ -357,6 +362,60 @@ class PlanLimitsAgainstMigratedSchemaTest {
         assertThat(closedTabExists(oldest)).isFalse();
     }
 
+    // ---------------------------------------------------------------------- browsing history
+
+    @Test
+    @DisplayName("visits are trimmed to the free limit, and after a downgrade a longer history "
+            + "rolls at its size instead of shrinking at once")
+    void shouldTrimVisitsToThePlanWithoutCuttingAHistoryAtOnce() {
+        final UserEntity freeOwner = newAccount();
+        final UUID freeProfile = UUID.randomUUID();
+        final UUID newest = UUID.randomUUID();
+        push(freeOwner, upsertProfile(freeProfile, "Free"),
+                upsertVisit(UUID.randomUUID(), freeProfile, 1),
+                upsertVisit(UUID.randomUUID(), freeProfile, 2),
+                upsertVisit(newest, freeProfile, 3));
+        assertThat(countVisits(freeOwner.getId())).isEqualTo(FREE_BROWSING_HISTORY);
+        assertThat(visitExists(newest)).isTrue();
+
+        final UserEntity downgraded = newAccount();
+        makePremium(downgraded);
+        final UUID profile = UUID.randomUUID();
+        final UUID oldest = UUID.randomUUID();
+        push(downgraded, upsertProfile(profile, "Was premium"),
+                upsertVisit(oldest, profile, 1),
+                upsertVisit(UUID.randomUUID(), profile, 2),
+                upsertVisit(UUID.randomUUID(), profile, 3),
+                upsertVisit(UUID.randomUUID(), profile, 4));
+        entitlementGrantService.revokeGrantedPro(downgraded);
+
+        push(downgraded, upsertVisit(UUID.randomUUID(), profile, 5));
+
+        assertThat(countVisits(downgraded.getId())).isEqualTo(4);
+        assertThat(visitExists(oldest)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a profile's visits go with it, and the snapshot carries them and the setting")
+    void shouldServeVisitsAndDeleteThemWithTheirProfile() throws Exception {
+        final UserEntity owner = newAccount();
+        final UUID profile = UUID.randomUUID();
+        final UUID visit = UUID.randomUUID();
+        push(owner, upsertProfile(profile, "Mine"), upsertVisit(visit, profile, 1));
+
+        mockMvc.perform(get("/api/v1/sync/snapshot")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visits[0].id").value(visit.toString()))
+                .andExpect(jsonPath("$.visits[0].visitedAt").value("2026-10-01T10:01:00Z"))
+                .andExpect(jsonPath("$.profiles[0].recordBrowsingHistory").value(false))
+                .andExpect(jsonPath("$.profiles[0].recordClosedTabs").value(true));
+
+        push(owner, delete(SyncEntityKind.PROFILE, profile));
+
+        assertThat(visitExists(visit)).isFalse();
+    }
+
     // ------------------------------------------------------------------- effective limits
 
     @Test
@@ -376,6 +435,7 @@ class PlanLimitsAgainstMigratedSchemaTest {
                 .andExpect(jsonPath("$.limits.subgroupsPerGroup").value(25))
                 .andExpect(jsonPath("$.limits.linksPerWorkspace").value(500))
                 .andExpect(jsonPath("$.limits.closedTabs").value(FREE_CLOSED_TABS))
+                .andExpect(jsonPath("$.limits.browsingHistory").value(FREE_BROWSING_HISTORY))
                 .andExpect(jsonPath("$.limits.devices").value(5));
 
         makePremium(owner);
@@ -385,6 +445,8 @@ class PlanLimitsAgainstMigratedSchemaTest {
                 .andExpect(jsonPath("$.planLimits.premium").value(true))
                 .andExpect(jsonPath("$.planLimits.limits.profiles").value(PREMIUM_PROFILES))
                 .andExpect(jsonPath("$.planLimits.limits.closedTabs").value(PREMIUM_CLOSED_TABS))
+                .andExpect(jsonPath("$.planLimits.limits.browsingHistory")
+                        .value(PREMIUM_BROWSING_HISTORY))
                 .andExpect(jsonPath("$.planLimits.limits.devices").value(100));
     }
 
@@ -432,7 +494,7 @@ class PlanLimitsAgainstMigratedSchemaTest {
     }
 
     private static ProfileSaveRequestDto profileRequest(final String name) {
-        return new ProfileSaveRequestDto(name, false, false, null, List.of());
+        return new ProfileSaveRequestDto(name, false, false, null, null, List.of());
     }
 
     private List<EnvironmentDto> createWorkspaces(
@@ -467,25 +529,25 @@ class PlanLimitsAgainstMigratedSchemaTest {
     private static SyncOperationDto upsertProfile(final UUID id, final String name) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null, name, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertWorkspace(final UUID id, final UUID profileId) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.ENVIRONMENT, id,
                 profileId, null, null, null, "Workspace", null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertGroup(final UUID id, final UUID workspaceId) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.GROUP, id,
                 null, workspaceId, null, null, "Group", null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertLink(final UUID id, final UUID groupId) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.LINK, id,
                 null, null, groupId, null, null, null, "Link", "https://link.test", null,
-                null, null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertClosedTab(
@@ -493,7 +555,17 @@ class PlanLimitsAgainstMigratedSchemaTest {
 
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, id,
                 profileId, null, null, null, null, null, "Closed", "https://closed.test", null,
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
+                Instant.parse("2026-10-01T10:00:00Z").plusSeconds(60L * minutesAfterTen),
+                null, null, null);
+    }
+
+    private static SyncOperationDto upsertVisit(
+            final UUID id, final UUID profileId, final int minutesAfterTen) {
+
+        return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.VISIT, id,
+                profileId, null, null, null, null, null, "Visited", "https://visited.test", null,
+                null, null, null, null, null, null, null, null, null, null,
                 Instant.parse("2026-10-01T10:00:00Z").plusSeconds(60L * minutesAfterTen),
                 null, null);
     }
@@ -501,7 +573,7 @@ class PlanLimitsAgainstMigratedSchemaTest {
     private static SyncOperationDto delete(final SyncEntityKind kind, final UUID id) {
         return new SyncOperationDto(SyncOperationKind.DELETE, kind, id,
                 null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     private String profileName(final UUID profileId) {
@@ -523,6 +595,17 @@ class PlanLimitsAgainstMigratedSchemaTest {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM closed_tab tab "
                 + "JOIN profile p ON p.id = tab.profile_id WHERE p.user_id = ?",
                 Integer.class, ownerId);
+    }
+
+    private int countVisits(final UUID ownerId) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM visit v "
+                + "JOIN profile p ON p.id = v.profile_id WHERE p.user_id = ?",
+                Integer.class, ownerId);
+    }
+
+    private boolean visitExists(final UUID visitId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM visit WHERE id = ?", Integer.class, visitId) > 0;
     }
 
     private boolean closedTabExists(final UUID closedTabId) {

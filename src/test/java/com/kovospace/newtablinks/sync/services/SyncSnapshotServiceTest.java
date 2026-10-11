@@ -18,6 +18,9 @@ import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.sync.dtos.SyncSnapshotDto;
 import com.kovospace.newtablinks.user.services.AccountPlanLimitsService;
 import com.kovospace.newtablinks.user.services.UserService;
+import com.kovospace.newtablinks.visit.mappers.VisitMapperImpl;
+import com.kovospace.newtablinks.visit.models.VisitEntity;
+import com.kovospace.newtablinks.visit.repositories.VisitRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -25,13 +28,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests that a pulled snapshot carries the owner's closed tabs.
+ * Tests that a pulled snapshot carries the owner's closed tabs and browsing history.
  *
  * <p>A pull replaces a profile wholesale, so a record the snapshot leaves out is a record every
  * other device deletes the next time it synchronizes. That makes the snapshot the other half of
  * the contract the push is the first half of, and worth pinning per kind of record.</p>
  *
- * <p>The closed tab half of the wiring is assembled for real - repository, mapper and reader -
+ * <p>The closed tab and visit halves of the wiring are assembled for real - repository, mapper and reader -
  * because the mapping is where a field silently goes missing. Everything else is a mock: this is
  * a test about one collection, not about the other five.</p>
  *
@@ -43,6 +46,7 @@ class SyncSnapshotServiceTest {
     private static final UUID OWNER_ID = UUID.randomUUID();
 
     private final ClosedTabRepository closedTabRepository = mock(ClosedTabRepository.class);
+    private final VisitRepository visitRepository = mock(VisitRepository.class);
 
     private final SyncSnapshotService syncSnapshotService = new SyncSnapshotService(
             mock(UserService.class),
@@ -54,6 +58,7 @@ class SyncSnapshotServiceTest {
             mock(LinkMapper.class),
             mock(EnvironmentSnapshotReader.class),
             new ClosedTabSnapshotReader(closedTabRepository, new ClosedTabMapperImpl()),
+            new VisitSnapshotReader(visitRepository, new VisitMapperImpl()),
             mock(ProfileService.class),
             mock(AccountPlanLimitsService.class));
 
@@ -98,6 +103,51 @@ class SyncSnapshotServiceTest {
         // A client that has just deleted its last entry pulls this, and null would be a crash on
         // a list it iterates without thinking about it.
         assertThat(syncSnapshotService.captureSnapshotForUser(OWNER_ID).closedTabs()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("returns the owner's visits, newest first, with every field of each")
+    void returnsTheVisitsOfTheOwner() {
+
+        final UUID profileId = UUID.randomUUID();
+        final ProfileEntity profile = mock(ProfileEntity.class);
+        when(profile.getId()).thenReturn(profileId);
+        final VisitEntity newer = new VisitEntity(profile, "https://spring.io",
+                "Spring Boot reference", "https://spring.io/icon.png",
+                Instant.parse("2026-10-11T09:00:00Z"), "Laptop");
+        newer.setId(UUID.randomUUID());
+        final VisitEntity older = new VisitEntity(profile, "https://example.test", "", null,
+                Instant.parse("2026-10-10T18:42:11Z"), null);
+        older.setId(UUID.randomUUID());
+
+        when(visitRepository.findAllByOwnerIdOrderedByMostRecentlyVisited(OWNER_ID))
+                .thenReturn(List.of(newer, older));
+
+        final SyncSnapshotDto snapshot = syncSnapshotService.captureSnapshotForUser(OWNER_ID);
+
+        assertThat(snapshot.visits()).hasSize(2);
+        assertThat(snapshot.visits().getFirst()).satisfies(pulled -> {
+            assertThat(pulled.id()).isEqualTo(newer.getId());
+            assertThat(pulled.profileId()).isEqualTo(profileId);
+            assertThat(pulled.url()).isEqualTo("https://spring.io");
+            assertThat(pulled.title()).isEqualTo("Spring Boot reference");
+            assertThat(pulled.faviconUrl()).isEqualTo("https://spring.io/icon.png");
+            assertThat(pulled.visitedAt()).isEqualTo(Instant.parse("2026-10-11T09:00:00Z"));
+            assertThat(pulled.deviceName()).isEqualTo("Laptop");
+        });
+        assertThat(snapshot.visits().get(1).visitedAt())
+                .isEqualTo(Instant.parse("2026-10-10T18:42:11Z"));
+    }
+
+    @Test
+    @DisplayName("reports an account with no visits as an empty list, never an absent one")
+    void returnsAnEmptyListWhenThereAreNoVisits() {
+
+        // The extension reads the collection's presence as "this server keeps visits", so null
+        // here would stop it synchronising history with an account that simply has none yet.
+        assertThat(syncSnapshotService.captureSnapshotForUser(OWNER_ID).visits())
+                .isNotNull()
+                .isEmpty();
     }
 
     /**

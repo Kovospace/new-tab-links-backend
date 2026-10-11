@@ -56,6 +56,8 @@ public class ProfileSyncOperationApplier implements SyncOperationApplier {
                 // Passed on as sent, not through flagOrFalse: absent has to keep recording on,
                 // or every extension released before the setting would switch it off.
                 operation.recordClosedTabs(),
+                // Likewise: absent keeps what another device turned on.
+                operation.recordBrowsingHistory(),
                 PushedOperationValues.listOrEmpty(operation.dismissedTips()),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 

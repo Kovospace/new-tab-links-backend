@@ -16,6 +16,8 @@ import java.util.List;
  * @param hideTips whether the profile hides the tips shown on the new tab page background
  * @param recordClosedTabs whether the profile records the browser tabs its user closes;
  *                         {@code null} leaves it as it is, and a new profile records them
+ * @param recordBrowsingHistory whether the profile records the pages its user visits;
+ *                              {@code null} leaves it as it is, and a new profile does not
  * @param dismissedTips identifiers of the tips the profile has dismissed one by one; absent is none
  * @since 0.0.6
  */
@@ -37,6 +39,11 @@ public record ProfileSaveRequestDto(
                 + "absent leaves the setting as it is, and a new profile records them",
                 example = "true")
         Boolean recordClosedTabs,
+
+        @Schema(description = "Whether the profile records the pages its user visits; absent "
+                + "leaves the setting as it is, and a new profile does not record them",
+                example = "false")
+        Boolean recordBrowsingHistory,
 
         @Schema(description = "Identifiers of the new tab page tips the profile has dismissed "
                 + "one by one; absent means none", example = "[\"hide-tips\"]")

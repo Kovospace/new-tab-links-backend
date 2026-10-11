@@ -14,6 +14,7 @@ package com.kovospace.newtablinks.common.models;
  * @param subgroupsPerGroup    most subgroups one group may hold
  * @param linksPerWorkspace    most links one workspace may hold
  * @param closedTabs           most closed-tab history entries an account keeps
+ * @param browsingHistory      most browsing history entries (visits) an account keeps
  * @param devices              most extension installations signed in at once
  * @since 0.0.18
  */
@@ -24,6 +25,7 @@ public record PlanLimitValues(
         int subgroupsPerGroup,
         int linksPerWorkspace,
         int closedTabs,
+        int browsingHistory,
         int devices) {
 
     /**
@@ -41,6 +43,7 @@ public record PlanLimitValues(
         requirePositive(subgroupsPerGroup, PlanLimit.SUBGROUPS_PER_GROUP);
         requirePositive(linksPerWorkspace, PlanLimit.LINKS_PER_WORKSPACE);
         requirePositive(closedTabs, PlanLimit.CLOSED_TABS);
+        requirePositive(browsingHistory, PlanLimit.BROWSING_HISTORY);
         requirePositive(devices, PlanLimit.DEVICES);
     }
 
@@ -58,6 +61,7 @@ public record PlanLimitValues(
             case SUBGROUPS_PER_GROUP -> subgroupsPerGroup;
             case LINKS_PER_WORKSPACE -> linksPerWorkspace;
             case CLOSED_TABS -> closedTabs;
+            case BROWSING_HISTORY -> browsingHistory;
             case DEVICES -> devices;
         };
     }

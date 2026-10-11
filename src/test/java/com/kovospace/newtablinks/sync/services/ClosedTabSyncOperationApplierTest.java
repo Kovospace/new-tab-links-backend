@@ -21,6 +21,7 @@ import com.kovospace.newtablinks.sync.dtos.SyncPushRequestDto;
 import com.kovospace.newtablinks.sync.dtos.SyncPushResultDto;
 import com.kovospace.newtablinks.sync.dtos.SyncRejectionReason;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
+import com.kovospace.newtablinks.visit.services.VisitSynchronizationService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -68,7 +69,8 @@ class ClosedTabSyncOperationApplierTest {
                     closedTabSynchronizationService, profileSynchronizationService)),
             mock(UserDataChangePublisher.class),
             PermissiveSyncPushLimitGuard.create(),
-            mock(ClosedTabSynchronizationService.class));
+            mock(ClosedTabSynchronizationService.class),
+            mock(VisitSynchronizationService.class));
 
     @Test
     @DisplayName("stores the closing moment the client sent rather than a server clock")
@@ -113,8 +115,8 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, UUID.randomUUID(),
                 PROFILE_ID, null, null, null,
                 null, null, "Spring Boot reference", null, null,
-                null, null, null, null, null, null, null, null,
-                CLOSED_YESTERDAY, "Laptop", null);
+                null, null, null, null, null, null, null, null, null,
+                CLOSED_YESTERDAY, null, "Laptop", null);
         final SyncOperationDto sound = upsertClosedTab(UUID.randomUUID(), CLOSED_YESTERDAY);
 
         profileIsTheOwners();
@@ -154,8 +156,8 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, UUID.randomUUID(),
                 null, null, null, null,
                 null, null, "Spring Boot reference", "https://spring.io", null,
-                null, null, null, null, null, null, null, null,
-                CLOSED_YESTERDAY, "Laptop", null);
+                null, null, null, null, null, null, null, null, null,
+                CLOSED_YESTERDAY, null, "Laptop", null);
 
         final SyncPushResultDto result =
                 syncPushService.applyPushedOperations(push(unparented), OWNER_ID);
@@ -177,8 +179,8 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, UUID.randomUUID(),
                 PROFILE_ID, null, null, null,
                 null, null, null, "https://spring.io", null,
-                null, null, null, null, null, null, null, null,
-                CLOSED_YESTERDAY, null, null);
+                null, null, null, null, null, null, null, null, null,
+                CLOSED_YESTERDAY, null, null, null);
 
         profileIsTheOwners();
         storedAsRequested();
@@ -287,8 +289,8 @@ class ClosedTabSyncOperationApplierTest {
                 PROFILE_ID, null, null, null,
                 null, null, "Spring Boot reference", "https://spring.io",
                 "https://spring.io/icon.png",
-                null, null, null, null, null, null, null, null,
-                closedAt, "Laptop", null);
+                null, null, null, null, null, null, null, null, null,
+                closedAt, null, "Laptop", null);
     }
 
     /**
@@ -302,7 +304,7 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.DELETE, SyncEntityKind.CLOSED_TAB, id,
                 null, null, null, null,
                 null, null, null, null, null,
-                null, null, null, null, null, null, null, null,
-                null, null, null);
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null);
     }
 }

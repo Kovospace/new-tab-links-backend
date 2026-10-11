@@ -33,6 +33,14 @@ class SyncEntityKindTest {
     }
 
     @Test
+    @DisplayName("a visit travels as visit, the name the extension's contract uses")
+    void visitTravelsAsVisit() {
+
+        assertThat(SyncEntityKind.VISIT.getWireName()).isEqualTo("visit");
+        assertThat(SyncEntityKind.fromWireName("visit")).isEqualTo(SyncEntityKind.VISIT);
+    }
+
+    @Test
     @DisplayName("the five kinds that existed before keep the names they were released under")
     void theOriginalKindsKeepTheirNames() {
 

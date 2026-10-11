@@ -136,6 +136,28 @@ class ProfileMapperTest {
         assertThat(profileDto.hideTips()).isFalse();
     }
 
+    @Test
+    @DisplayName("reports a profile nobody has set as not recording its browsing history")
+    void carriesTheRecordBrowsingHistorySettingAsOffByDefault() {
+
+        final ProfileDto profileDto = profileMapper.toDto(profileWithDragAndDrop(false));
+
+        assertThat(profileDto.recordBrowsingHistory()).isFalse();
+    }
+
+    @Test
+    @DisplayName("puts browsing history recording switched on into the shape a client pulls")
+    void carriesTheRecordBrowsingHistorySettingWhenItIsOn() {
+
+        final ProfileEntity profile = profileWithDragAndDrop(false);
+        profile.setRecordBrowsingHistory(true);
+
+        final ProfileDto profileDto = profileMapper.toDto(profile);
+
+        assertThat(profileDto.recordBrowsingHistory()).isTrue();
+        assertThat(profileDto.recordClosedTabs()).isTrue();
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     /**

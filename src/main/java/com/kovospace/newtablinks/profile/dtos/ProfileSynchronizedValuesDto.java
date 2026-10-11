@@ -15,7 +15,10 @@ import java.util.List;
  * @param hideTips          whether the profile hides the tips shown on the new tab page background
  * @param recordClosedTabs  whether the profile records the browser tabs its user closes;
  *                          {@code null} when the operation did not say, which leaves the stored
- *                          setting as it is - the one field an upsert does not replace when absent
+ *                          setting as it is
+ * @param recordBrowsingHistory whether the profile records the pages its user visits;
+ *                          {@code null} when the operation did not say, which leaves the stored
+ *                          setting as it is
  * @param dismissedTips     identifiers of the tips the profile has dismissed one by one, never null
  * @param position          zero based position among the owner's profiles
  * @since 0.0.6
@@ -25,6 +28,7 @@ public record ProfileSynchronizedValuesDto(
         boolean enableDragAndDrop,
         boolean hideTips,
         Boolean recordClosedTabs,
+        Boolean recordBrowsingHistory,
         List<String> dismissedTips,
         int position) {
 }

@@ -8,6 +8,7 @@ import com.kovospace.newtablinks.profile.dtos.ProfileDto;
 import com.kovospace.newtablinks.subgroup.dtos.SubgroupDto;
 import com.kovospace.newtablinks.user.dtos.PlanLimitsDto;
 import com.kovospace.newtablinks.user.dtos.UserDto;
+import com.kovospace.newtablinks.visit.dtos.VisitDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
@@ -15,9 +16,13 @@ import java.util.List;
 /**
  * Everything one user owns, in a single response.
  *
- * <p>Every collection is ordered for display except {@code closedTabs}, which is ordered by when
- * each tab was closed - the only order that list is ever read in, and the client's own clock
- * rather than this server's.</p>
+ * <p>Every collection is ordered for display except {@code closedTabs} and {@code visits}, which
+ * are ordered by when each tab was closed or each page visited - the only order those lists are
+ * ever read in, and the client's own clock rather than this server's.</p>
+ *
+ * <p>{@code visits} is always present, an empty list when the account has none: the extension
+ * reads its presence as "this server keeps browsing history" and sends no visit to a server
+ * whose snapshot lacks it.</p>
  *
  * <p>The collections are flat rather than nested, deliberately: the browser extension stores its
  * state as flat maps keyed by identifier, so a flat snapshot maps onto it without the client
@@ -30,6 +35,7 @@ import java.util.List;
  * @param subgroups    every subgroup of those groups, in display order
  * @param links        every link of those groups and subgroups, in display order
  * @param closedTabs   every closed tab of those profiles, most recently closed first
+ * @param visits       every visit in the browsing history of those profiles, most recent first
  * @param capturedAt   moment the snapshot was assembled
  * @param planLimits   the plan limits that hold for the owner right now
  * @since 0.0.1
@@ -57,6 +63,10 @@ public record SyncSnapshotDto(
 
         @Schema(description = "Every closed tab of those profiles, most recently closed first")
         List<ClosedTabDto> closedTabs,
+
+        @Schema(description = "Every visit in the browsing history of those profiles, most "
+                + "recent first; empty, never absent, when there are none")
+        List<VisitDto> visits,
 
         @Schema(description = "Moment the snapshot was assembled", example = "2026-08-24T10:15:30Z")
         Instant capturedAt,
