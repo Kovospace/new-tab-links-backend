@@ -74,6 +74,19 @@ public class ProfileEntity extends AbstractAuditableEntity {
     private boolean hideTips;
 
     /**
+     * Whether this profile records the browser tabs its user closes.
+     *
+     * <p>On unless somebody turns it off, unlike the settings above: the column is
+     * {@code NOT NULL DEFAULT true}, because recording is what every profile did before the
+     * setting existed. The field starts {@code true} for the same reason, so that a profile
+     * created by a client that has never heard of the setting records, as it always did.
+     * Turning it off deletes nothing here - the client removes its closed tabs itself and pushes
+     * the deletions.</p>
+     */
+    @Column(name = "record_closed_tabs", nullable = false)
+    private boolean recordClosedTabs = true;
+
+    /**
      * Identifiers of the tips this profile has dismissed one by one, in the order the client sent.
      *
      * <p>A tip identifier is a stable name out of the extension's own list of tips, not a row
@@ -183,6 +196,39 @@ public class ProfileEntity extends AbstractAuditableEntity {
      */
     public void setHideTips(final boolean hideTips) {
         this.hideTips = hideTips;
+    }
+
+    /**
+     * Tells whether this profile records the browser tabs its user closes.
+     *
+     * @return {@code true} when closed tabs are recorded, which is the default
+     */
+    public boolean isRecordClosedTabs() {
+        return recordClosedTabs;
+    }
+
+    /**
+     * Sets whether this profile records the browser tabs its user closes.
+     *
+     * @param recordClosedTabs {@code true} to record them
+     */
+    public void setRecordClosedTabs(final boolean recordClosedTabs) {
+        this.recordClosedTabs = recordClosedTabs;
+    }
+
+    /**
+     * Sets whether this profile records closed tabs, but only when the caller said so.
+     *
+     * <p>A client released before the setting existed sends nothing for it. Read as
+     * {@code false}, that silence would switch recording off on every profile such a client
+     * saves - so an absent value leaves the setting as it is, which for a new profile is on.</p>
+     *
+     * @param suppliedRecordClosedTabs the value the caller sent; {@code null} changes nothing
+     */
+    public void setRecordClosedTabsWhenSupplied(final Boolean suppliedRecordClosedTabs) {
+        if (suppliedRecordClosedTabs != null) {
+            this.recordClosedTabs = suppliedRecordClosedTabs;
+        }
     }
 
     /**

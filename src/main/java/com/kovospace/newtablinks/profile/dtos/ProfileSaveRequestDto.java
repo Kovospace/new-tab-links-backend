@@ -14,6 +14,8 @@ import java.util.List;
  * @param name name shown on the profile switcher
  * @param enableDragAndDrop whether the profile lets its links and groups be rearranged by dragging
  * @param hideTips whether the profile hides the tips shown on the new tab page background
+ * @param recordClosedTabs whether the profile records the browser tabs its user closes;
+ *                         {@code null} leaves it as it is, and a new profile records them
  * @param dismissedTips identifiers of the tips the profile has dismissed one by one; absent is none
  * @since 0.0.6
  */
@@ -30,6 +32,11 @@ public record ProfileSaveRequestDto(
         @Schema(description = "Whether the profile hides the tips shown on the new tab page "
                 + "background", example = "false")
         boolean hideTips,
+
+        @Schema(description = "Whether the profile records the browser tabs its user closes; "
+                + "absent leaves the setting as it is, and a new profile records them",
+                example = "true")
+        Boolean recordClosedTabs,
 
         @Schema(description = "Identifiers of the new tab page tips the profile has dismissed "
                 + "one by one; absent means none", example = "[\"hide-tips\"]")

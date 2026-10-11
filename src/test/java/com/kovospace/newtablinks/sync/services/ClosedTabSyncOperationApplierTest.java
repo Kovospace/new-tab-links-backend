@@ -113,7 +113,7 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, UUID.randomUUID(),
                 PROFILE_ID, null, null, null,
                 null, null, "Spring Boot reference", null, null,
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 CLOSED_YESTERDAY, "Laptop", null);
         final SyncOperationDto sound = upsertClosedTab(UUID.randomUUID(), CLOSED_YESTERDAY);
 
@@ -154,7 +154,7 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, UUID.randomUUID(),
                 null, null, null, null,
                 null, null, "Spring Boot reference", "https://spring.io", null,
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 CLOSED_YESTERDAY, "Laptop", null);
 
         final SyncPushResultDto result =
@@ -177,7 +177,7 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, UUID.randomUUID(),
                 PROFILE_ID, null, null, null,
                 null, null, null, "https://spring.io", null,
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 CLOSED_YESTERDAY, null, null);
 
         profileIsTheOwners();
@@ -287,7 +287,7 @@ class ClosedTabSyncOperationApplierTest {
                 PROFILE_ID, null, null, null,
                 null, null, "Spring Boot reference", "https://spring.io",
                 "https://spring.io/icon.png",
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 closedAt, "Laptop", null);
     }
 
@@ -302,7 +302,7 @@ class ClosedTabSyncOperationApplierTest {
                 SyncOperationKind.DELETE, SyncEntityKind.CLOSED_TAB, id,
                 null, null, null, null,
                 null, null, null, null, null,
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 null, null, null);
     }
 }

@@ -345,7 +345,7 @@ class FairUseLimitsAgainstMigratedSchemaTest {
      * @return the request
      */
     private static ProfileSaveRequestDto profileRequest(final String name) {
-        return new ProfileSaveRequestDto(name, false, false, List.of());
+        return new ProfileSaveRequestDto(name, false, false, null, List.of());
     }
 
     /**

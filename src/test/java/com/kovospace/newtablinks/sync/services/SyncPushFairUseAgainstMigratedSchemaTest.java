@@ -324,25 +324,25 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
     private static SyncOperationDto upsertProfile(final UUID id) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null, "Profile", null, null, null, null,
-                null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertWorkspace(final UUID id, final UUID profileId) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.ENVIRONMENT, id,
                 profileId, null, null, null, "Workspace", null, null, null, null,
-                null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertGroup(final UUID id, final UUID workspaceId) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.GROUP, id,
                 null, workspaceId, null, null, "Group", null, null, null, null,
-                null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertLink(final UUID id, final UUID groupId, final String title) {
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.LINK, id,
                 null, null, groupId, null, null, null, title, "https://example.test", null,
-                null, null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, null, 0);
     }
 
     private static SyncOperationDto upsertClosedTab(
@@ -352,7 +352,7 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
 
         return new SyncOperationDto(SyncOperationKind.UPSERT, SyncEntityKind.CLOSED_TAB, id,
                 profileId, null, null, null, null, null, "Closed", "https://closed.test", null,
-                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 Instant.parse("2026-10-01T10:00:00Z").plusSeconds(60L * minutesAfterTen),
                 null, null);
     }
@@ -360,7 +360,7 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
     private static SyncOperationDto delete(final SyncEntityKind kind, final UUID id) {
         return new SyncOperationDto(SyncOperationKind.DELETE, kind, id,
                 null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**

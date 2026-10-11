@@ -194,6 +194,11 @@ Which file holds which concern, and which endpoint lives in which controller:
 - **Closed tabs never refuse:** after every push the oldest beyond the plan's limit are deleted,
   but never more than the push added (`max(limit, size before push)`), so a downgrade does not
   cut 500 to 25 at once.
+- **`profile.record_closed_tabs` is the one profile setting an upsert does not replace when
+  absent** (V17, default true). Every other flag reads absent as false; this one is on by
+  default, so absent - an extension build from before it - keeps the stored value, or true for a
+  new row (`ProfileEntity.setRecordClosedTabsWhenSupplied`). Turning it off deletes nothing
+  here; the extension pushes the deletions of its closed tabs itself.
 - **Installations are counted while signed in, never as rows** (`SignedInInstallationLimitService`):
   a device with `installation_id` and a live refresh token. A sign-in past the limit is refused
   (a known installation already in session always passes; a new one, or one claiming a
