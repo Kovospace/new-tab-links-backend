@@ -87,6 +87,19 @@ public class ProfileEntity extends AbstractAuditableEntity {
     private boolean recordClosedTabs = true;
 
     /**
+     * Whether this profile records the pages its user visits into its browsing history.
+     *
+     * <p>Off unless somebody turns it on - the column is {@code NOT NULL DEFAULT false}, because
+     * recording a browsing history is new behaviour and has to be asked for. Like
+     * {@link #recordClosedTabs}, an upsert that leaves it out keeps what is stored
+     * ({@link #setRecordBrowsingHistoryWhenSupplied(Boolean)}): a client released before the
+     * setting existed must not switch off what a newer one switched on. Turning it off deletes
+     * nothing here - the client removes its visits itself and pushes the deletions.</p>
+     */
+    @Column(name = "record_browsing_history", nullable = false)
+    private boolean recordBrowsingHistory;
+
+    /**
      * Identifiers of the tips this profile has dismissed one by one, in the order the client sent.
      *
      * <p>A tip identifier is a stable name out of the extension's own list of tips, not a row
@@ -228,6 +241,39 @@ public class ProfileEntity extends AbstractAuditableEntity {
     public void setRecordClosedTabsWhenSupplied(final Boolean suppliedRecordClosedTabs) {
         if (suppliedRecordClosedTabs != null) {
             this.recordClosedTabs = suppliedRecordClosedTabs;
+        }
+    }
+
+    /**
+     * Tells whether this profile records the pages its user visits.
+     *
+     * @return {@code true} when visits are recorded; {@code false}, the default, when not
+     */
+    public boolean isRecordBrowsingHistory() {
+        return recordBrowsingHistory;
+    }
+
+    /**
+     * Sets whether this profile records the pages its user visits.
+     *
+     * @param recordBrowsingHistory {@code true} to record them
+     */
+    public void setRecordBrowsingHistory(final boolean recordBrowsingHistory) {
+        this.recordBrowsingHistory = recordBrowsingHistory;
+    }
+
+    /**
+     * Sets whether this profile records visits, but only when the caller said so.
+     *
+     * <p>A client released before the setting existed sends nothing for it, and that silence
+     * must not switch off a history another device turned on. An absent value therefore leaves
+     * the setting as it is, which for a new profile is off.</p>
+     *
+     * @param suppliedRecordBrowsingHistory the value the caller sent; {@code null} changes nothing
+     */
+    public void setRecordBrowsingHistoryWhenSupplied(final Boolean suppliedRecordBrowsingHistory) {
+        if (suppliedRecordBrowsingHistory != null) {
+            this.recordBrowsingHistory = suppliedRecordBrowsingHistory;
         }
     }
 

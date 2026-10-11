@@ -22,7 +22,8 @@ import java.util.UUID;
  * <p>A closed tab reuses {@code url}, {@code title}, {@code faviconUrl} and {@code profileId}
  * rather than growing four more fields beside them: the values mean the same thing and the flat
  * shape exists precisely so that it can be shared. Only {@code closedAt} and {@code deviceName}
- * are new, because nothing else here carries either.</p>
+ * are new, because nothing else here carries either. A visit reuses the same four and
+ * {@code deviceName} as well; only {@code visitedAt} is its own.</p>
  *
  * <p>Every identifier here is chosen by the client. That is safe because it names nothing but a
  * row inside the caller's own account; see
@@ -31,15 +32,15 @@ import java.util.UUID;
  * @param operation        what to do with the record
  * @param entityKind       what kind of record it is
  * @param id               identifier the client uses for the record
- * @param profileId        parent profile, for an environment or a closed tab
+ * @param profileId        parent profile, for an environment, a closed tab or a visit
  * @param environmentId    parent environment, for a group
  * @param parentGroupId    parent group, for a subgroup or a link
  * @param parentSubgroupId parent subgroup, for a link that is nested in one
  * @param name             display name, for a profile, environment, group or subgroup
  * @param description      free text, for an environment, group or subgroup
- * @param title            display text, for a link or a closed tab
- * @param url              address, for a link or a closed tab
- * @param faviconUrl       cached favicon address, for a link or a closed tab
+ * @param title            display text, for a link, a closed tab or a visit
+ * @param url              address, for a link, a closed tab or a visit
+ * @param faviconUrl       cached favicon address, for a link, a closed tab or a visit
  * @param collapsed        whether a subgroup is folded away right now
  * @param defaultCollapsed whether a subgroup starts folded away
  * @param catchLinksIntoTabGroup whether tabs navigating to a subgroup's links are pulled into its
@@ -50,11 +51,15 @@ import java.util.UUID;
  *                               background
  * @param recordClosedTabs       whether a profile records the browser tabs its user closes;
  *                               absent leaves the stored setting as it is
+ * @param recordBrowsingHistory  whether a profile records the pages its user visits; absent
+ *                               leaves the stored setting as it is, and a new profile does not
  * @param dismissedTips          identifiers of the tips a profile has dismissed one by one
  * @param color                  name of the Chrome tab group colour a subgroup is painted with,
  *                               absent when it has none
  * @param closedAt               moment a tab was closed, as the closing device reported it
- * @param deviceName             name of the device a tab was closed on, absent when it has none
+ * @param visitedAt              moment a page was visited, as the visiting device reported it
+ * @param deviceName             name of the device a tab was closed or a page visited on,
+ *                               absent when it has none
  * @param position         zero based position among the record's siblings
  * @since 0.0.6
  */
@@ -70,7 +75,7 @@ public record SyncOperationDto(
         @Schema(description = "Identifier the client uses for the record")
         @NotNull UUID id,
 
-        @Schema(description = "Parent profile, for an environment or a closed tab")
+        @Schema(description = "Parent profile, for an environment, a closed tab or a visit")
         UUID profileId,
 
         @Schema(description = "Parent environment, for a group")
@@ -89,14 +94,16 @@ public record SyncOperationDto(
         @Schema(description = "Free text, for an environment, group or subgroup")
         @Size(max = 500) String description,
 
-        @Schema(description = "Display text, for a link, or the page title of a closed tab",
+        @Schema(description = "Display text, for a link, or the page title of a closed tab or "
+                + "a visit",
                 example = "Spring Boot reference")
         @Size(max = 200) String title,
 
-        @Schema(description = "Address, for a link or a closed tab", example = "https://spring.io")
+        @Schema(description = "Address, for a link, a closed tab or a visit",
+                example = "https://spring.io")
         @Size(max = 2048) String url,
 
-        @Schema(description = "Cached favicon address, for a link or a closed tab")
+        @Schema(description = "Cached favicon address, for a link, a closed tab or a visit")
         @Size(max = 2048) String faviconUrl,
 
         @Schema(description = "Whether a subgroup is folded away right now", example = "false")
@@ -123,6 +130,11 @@ public record SyncOperationDto(
                 example = "true")
         Boolean recordClosedTabs,
 
+        @Schema(description = "Whether a profile records the pages its user visits. Absent "
+                + "leaves the stored setting as it is; a new profile does not record them",
+                example = "false")
+        Boolean recordBrowsingHistory,
+
         @Schema(description = "Identifiers of the new tab page tips a profile has dismissed one "
                 + "by one; absent means none. An upsert replaces the whole list",
                 example = "[\"hide-tips\"]")
@@ -138,7 +150,13 @@ public record SyncOperationDto(
                 example = "2026-09-11T10:15:30Z")
         Instant closedAt,
 
-        @Schema(description = "Name of the device a tab was closed on; absent when it has none",
+        @Schema(description = "Moment a page was visited, as the device that visited it "
+                + "reported it; stored as sent and never replaced by a server clock",
+                example = "2026-10-11T10:15:30Z")
+        Instant visitedAt,
+
+        @Schema(description = "Name of the device a tab was closed or a page visited on; "
+                + "absent when it has none",
                 example = "Laptop")
         @Size(max = 120) String deviceName,
 

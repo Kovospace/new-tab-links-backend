@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * @param subgroupsPerGroup    most subgroups one group may hold
  * @param linksPerWorkspace    most links one workspace may hold
  * @param closedTabs           most closed-tab history entries kept
+ * @param browsingHistory      most browsing history entries (visits) kept
  * @param devices              most extension installations signed in at once
  * @since 0.0.18
  */
@@ -37,6 +38,10 @@ public record PlanLimitValuesDto(
         @Schema(description = "Most closed-tab history entries kept; the oldest drop off",
                 example = "25")
         int closedTabs,
+
+        @Schema(description = "Most browsing history entries (visits) kept; the oldest drop off",
+                example = "50")
+        int browsingHistory,
 
         @Schema(description = "Most extension installations signed in at once", example = "5")
         int devices) {

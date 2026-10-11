@@ -26,6 +26,7 @@ import com.kovospace.newtablinks.sync.dtos.SyncRejectionReason;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import com.kovospace.newtablinks.sync.exceptions.SyncOperationRejectedException;
 import com.kovospace.newtablinks.sync.models.SyncOperationContext;
+import com.kovospace.newtablinks.visit.services.VisitSynchronizationService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,6 +52,8 @@ class SyncPushServiceTest {
     private final SyncPushLimitGuard syncPushLimitGuard = PermissiveSyncPushLimitGuard.create();
     private final ClosedTabSynchronizationService closedTabSynchronizationService =
             mock(ClosedTabSynchronizationService.class);
+    private final VisitSynchronizationService visitSynchronizationService =
+            mock(VisitSynchronizationService.class);
 
     private SyncPushService syncPushService;
 
@@ -59,7 +62,7 @@ class SyncPushServiceTest {
         // Stubbed before construction: the service indexes its appliers by the kind they claim.
         when(linkApplier.supportedEntityKind()).thenReturn(SyncEntityKind.LINK);
         syncPushService = new SyncPushService(List.of(linkApplier), userDataChangePublisher,
-                syncPushLimitGuard, closedTabSynchronizationService);
+                syncPushLimitGuard, closedTabSynchronizationService, visitSynchronizationService);
     }
 
     @Test
@@ -147,24 +150,26 @@ class SyncPushServiceTest {
     }
 
     @Test
-    @DisplayName("takes the baseline before the first operation, trims closed tabs to the plan "
-            + "and judges the end state with what the operations wrote into, after the last")
+    @DisplayName("takes the baseline before the first operation, trims closed tabs and visits to "
+            + "the plan and judges the end state with what the operations wrote into, after the last")
     void judgesThePlanOnTheBatchAsAWhole() {
 
         final PushLimitBaseline baseline = new PushLimitBaseline(
-                new EffectivePlanLimits(false, new PlanLimitValues(1, 2, 25, 25, 500, 25, 5)),
-                Map.of(), Map.of(), Map.of(), 40);
+                new EffectivePlanLimits(false, new PlanLimitValues(1, 2, 25, 25, 500, 25, 50, 5)),
+                Map.of(), Map.of(), Map.of(), 40, 70);
         when(syncPushLimitGuard.captureBaselineBeforeBatch(OWNER_ID)).thenReturn(baseline);
         when(linkApplier.applyUpsert(any(), any())).thenReturn(UUID.randomUUID());
 
         syncPushService.applyPushedOperations(
                 push(upsertLink(UUID.randomUUID()), deleteLink(UUID.randomUUID())), OWNER_ID);
 
-        final InOrder order = inOrder(syncPushLimitGuard, linkApplier, closedTabSynchronizationService);
+        final InOrder order = inOrder(syncPushLimitGuard, linkApplier,
+                closedTabSynchronizationService, visitSynchronizationService);
         order.verify(syncPushLimitGuard).captureBaselineBeforeBatch(OWNER_ID);
         order.verify(linkApplier).applyUpsert(any(), any());
         order.verify(linkApplier).applyDelete(any(), any());
         order.verify(closedTabSynchronizationService).trimHistoryToPlanLimit(OWNER_ID, 25, 40);
+        order.verify(visitSynchronizationService).trimHistoryToPlanLimit(OWNER_ID, 50, 70);
         order.verify(syncPushLimitGuard).requireEndStateWithinLimits(
                 eq(OWNER_ID), eq(baseline), any(PushFootprint.class));
     }
@@ -198,7 +203,7 @@ class SyncPushServiceTest {
                 kind, SyncEntityKind.LINK, id,
                 null, null, UUID.randomUUID(), null,
                 null, null, "A link", "https://example.test", null,
-                null, null, null, null, null, null, null, null,
-                null, null, 0);
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, 0);
     }
 }

@@ -13,6 +13,7 @@ import com.kovospace.newtablinks.sync.dtos.SyncRejectedOperationDto;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import com.kovospace.newtablinks.sync.exceptions.SyncOperationRejectedException;
 import com.kovospace.newtablinks.sync.models.SyncOperationContext;
+import com.kovospace.newtablinks.visit.services.VisitSynchronizationService;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -45,8 +46,8 @@ import org.springframework.transaction.annotation.Transactional;
  * or workspace holding no slot, or grew a container past its cap, fails entirely with
  * {@link PlanLimitReachedException} (HTTP 409), leaving the account as it was. Per operation would
  * refuse a device that replaces a record at a limit, since a device sends its upserts before its
- * deletions. Closed-tab history never fails a push: the oldest entries beyond the plan's limit
- * are deleted instead.</p>
+ * deletions. Closed-tab history and browsing history never fail a push: the oldest entries
+ * beyond the plan's limit are deleted instead.</p>
  *
  * @since 0.0.6
  */
@@ -61,6 +62,7 @@ public class SyncPushService {
     private final UserDataChangePublisher userDataChangePublisher;
     private final SyncPushLimitGuard syncPushLimitGuard;
     private final ClosedTabSynchronizationService closedTabSynchronizationService;
+    private final VisitSynchronizationService visitSynchronizationService;
 
     /**
      * Creates the service.
@@ -69,18 +71,21 @@ public class SyncPushService {
      * @param userDataChangePublisher         announces the change to the user's other browsers
      * @param syncPushLimitGuard              refuses a batch whose end state the plan forbids
      * @param closedTabSynchronizationService trims closed-tab history to the plan's limit
+     * @param visitSynchronizationService     trims browsing history to the plan's limit
      */
     public SyncPushService(
             final List<SyncOperationApplier> appliers,
             final UserDataChangePublisher userDataChangePublisher,
             final SyncPushLimitGuard syncPushLimitGuard,
-            final ClosedTabSynchronizationService closedTabSynchronizationService) {
+            final ClosedTabSynchronizationService closedTabSynchronizationService,
+            final VisitSynchronizationService visitSynchronizationService) {
 
         appliers.forEach(applier ->
                 appliersByEntityKind.put(applier.supportedEntityKind(), applier));
         this.userDataChangePublisher = userDataChangePublisher;
         this.syncPushLimitGuard = syncPushLimitGuard;
         this.closedTabSynchronizationService = closedTabSynchronizationService;
+        this.visitSynchronizationService = visitSynchronizationService;
     }
 
     /**
@@ -121,6 +126,8 @@ public class SyncPushService {
 
         closedTabSynchronizationService.trimHistoryToPlanLimit(ownerId,
                 baseline.limits().maximumFor(PlanLimit.CLOSED_TABS), baseline.closedTabCount());
+        visitSynchronizationService.trimHistoryToPlanLimit(ownerId,
+                baseline.limits().maximumFor(PlanLimit.BROWSING_HISTORY), baseline.visitCount());
         syncPushLimitGuard.requireEndStateWithinLimits(ownerId, baseline, context.getFootprint());
 
         LOGGER.debug("Applied {} pushed operations for account {}, {} remapped, {} refused",

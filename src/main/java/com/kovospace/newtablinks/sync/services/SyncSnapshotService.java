@@ -41,6 +41,7 @@ public class SyncSnapshotService {
     private final LinkMapper linkMapper;
     private final EnvironmentSnapshotReader environmentSnapshotReader;
     private final ClosedTabSnapshotReader closedTabSnapshotReader;
+    private final VisitSnapshotReader visitSnapshotReader;
     private final ProfileService profileService;
     private final AccountPlanLimitsService accountPlanLimitsService;
 
@@ -56,6 +57,7 @@ public class SyncSnapshotService {
      * @param linkMapper                converts links
      * @param environmentSnapshotReader reads the owner's environments
      * @param closedTabSnapshotReader   reads the owner's closed tabs
+     * @param visitSnapshotReader       reads the owner's browsing history
      * @param profileService            reads the owner's profiles
      * @param accountPlanLimitsService  reads the limits that hold for the owner
      */
@@ -69,6 +71,7 @@ public class SyncSnapshotService {
             final LinkMapper linkMapper,
             final EnvironmentSnapshotReader environmentSnapshotReader,
             final ClosedTabSnapshotReader closedTabSnapshotReader,
+            final VisitSnapshotReader visitSnapshotReader,
             final ProfileService profileService,
             final AccountPlanLimitsService accountPlanLimitsService) {
 
@@ -81,6 +84,7 @@ public class SyncSnapshotService {
         this.linkMapper = linkMapper;
         this.environmentSnapshotReader = environmentSnapshotReader;
         this.closedTabSnapshotReader = closedTabSnapshotReader;
+        this.visitSnapshotReader = visitSnapshotReader;
         this.profileService = profileService;
         this.accountPlanLimitsService = accountPlanLimitsService;
     }
@@ -103,6 +107,7 @@ public class SyncSnapshotService {
                 subgroupMapper.toDtoList(subgroupRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
                 linkMapper.toDtoList(linkRepository.findAllByOwnerIdOrderedForDisplay(ownerId)),
                 closedTabSnapshotReader.readClosedTabsOfOwner(ownerId),
+                visitSnapshotReader.readVisitsOfOwner(ownerId),
                 Instant.now(),
                 accountPlanLimitsService.findPlanLimitsOf(ownerId));
     }

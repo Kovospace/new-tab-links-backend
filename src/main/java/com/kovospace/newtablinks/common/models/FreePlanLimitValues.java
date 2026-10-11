@@ -10,6 +10,7 @@ package com.kovospace.newtablinks.common.models;
  * @param profiles             most profiles a free account may synchronise
  * @param workspacesPerProfile most workspaces one profile of a free account may synchronise
  * @param closedTabs           most closed-tab history entries a free account keeps
+ * @param browsingHistory      most browsing history entries (visits) a free account keeps
  * @param devices              most extension installations a free account may have signed in
  * @since 0.0.18
  */
@@ -17,6 +18,7 @@ public record FreePlanLimitValues(
         int profiles,
         int workspacesPerProfile,
         int closedTabs,
+        int browsingHistory,
         int devices) {
 
     /**
@@ -28,6 +30,7 @@ public record FreePlanLimitValues(
         PlanLimitValues.requirePositive(profiles, PlanLimit.PROFILES);
         PlanLimitValues.requirePositive(workspacesPerProfile, PlanLimit.WORKSPACES_PER_PROFILE);
         PlanLimitValues.requirePositive(closedTabs, PlanLimit.CLOSED_TABS);
+        PlanLimitValues.requirePositive(browsingHistory, PlanLimit.BROWSING_HISTORY);
         PlanLimitValues.requirePositive(devices, PlanLimit.DEVICES);
     }
 
@@ -45,6 +48,7 @@ public record FreePlanLimitValues(
                 premiumLimits.subgroupsPerGroup(),
                 premiumLimits.linksPerWorkspace(),
                 closedTabs,
+                browsingHistory,
                 devices);
     }
 }

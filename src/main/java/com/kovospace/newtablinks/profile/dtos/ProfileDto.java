@@ -15,6 +15,7 @@ import java.util.UUID;
  * @param enableDragAndDrop whether the profile lets its links and groups be rearranged by dragging
  * @param hideTips  whether the profile hides the tips shown on the new tab page background
  * @param recordClosedTabs whether the profile records the browser tabs its user closes
+ * @param recordBrowsingHistory whether the profile records the pages its user visits
  * @param dismissedTips identifiers of the tips the profile has dismissed one by one, never null
  * @param createdAt when the profile was created
  * @param updatedAt when the profile was last changed
@@ -35,6 +36,9 @@ public record ProfileDto(
         @Schema(description = "Whether the profile records the browser tabs its user closes; "
                 + "on unless turned off", example = "true")
         boolean recordClosedTabs,
+        @Schema(description = "Whether the profile records the pages its user visits into its "
+                + "browsing history; off unless turned on", example = "false")
+        boolean recordBrowsingHistory,
         @Schema(description = "Identifiers of the new tab page tips the profile has dismissed "
                 + "one by one; empty when none", example = "[\"hide-tips\"]")
         List<String> dismissedTips,

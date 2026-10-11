@@ -10,6 +10,7 @@ import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.profile.repositories.ProfileRepository;
 import com.kovospace.newtablinks.subgroup.models.SubgroupEntity;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
+import com.kovospace.newtablinks.visit.repositories.VisitRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,9 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
  * Removes a record together with everything that hangs beneath it.
  *
  * <p>Profile, environment, group, subgroup and link form one containment hierarchy, and every
- * child names its parent through a non-null foreign key. A closed tab hangs off the profile
- * beside that hierarchy rather than inside it - it has no children of its own, and nothing
- * beneath a profile points at it - so it is cleared when the profile is, and at no other level.
+ * child names its parent through a non-null foreign key. A closed tab and a visit hang off the
+ * profile beside that hierarchy rather than inside it - they have no children of their own, and
+ * nothing beneath a profile points at them - so they are cleared when the profile is, and at no
+ * other level.
  * </p>
  *
  * <p>No entity declares the reverse association, so nothing cascades in the mapping. Deleting a
@@ -59,6 +61,7 @@ public class HierarchyDeletionService {
     private final SubgroupRepository subgroupRepository;
     private final LinkRepository linkRepository;
     private final ClosedTabRepository closedTabRepository;
+    private final VisitRepository visitRepository;
 
     /**
      * Creates the service.
@@ -69,6 +72,7 @@ public class HierarchyDeletionService {
      * @param subgroupRepository    persistence access for subgroups
      * @param linkRepository        persistence access for links
      * @param closedTabRepository   persistence access for closed tabs
+     * @param visitRepository       persistence access for visits
      */
     public HierarchyDeletionService(
             final ProfileRepository profileRepository,
@@ -76,7 +80,8 @@ public class HierarchyDeletionService {
             final GroupRepository groupRepository,
             final SubgroupRepository subgroupRepository,
             final LinkRepository linkRepository,
-            final ClosedTabRepository closedTabRepository) {
+            final ClosedTabRepository closedTabRepository,
+            final VisitRepository visitRepository) {
 
         this.profileRepository = profileRepository;
         this.environmentRepository = environmentRepository;
@@ -84,14 +89,16 @@ public class HierarchyDeletionService {
         this.subgroupRepository = subgroupRepository;
         this.linkRepository = linkRepository;
         this.closedTabRepository = closedTabRepository;
+        this.visitRepository = visitRepository;
     }
 
     /**
-     * Deletes a profile, its closed tabs, its environments, and everything inside them.
+     * Deletes a profile, its closed tabs, its visits, its environments, and everything inside
+     * them.
      *
-     * <p>The closed tabs go first, like every other child: they name the profile through a
-     * non-null foreign key and would hold it in place. They are not touched at any deeper level,
-     * because nothing deeper owns one.</p>
+     * <p>The closed tabs and visits go first, like every other child: they name the profile
+     * through a non-null foreign key and would hold it in place. They are not touched at any
+     * deeper level, because nothing deeper owns one.</p>
      *
      * @param profile the profile to remove; already resolved as the caller's own
      */
@@ -102,6 +109,7 @@ public class HierarchyDeletionService {
                 environmentRepository.findAllByProfileId(profile.getId());
 
         closedTabRepository.deleteAll(closedTabRepository.findAllByProfileId(profile.getId()));
+        visitRepository.deleteAll(visitRepository.findAllByProfileId(profile.getId()));
         environments.forEach(this::deleteEnvironmentWithDescendants);
         profileRepository.delete(profile);
     }

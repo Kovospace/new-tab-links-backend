@@ -110,6 +110,7 @@ public class ProfileService {
         newProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         newProfile.setHideTips(saveRequest.hideTips());
         newProfile.setRecordClosedTabsWhenSupplied(saveRequest.recordClosedTabs());
+        newProfile.setRecordBrowsingHistoryWhenSupplied(saveRequest.recordBrowsingHistory());
         newProfile.setDismissedTips(saveRequest.dismissedTips());
 
         userDataChangePublisher.publishChangeFor(ownerId);
@@ -141,6 +142,7 @@ public class ProfileService {
         existingProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         existingProfile.setHideTips(saveRequest.hideTips());
         existingProfile.setRecordClosedTabsWhenSupplied(saveRequest.recordClosedTabs());
+        existingProfile.setRecordBrowsingHistoryWhenSupplied(saveRequest.recordBrowsingHistory());
         existingProfile.setDismissedTips(saveRequest.dismissedTips());
         userDataChangePublisher.publishChangeFor(ownerId);
         return profileMapper.toDto(existingProfile);

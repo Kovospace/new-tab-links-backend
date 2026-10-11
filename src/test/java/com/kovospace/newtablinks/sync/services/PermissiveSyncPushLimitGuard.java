@@ -18,7 +18,7 @@ final class PermissiveSyncPushLimitGuard {
 
     /** Limits far above anything a unit test pushes. */
     private static final PlanLimitValues GENEROUS_LIMITS =
-            new PlanLimitValues(1_000, 1_000, 1_000, 1_000, 1_000, 1_000, 1_000);
+            new PlanLimitValues(1_000, 1_000, 1_000, 1_000, 1_000, 1_000, 1_000, 1_000);
 
     /**
      * Not instantiable; a factory only.
@@ -34,7 +34,7 @@ final class PermissiveSyncPushLimitGuard {
     static SyncPushLimitGuard create() {
         final SyncPushLimitGuard guard = mock(SyncPushLimitGuard.class);
         when(guard.captureBaselineBeforeBatch(any())).thenReturn(new PushLimitBaseline(
-                new EffectivePlanLimits(true, GENEROUS_LIMITS), Map.of(), Map.of(), Map.of(), 0));
+                new EffectivePlanLimits(true, GENEROUS_LIMITS), Map.of(), Map.of(), Map.of(), 0, 0));
         return guard;
     }
 }

@@ -20,6 +20,7 @@ import com.kovospace.newtablinks.sync.dtos.SyncPushResultDto;
 import com.kovospace.newtablinks.sync.dtos.SyncRejectionReason;
 import com.kovospace.newtablinks.sync.events.UserDataChangePublisher;
 import com.kovospace.newtablinks.user.models.UserEntity;
+import com.kovospace.newtablinks.visit.services.VisitSynchronizationService;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -58,7 +59,8 @@ class ProfileSyncOperationApplierTest {
             List.of(new ProfileSyncOperationApplier(profileSynchronizationService)),
             mock(UserDataChangePublisher.class),
             PermissiveSyncPushLimitGuard.create(),
-            mock(ClosedTabSynchronizationService.class));
+            mock(ClosedTabSynchronizationService.class),
+            mock(VisitSynchronizationService.class));
 
     @Test
     @DisplayName("a profile rename carrying no name is refused, and the rest of the batch is not")
@@ -109,7 +111,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work and study", false, false, null, List.of(), 3));
+                new ProfileSynchronizedValuesDto("Work and study", false, false, null, null, List.of(), 3));
     }
 
     @Test
@@ -124,7 +126,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 settingsChange.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", true, false, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", true, false, null, null, List.of(), 0));
     }
 
     @Test
@@ -141,7 +143,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, null, List.of(), 0));
     }
 
     @Test
@@ -156,7 +158,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 confusable.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, null, List.of(), 0));
     }
 
     @Test
@@ -171,7 +173,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 tipsDismissed.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, true, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, true, null, null, List.of(), 0));
     }
 
     @Test
@@ -189,7 +191,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, null, List.of(), 0));
     }
 
     @Test
@@ -205,7 +207,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 recordingTurnedOff.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, false, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, false, null, List.of(), 0));
     }
 
     @Test
@@ -223,7 +225,30 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, null, List.of(), 0));
+    }
+
+    @Test
+    @DisplayName("a pushed browsing history recording setting is carried through, and an "
+            + "omitted one as unsaid")
+    void shouldPassTheRecordBrowsingHistorySettingOnAndAnOmittedOneAsUnsaid() {
+
+        final SyncOperationDto recordingTurnedOn = upsertProfileRecordingBrowsingHistory(
+                UUID.randomUUID(), "Work", 0, Boolean.TRUE);
+        final SyncOperationDto rename =
+                upsertProfileRecordingBrowsingHistory(UUID.randomUUID(), "Home", 1, null);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(recordingTurnedOn, rename), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                recordingTurnedOn.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, false, null, true, List.of(), 0));
+        // Absent must not read as false: that would let an older build switch off a history
+        // another device turned on.
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                rename.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Home", false, false, null, null, List.of(), 1));
     }
 
     @Test
@@ -239,7 +264,7 @@ class ProfileSyncOperationApplierTest {
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 twoDismissed.id(), OWNER_ID,
                 new ProfileSynchronizedValuesDto(
-                        "Work", false, false, null, List.of("hide-tips", "change-background"), 0));
+                        "Work", false, false, null, null, List.of("hide-tips", "change-background"), 0));
     }
 
     @Test
@@ -257,7 +282,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, null, List.of(), 0));
     }
 
     @Test
@@ -275,7 +300,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 draggableOnly.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", true, false, null, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", true, false, null, null, List.of(), 0));
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -340,8 +365,8 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, enableDragAndDrop, null, null, null, null,
-                null, null, position);
+                null, null, null, enableDragAndDrop, null, null, null, null, null,
+                null, null, null, position);
     }
 
     /**
@@ -364,8 +389,8 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, null, null, dismissedTips, null,
-                null, null, position);
+                null, null, null, null, null, null, null, dismissedTips, null,
+                null, null, null, position);
     }
 
     /**
@@ -388,8 +413,8 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, hideTips, null, null, null,
-                null, null, position);
+                null, null, null, null, hideTips, null, null, null, null,
+                null, null, null, position);
     }
 
     /**
@@ -413,8 +438,33 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, null, recordClosedTabs, null, null,
-                null, null, position);
+                null, null, null, null, null, recordClosedTabs, null, null, null,
+                null, null, null, position);
+    }
+
+    /**
+     * Builds a pushed profile upsert carrying the browsing history recording setting and no
+     * other settings flag.
+     *
+     * @param id                    identifier of the profile
+     * @param name                  name to store
+     * @param position              display position to store
+     * @param recordBrowsingHistory the setting as the operation carries it, {@code null} when
+     *                              the operation leaves it out
+     * @return the operation
+     */
+    private SyncOperationDto upsertProfileRecordingBrowsingHistory(
+            final UUID id,
+            final String name,
+            final Integer position,
+            final Boolean recordBrowsingHistory) {
+
+        return new SyncOperationDto(
+                SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
+                null, null, null, null,
+                name, null, null, null, null,
+                null, null, null, null, null, null, recordBrowsingHistory, null, null,
+                null, null, null, position);
     }
 
     /**
@@ -437,7 +487,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, Boolean.TRUE, null, null, null, null, null,
-                null, null, position);
+                null, null, Boolean.TRUE, null, null, null, null, null, null,
+                null, null, null, position);
     }
 }

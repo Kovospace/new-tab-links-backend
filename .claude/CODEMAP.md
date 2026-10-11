@@ -25,13 +25,14 @@ Keep it current: a new module, controller or cross-cutting service adds a row he
 | Account deletion (user and admin paths) | `common/services/AccountDeletionService.java`, `user/services/UserAdministrationService.java` |
 | Deleting a subtree of the hierarchy | `common/services/HierarchyDeletionService.java` |
 | Operator sign-in and lockout (shared by every replica) | `admin/services/AdminSignInService.java`, `admin/services/AdminSignInAttemptTracker.java`, `admin/repositories/AdminSignInLockRepository.java` (the atomic SQL) |
-| Sync snapshot (GET) | `sync/services/SyncSnapshotService.java`, `sync/services/EnvironmentSnapshotReader.java` |
+| Sync snapshot (GET) | `sync/services/SyncSnapshotService.java`, `sync/services/EnvironmentSnapshotReader.java`, `ClosedTabSnapshotReader.java`, `VisitSnapshotReader.java` |
+| Closed tabs / browsing history (visits) - logs hanging off a profile, sync-only | `closedtab/`, `visit/` (entity, repository, `*SynchronizationService`), applied by `sync/services/ClosedTabSyncOperationApplier.java`, `VisitSyncOperationApplier.java` |
 | Sync push (POST) | `sync/services/SyncPushService.java` → one `*SyncOperationApplier.java` per entity kind |
 | Why a pushed operation was refused | `sync/dtos/SyncRejectionReason.java` |
 | Plan limits - one config (`newtablinks.plan-limits.premium/free.*`), live standing, refusal code + `manageUrl` | `common/config/PlanLimitProperties.java`, `common/models/PlanLimit*.java`, `common/services/PlanLimitPolicy.java`, `common/exceptions/PlanLimitReachedException.java` (409 body in `ApiErrorResponseDto`) |
 | Synchronisation slots (first profiles / first workspaces per profile by `createdAt`, `id`) | `common/services/SynchronisationSlotReader.java` |
 | Slot + cap checks on REST writes (profile/environment/group/subgroup/link services) | `common/services/PlanLimitGuard.java` |
-| Slot + cap checks on the sync push, end state; what a push wrote into | `common/services/SyncPushLimitGuard.java`, `common/models/PushFootprint.java` (filled by the appliers through `SyncOperationContext`); closed tabs trimmed: `ClosedTabSynchronizationService.trimHistoryToPlanLimit` |
+| Slot + cap checks on the sync push, end state; what a push wrote into | `common/services/SyncPushLimitGuard.java`, `common/models/PushFootprint.java` (filled by the appliers through `SyncOperationContext`); closed tabs and visits trimmed: `ClosedTabSynchronizationService.trimHistoryToPlanLimit`, `VisitSynchronizationService.trimHistoryToPlanLimit` |
 | Signed-in installation limit (sign-in refusal, sign-out on refresh after a downgrade) | `user/services/SignedInInstallationLimitService.java`, called from `UserDeviceService.recordDeviceUse` and `AuthenticationService.refresh` |
 | Effective limits for clients (`GET /users/me/plan-limits`, `planLimits` on the snapshot) | `user/services/AccountPlanLimitsService.java`, `user/mappers/PlanLimitsMapper.java` |
 | Installation inventory report, device `syncSummary` | `user/services/DeviceInventoryService.java`, `user/utils/DeviceInventoryCodec.java`, `user/utils/DeviceSyncSummaryCalculator.java`, `user/dtos/DeviceInventory*.java`; column `user_device.inventory` |

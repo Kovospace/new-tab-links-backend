@@ -16,6 +16,7 @@ import com.kovospace.newtablinks.profile.models.ProfileEntity;
 import com.kovospace.newtablinks.profile.repositories.ProfileRepository;
 import com.kovospace.newtablinks.subgroup.repositories.SubgroupRepository;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
+import com.kovospace.newtablinks.visit.repositories.VisitRepository;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +85,7 @@ public class SyncPushLimitGuard {
      * @param subgroupRepository        counts subgroups per group
      * @param linkRepository            counts links per workspace
      * @param closedTabRepository       counts closed tabs
+     * @param visitRepository           counts visits
      */
     public SyncPushLimitGuard(
             final PlanLimitPolicy planLimitPolicy,
@@ -94,7 +96,8 @@ public class SyncPushLimitGuard {
             final GroupRepository groupRepository,
             final SubgroupRepository subgroupRepository,
             final LinkRepository linkRepository,
-            final ClosedTabRepository closedTabRepository) {
+            final ClosedTabRepository closedTabRepository,
+            final VisitRepository visitRepository) {
 
         this.planLimitPolicy = planLimitPolicy;
         this.synchronisationSlotReader = synchronisationSlotReader;
@@ -102,7 +105,8 @@ public class SyncPushLimitGuard {
         this.profileRepository = profileRepository;
         this.environmentRepository = environmentRepository;
         this.containerCounter = new ContainerCounter(
-                groupRepository, subgroupRepository, linkRepository, closedTabRepository);
+                groupRepository, subgroupRepository, linkRepository, closedTabRepository,
+                visitRepository);
     }
 
     /**
@@ -121,7 +125,8 @@ public class SyncPushLimitGuard {
                 containerCounter.groupsPerWorkspace(ownerId),
                 containerCounter.subgroupsPerGroup(ownerId),
                 containerCounter.linksPerWorkspace(ownerId),
-                containerCounter.closedTabs(ownerId));
+                containerCounter.closedTabs(ownerId),
+                containerCounter.visits(ownerId));
     }
 
     /**
@@ -251,12 +256,14 @@ public class SyncPushLimitGuard {
      * @param subgroupRepository  counts subgroups per group
      * @param linkRepository      counts links per workspace
      * @param closedTabRepository counts closed tabs
+     * @param visitRepository     counts visits
      */
     private record ContainerCounter(
             GroupRepository groupRepository,
             SubgroupRepository subgroupRepository,
             LinkRepository linkRepository,
-            ClosedTabRepository closedTabRepository) {
+            ClosedTabRepository closedTabRepository,
+            VisitRepository visitRepository) {
 
         /** Groups per workspace of the account; a workspace without any is absent. */
         Map<UUID, Long> groupsPerWorkspace(final UUID ownerId) {
@@ -276,6 +283,11 @@ public class SyncPushLimitGuard {
         /** The account's closed-tab history entries. */
         long closedTabs(final UUID ownerId) {
             return closedTabRepository.countByProfileOwnerId(ownerId);
+        }
+
+        /** The account's browsing history entries. */
+        long visits(final UUID ownerId) {
+            return visitRepository.countByProfileOwnerId(ownerId);
         }
 
         /** Turns per-container counts into a map keyed by container. */
