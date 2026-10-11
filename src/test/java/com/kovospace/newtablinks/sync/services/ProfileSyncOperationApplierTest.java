@@ -109,7 +109,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work and study", false, false, List.of(), 3));
+                new ProfileSynchronizedValuesDto("Work and study", false, false, null, List.of(), 3));
     }
 
     @Test
@@ -124,7 +124,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 settingsChange.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", true, false, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", true, false, null, List.of(), 0));
     }
 
     @Test
@@ -141,7 +141,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
     }
 
     @Test
@@ -156,7 +156,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 confusable.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
     }
 
     @Test
@@ -171,7 +171,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 tipsDismissed.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, true, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, true, null, List.of(), 0));
     }
 
     @Test
@@ -189,7 +189,41 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
+    }
+
+    @Test
+    @DisplayName("a pushed closed tab recording setting is carried through to the profile being "
+            + "stored")
+    void shouldPassThePushedRecordClosedTabsSettingOn() {
+
+        final SyncOperationDto recordingTurnedOff =
+                upsertProfileRecordingClosedTabs(UUID.randomUUID(), "Work", 0, Boolean.FALSE);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(recordingTurnedOff), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                recordingTurnedOff.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, false, false, List.of(), 0));
+    }
+
+    @Test
+    @DisplayName("a profile upsert that omits the closed tab recording setting does not turn "
+            + "recording off")
+    void shouldPassAnOmittedRecordClosedTabsSettingOnAsUnsaid() {
+
+        // Unlike hideTips, absent must not read as false: recording is on by default, and every
+        // extension build from before the setting sends no such field.
+        final SyncOperationDto rename =
+                upsertProfileRecordingClosedTabs(UUID.randomUUID(), "Work", 0, null);
+        storedAsRequested();
+
+        syncPushService.applyPushedOperations(push(rename), OWNER_ID);
+
+        verify(profileSynchronizationService).upsertProfileFromPushedOperation(
+                rename.id(), OWNER_ID,
+                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
     }
 
     @Test
@@ -205,7 +239,7 @@ class ProfileSyncOperationApplierTest {
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 twoDismissed.id(), OWNER_ID,
                 new ProfileSynchronizedValuesDto(
-                        "Work", false, false, List.of("hide-tips", "change-background"), 0));
+                        "Work", false, false, null, List.of("hide-tips", "change-background"), 0));
     }
 
     @Test
@@ -223,7 +257,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 rename.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", false, false, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", false, false, null, List.of(), 0));
     }
 
     @Test
@@ -241,7 +275,7 @@ class ProfileSyncOperationApplierTest {
 
         verify(profileSynchronizationService).upsertProfileFromPushedOperation(
                 draggableOnly.id(), OWNER_ID,
-                new ProfileSynchronizedValuesDto("Work", true, false, List.of(), 0));
+                new ProfileSynchronizedValuesDto("Work", true, false, null, List.of(), 0));
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -306,7 +340,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, enableDragAndDrop, null, null, null,
+                null, null, null, enableDragAndDrop, null, null, null, null,
                 null, null, position);
     }
 
@@ -330,7 +364,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, null, dismissedTips, null,
+                null, null, null, null, null, null, dismissedTips, null,
                 null, null, position);
     }
 
@@ -354,7 +388,32 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, null, null, hideTips, null, null,
+                null, null, null, null, hideTips, null, null, null,
+                null, null, position);
+    }
+
+    /**
+     * Builds a pushed profile upsert carrying the closed tab recording setting and no other
+     * settings flag.
+     *
+     * @param id               identifier of the profile
+     * @param name             name to store
+     * @param position         display position to store
+     * @param recordClosedTabs the recording setting as the operation carries it, {@code null}
+     *                         when the operation leaves it out
+     * @return the operation
+     */
+    private SyncOperationDto upsertProfileRecordingClosedTabs(
+            final UUID id,
+            final String name,
+            final Integer position,
+            final Boolean recordClosedTabs) {
+
+        return new SyncOperationDto(
+                SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
+                null, null, null, null,
+                name, null, null, null, null,
+                null, null, null, null, null, recordClosedTabs, null, null,
                 null, null, position);
     }
 
@@ -378,7 +437,7 @@ class ProfileSyncOperationApplierTest {
                 SyncOperationKind.UPSERT, SyncEntityKind.PROFILE, id,
                 null, null, null, null,
                 name, null, null, null, null,
-                null, null, Boolean.TRUE, null, null, null, null,
+                null, null, Boolean.TRUE, null, null, null, null, null,
                 null, null, position);
     }
 }

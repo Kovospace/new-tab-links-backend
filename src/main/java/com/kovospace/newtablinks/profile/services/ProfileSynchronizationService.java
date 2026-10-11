@@ -77,7 +77,9 @@ public class ProfileSynchronizationService {
      *
      * @param requestedProfileId identifier the client wants the profile stored under
      * @param ownerId            identifier of the user the profile belongs to
-     * @param values             the fields to store, all of which are replaced
+     * @param values             the fields to store, all of which are replaced except a
+     *                           {@code recordClosedTabs} the operation left out, which keeps its
+     *                           stored value
      * @return the stored entity, whose identifier differs from the requested one exactly when the
      *         requested one was already taken and the client has to be told about a remapping
      * @throws ResourceNotFoundException when the owning user does not exist, which would mean an
@@ -144,6 +146,7 @@ public class ProfileSynchronizationService {
                 userService.getRequiredUserEntity(ownerId), values.name(), values.position());
         newProfile.setEnableDragAndDrop(values.enableDragAndDrop());
         newProfile.setHideTips(values.hideTips());
+        newProfile.setRecordClosedTabsWhenSupplied(values.recordClosedTabs());
         newProfile.setDismissedTips(values.dismissedTips());
 
         newProfile.setId(ClientAssignedIdentifierPolicy.chooseIdentifierForInsert(
@@ -153,7 +156,8 @@ public class ProfileSynchronizationService {
     }
 
     /**
-     * Overwrites every synchronized field of an existing profile.
+     * Overwrites every synchronized field of an existing profile, keeping its closed tab
+     * recording setting when the operation did not carry one.
      *
      * @param existingProfile the managed entity to update
      * @param values          the fields to store
@@ -166,6 +170,7 @@ public class ProfileSynchronizationService {
         existingProfile.setName(values.name());
         existingProfile.setEnableDragAndDrop(values.enableDragAndDrop());
         existingProfile.setHideTips(values.hideTips());
+        existingProfile.setRecordClosedTabsWhenSupplied(values.recordClosedTabs());
         existingProfile.setDismissedTips(values.dismissedTips());
         existingProfile.setPosition(values.position());
         return existingProfile;

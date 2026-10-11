@@ -48,6 +48,8 @@ import java.util.UUID;
  *                               dragging
  * @param hideTips               whether a profile hides the tips shown on the new tab page
  *                               background
+ * @param recordClosedTabs       whether a profile records the browser tabs its user closes;
+ *                               absent leaves the stored setting as it is
  * @param dismissedTips          identifiers of the tips a profile has dismissed one by one
  * @param color                  name of the Chrome tab group colour a subgroup is painted with,
  *                               absent when it has none
@@ -114,6 +116,12 @@ public record SyncOperationDto(
         @Schema(description = "Whether a profile hides the tips shown on the new tab page "
                 + "background", example = "false")
         Boolean hideTips,
+
+        @Schema(description = "Whether a profile records the browser tabs its user closes. "
+                + "Absent leaves the stored setting as it is - a new profile records them - so "
+                + "that a client predating the setting never turns recording off",
+                example = "true")
+        Boolean recordClosedTabs,
 
         @Schema(description = "Identifiers of the new tab page tips a profile has dismissed one "
                 + "by one; absent means none. An upsert replaces the whole list",

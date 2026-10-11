@@ -114,6 +114,28 @@ class ProfileMapperTest {
         assertThat(profileDto.dismissedTips()).isNotNull().isEmpty();
     }
 
+    @Test
+    @DisplayName("reports a profile nobody has set as recording its closed tabs")
+    void carriesTheRecordClosedTabsSettingAsOnByDefault() {
+
+        final ProfileDto profileDto = profileMapper.toDto(profileWithDragAndDrop(false));
+
+        assertThat(profileDto.recordClosedTabs()).isTrue();
+    }
+
+    @Test
+    @DisplayName("puts closed tab recording switched off into the shape a client pulls")
+    void carriesTheRecordClosedTabsSettingWhenItIsOff() {
+
+        final ProfileEntity profile = profileWithDragAndDrop(false);
+        profile.setRecordClosedTabs(false);
+
+        final ProfileDto profileDto = profileMapper.toDto(profile);
+
+        assertThat(profileDto.recordClosedTabs()).isFalse();
+        assertThat(profileDto.hideTips()).isFalse();
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     /**
