@@ -211,6 +211,12 @@ Which file holds which concern, and which endpoint lives in which controller:
 - **`profile.record_browsing_history` follows the same "absent keeps what is stored" rule**
   (V18), but defaults to **false** - recording a browsing history is opt-in, so a new profile
   does not (`setRecordBrowsingHistoryWhenSupplied`). Turning it off deletes no visits here.
+- **Favourites are two ordinary flags** (V19): `link.favorite` and `profile.enable_favorites`,
+  both absent = false on an upsert, carried wherever `hideTips` is (sync operation, snapshot,
+  REST DTOs). **A new field on a REST save request is a `Boolean`, never a `boolean`**: Jackson 3
+  refuses a missing primitive with a 400, so a primitive turns every caller that predates the
+  field into a broken one (`LinkSaveRequestDto.favorite`, `ProfileSaveRequestDto.enableFavorites`;
+  `FairUseLimitsAgainstMigratedSchemaTest` posts a profile without it).
 - **Installations are counted while signed in, never as rows** (`SignedInInstallationLimitService`):
   a device with `installation_id` and a live refresh token. A sign-in past the limit is refused
   (a known installation already in session always passes; a new one, or one claiming a

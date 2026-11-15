@@ -13,6 +13,7 @@ import java.util.UUID;
  * @param title            text shown for the link
  * @param url              address the link points to
  * @param faviconUrl       address of the cached favicon, {@code null} when none
+ * @param favorite         whether the link is one of its profile's favourites
  * @param position         zero based position among the links of the same parent
  * @param createdAt        when the link was created
  * @param updatedAt        when the link was last changed
@@ -27,6 +28,9 @@ public record LinkDto(
         @Schema(description = "Text shown for the link", example = "Spring Boot reference") String title,
         @Schema(description = "Address the link points to", example = "https://spring.io") String url,
         @Schema(description = "Address of the cached favicon") String faviconUrl,
+        @Schema(description = "Whether the link is one of its profile's favourites",
+                example = "false")
+        boolean favorite,
         @Schema(description = "Zero based display position", example = "0") int position,
         @Schema(description = "When the link was created") Instant createdAt,
         @Schema(description = "When the link was last changed") Instant updatedAt) {

@@ -263,7 +263,8 @@ class FairUseLimitsAgainstMigratedSchemaTest {
         insertLinksBehindTheGuardsBack(groupId, 2);
 
         final LinkDto edited = linkService.updateLink(links.getFirst().id(),
-                new LinkSaveRequestDto(groupId, null, "Renamed", "https://renamed.test", null),
+                new LinkSaveRequestDto(groupId, null, "Renamed", "https://renamed.test", null,
+                        false),
                 ownerId);
         assertThat(edited.title()).isEqualTo("Renamed");
 
@@ -345,7 +346,7 @@ class FairUseLimitsAgainstMigratedSchemaTest {
      * @return the request
      */
     private static ProfileSaveRequestDto profileRequest(final String name) {
-        return new ProfileSaveRequestDto(name, false, false, null, null, List.of());
+        return new ProfileSaveRequestDto(name, false, false, false, null, null, List.of());
     }
 
     /**
@@ -393,7 +394,7 @@ class FairUseLimitsAgainstMigratedSchemaTest {
      */
     private LinkDto createLink(final UUID groupId, final UUID ownerId) {
         return linkService.createLink(
-                new LinkSaveRequestDto(groupId, null, "Link", "https://example.test", null),
+                new LinkSaveRequestDto(groupId, null, "Link", "https://example.test", null, false),
                 ownerId);
     }
 

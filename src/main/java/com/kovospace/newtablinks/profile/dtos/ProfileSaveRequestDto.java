@@ -14,6 +14,11 @@ import java.util.List;
  * @param name name shown on the profile switcher
  * @param enableDragAndDrop whether the profile lets its links and groups be rearranged by dragging
  * @param hideTips whether the profile hides the tips shown on the new tab page background
+ * @param enableFavorites whether the profile shows favourite links and lets links be marked as
+ *                        favourites; {@code null} - a caller predating the setting - is
+ *                        {@code false}. A wrapper rather than a primitive because the JSON
+ *                        mapper refuses a missing primitive, which would turn every such
+ *                        caller's save into a 400
  * @param recordClosedTabs whether the profile records the browser tabs its user closes;
  *                         {@code null} leaves it as it is, and a new profile records them
  * @param recordBrowsingHistory whether the profile records the pages its user visits;
@@ -34,6 +39,10 @@ public record ProfileSaveRequestDto(
         @Schema(description = "Whether the profile hides the tips shown on the new tab page "
                 + "background", example = "false")
         boolean hideTips,
+
+        @Schema(description = "Whether the profile shows favourite links and lets links be "
+                + "marked as favourites; absent means it does not", example = "false")
+        Boolean enableFavorites,
 
         @Schema(description = "Whether the profile records the browser tabs its user closes; "
                 + "absent leaves the setting as it is, and a new profile records them",

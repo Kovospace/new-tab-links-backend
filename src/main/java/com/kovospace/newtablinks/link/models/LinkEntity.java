@@ -63,6 +63,17 @@ public class LinkEntity extends AbstractAuditableEntity {
     private int position;
 
     /**
+     * Whether this link is one of its profile's favourites.
+     *
+     * <p>A property of the link rather than of the device that starred it, so it is stored here
+     * and travels with the row. Not a constructor argument, for the reason given on
+     * {@link SubgroupEntity}'s tab group setting: it is off until somebody sets it, and another
+     * positional argument would be one more thing to transpose by accident.</p>
+     */
+    @Column(name = "favorite", nullable = false)
+    private boolean favorite;
+
+    /**
      * Required by JPA.
      */
     protected LinkEntity() {
@@ -203,5 +214,25 @@ public class LinkEntity extends AbstractAuditableEntity {
      */
     public void setPosition(final int position) {
         this.position = position;
+    }
+
+    /**
+     * Tells whether this link is one of its profile's favourites.
+     *
+     * @return {@code true} when the link is marked as a favourite
+     * @since 0.0.19
+     */
+    public boolean isFavorite() {
+        return favorite;
+    }
+
+    /**
+     * Sets whether this link is one of its profile's favourites.
+     *
+     * @param favorite {@code true} to mark the link as a favourite
+     * @since 0.0.19
+     */
+    public void setFavorite(final boolean favorite) {
+        this.favorite = favorite;
     }
 }

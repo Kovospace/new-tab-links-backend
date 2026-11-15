@@ -109,6 +109,7 @@ public class ProfileService {
         final ProfileEntity newProfile = new ProfileEntity(owner, saveRequest.name(), position);
         newProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         newProfile.setHideTips(saveRequest.hideTips());
+        newProfile.setEnableFavorites(Boolean.TRUE.equals(saveRequest.enableFavorites()));
         newProfile.setRecordClosedTabsWhenSupplied(saveRequest.recordClosedTabs());
         newProfile.setRecordBrowsingHistoryWhenSupplied(saveRequest.recordBrowsingHistory());
         newProfile.setDismissedTips(saveRequest.dismissedTips());
@@ -141,6 +142,7 @@ public class ProfileService {
         existingProfile.setName(saveRequest.name());
         existingProfile.setEnableDragAndDrop(saveRequest.enableDragAndDrop());
         existingProfile.setHideTips(saveRequest.hideTips());
+        existingProfile.setEnableFavorites(Boolean.TRUE.equals(saveRequest.enableFavorites()));
         existingProfile.setRecordClosedTabsWhenSupplied(saveRequest.recordClosedTabs());
         existingProfile.setRecordBrowsingHistoryWhenSupplied(saveRequest.recordBrowsingHistory());
         existingProfile.setDismissedTips(saveRequest.dismissedTips());

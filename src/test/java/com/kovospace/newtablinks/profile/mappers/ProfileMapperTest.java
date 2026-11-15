@@ -94,6 +94,18 @@ class ProfileMapperTest {
     }
 
     @Test
+    @DisplayName("puts the favourites setting into the shape a client pulls, and off as off")
+    void carriesTheEnableFavoritesSettingIntoTheDto() {
+
+        final ProfileEntity profileWithFavorites = profileWithDragAndDrop(false);
+        profileWithFavorites.setEnableFavorites(true);
+
+        assertThat(profileMapper.toDto(profileWithFavorites).enableFavorites()).isTrue();
+        assertThat(profileMapper.toDto(profileWithFavorites).hideTips()).isFalse();
+        assertThat(profileMapper.toDto(profileWithDragAndDrop(false)).enableFavorites()).isFalse();
+    }
+
+    @Test
     @DisplayName("puts the tips dismissed one by one into the shape a client pulls, in order")
     void carriesTheDismissedTipsIntoTheDto() {
 

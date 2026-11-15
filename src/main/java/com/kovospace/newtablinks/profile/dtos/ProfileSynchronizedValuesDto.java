@@ -13,6 +13,8 @@ import java.util.List;
  * @param name              name shown on the profile switcher
  * @param enableDragAndDrop whether the profile lets its links and groups be rearranged by dragging
  * @param hideTips          whether the profile hides the tips shown on the new tab page background
+ * @param enableFavorites   whether the profile shows favourite links and lets links be marked as
+ *                          favourites
  * @param recordClosedTabs  whether the profile records the browser tabs its user closes;
  *                          {@code null} when the operation did not say, which leaves the stored
  *                          setting as it is
@@ -27,6 +29,7 @@ public record ProfileSynchronizedValuesDto(
         String name,
         boolean enableDragAndDrop,
         boolean hideTips,
+        boolean enableFavorites,
         Boolean recordClosedTabs,
         Boolean recordBrowsingHistory,
         List<String> dismissedTips,

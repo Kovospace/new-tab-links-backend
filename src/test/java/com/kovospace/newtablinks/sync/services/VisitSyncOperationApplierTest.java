@@ -183,7 +183,7 @@ class VisitSyncOperationApplierTest {
                 PROFILE_ID, null, null, null,
                 null, null, "Spring Boot reference", "https://spring.io",
                 "https://spring.io/icon.png",
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
                 closedAt, visitedAt, "Laptop", null);
     }
 
@@ -198,7 +198,7 @@ class VisitSyncOperationApplierTest {
                 SyncOperationKind.DELETE, SyncEntityKind.VISIT, id,
                 null, null, null, null,
                 null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null);
     }
 }

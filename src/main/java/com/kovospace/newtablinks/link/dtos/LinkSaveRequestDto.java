@@ -15,6 +15,9 @@ import java.util.UUID;
  * @param title            text shown for the link
  * @param url              address the link points to
  * @param faviconUrl       address of the cached favicon, may be {@code null}
+ * @param favorite         whether the link is one of its profile's favourites; {@code null} - a
+ *                         caller predating favourites - is {@code false}. A wrapper rather than
+ *                         a primitive because the JSON mapper refuses a missing primitive
  * @since 0.0.1
  */
 @Schema(description = "Body accepted when creating or replacing a link")
@@ -33,5 +36,9 @@ public record LinkSaveRequestDto(
         @NotBlank @Size(max = 2048) String url,
 
         @Schema(description = "Address of the cached favicon")
-        @Size(max = 2048) String faviconUrl) {
+        @Size(max = 2048) String faviconUrl,
+
+        @Schema(description = "Whether the link is one of its profile's favourites; absent "
+                + "means it is not", example = "false")
+        Boolean favorite) {
 }

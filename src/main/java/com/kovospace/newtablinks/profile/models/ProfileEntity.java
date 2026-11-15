@@ -74,6 +74,16 @@ public class ProfileEntity extends AbstractAuditableEntity {
     private boolean hideTips;
 
     /**
+     * Whether this profile shows favourite links and lets links be marked as favourites.
+     *
+     * <p>Stored like the two settings above, and off by default for the same reason: the column
+     * is {@code NOT NULL DEFAULT false}, and every profile that existed before it did has never
+     * had favourites.</p>
+     */
+    @Column(name = "enable_favorites", nullable = false)
+    private boolean enableFavorites;
+
+    /**
      * Whether this profile records the browser tabs its user closes.
      *
      * <p>On unless somebody turns it off, unlike the settings above: the column is
@@ -209,6 +219,26 @@ public class ProfileEntity extends AbstractAuditableEntity {
      */
     public void setHideTips(final boolean hideTips) {
         this.hideTips = hideTips;
+    }
+
+    /**
+     * Tells whether this profile shows favourite links and lets links be marked as favourites.
+     *
+     * @return {@code true} when the favourites feature is switched on
+     * @since 0.0.19
+     */
+    public boolean isEnableFavorites() {
+        return enableFavorites;
+    }
+
+    /**
+     * Sets whether this profile shows favourite links and lets links be marked as favourites.
+     *
+     * @param enableFavorites {@code true} to switch the favourites feature on
+     * @since 0.0.19
+     */
+    public void setEnableFavorites(final boolean enableFavorites) {
+        this.enableFavorites = enableFavorites;
     }
 
     /**

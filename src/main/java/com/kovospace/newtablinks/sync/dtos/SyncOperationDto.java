@@ -45,10 +45,14 @@ import java.util.UUID;
  * @param defaultCollapsed whether a subgroup starts folded away
  * @param catchLinksIntoTabGroup whether tabs navigating to a subgroup's links are pulled into its
  *                               browser tab group
+ * @param favorite               whether a link is one of its profile's favourites; absent is
+ *                               {@code false}
  * @param enableDragAndDrop      whether a profile lets its links and groups be rearranged by
  *                               dragging
  * @param hideTips               whether a profile hides the tips shown on the new tab page
  *                               background
+ * @param enableFavorites        whether a profile shows favourite links and lets links be
+ *                               marked as favourites; absent is {@code false}
  * @param recordClosedTabs       whether a profile records the browser tabs its user closes;
  *                               absent leaves the stored setting as it is
  * @param recordBrowsingHistory  whether a profile records the pages its user visits; absent
@@ -116,6 +120,10 @@ public record SyncOperationDto(
                 + "browser tab group", example = "false")
         Boolean catchLinksIntoTabGroup,
 
+        @Schema(description = "Whether a link is one of its profile's favourites; absent means "
+                + "it is not", example = "false")
+        Boolean favorite,
+
         @Schema(description = "Whether a profile lets its links and groups be rearranged by "
                 + "dragging", example = "false")
         Boolean enableDragAndDrop,
@@ -123,6 +131,10 @@ public record SyncOperationDto(
         @Schema(description = "Whether a profile hides the tips shown on the new tab page "
                 + "background", example = "false")
         Boolean hideTips,
+
+        @Schema(description = "Whether a profile shows favourite links and lets links be marked "
+                + "as favourites; absent means it does not", example = "false")
+        Boolean enableFavorites,
 
         @Schema(description = "Whether a profile records the browser tabs its user closes. "
                 + "Absent leaves the stored setting as it is - a new profile records them - so "
