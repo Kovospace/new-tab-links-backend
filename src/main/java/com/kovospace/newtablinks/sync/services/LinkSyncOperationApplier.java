@@ -71,6 +71,7 @@ public class LinkSyncOperationApplier implements SyncOperationApplier {
                 PushedOperationValues.requireSuppliedText(operation.title()),
                 PushedOperationValues.requireSuppliedText(operation.url()),
                 operation.faviconUrl(),
+                PushedOperationValues.flagOrFalse(operation.favorite()),
                 PushedOperationValues.requireSuppliedPosition(operation.position()));
 
         context.recordWriteIntoWorkspace(parentGroup.getEnvironment().getId());

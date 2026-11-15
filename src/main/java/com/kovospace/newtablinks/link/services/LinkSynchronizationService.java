@@ -136,6 +136,7 @@ public class LinkSynchronizationService {
                 values.url(),
                 FaviconUrlResolver.resolveFaviconUrl(values.faviconUrl(), values.url()),
                 values.position());
+        newLink.setFavorite(values.favorite());
 
         newLink.setId(ClientAssignedIdentifierPolicy.chooseIdentifierForInsert(
                 requestedLinkId, linkRepository::existsById));
@@ -168,6 +169,7 @@ public class LinkSynchronizationService {
         existingLink.setUrl(values.url());
         existingLink.setFaviconUrl(
                 FaviconUrlResolver.resolveFaviconUrl(values.faviconUrl(), values.url()));
+        existingLink.setFavorite(values.favorite());
         existingLink.setPosition(values.position());
         return existingLink;
     }

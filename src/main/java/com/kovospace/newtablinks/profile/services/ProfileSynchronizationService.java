@@ -146,6 +146,7 @@ public class ProfileSynchronizationService {
                 userService.getRequiredUserEntity(ownerId), values.name(), values.position());
         newProfile.setEnableDragAndDrop(values.enableDragAndDrop());
         newProfile.setHideTips(values.hideTips());
+        newProfile.setEnableFavorites(values.enableFavorites());
         newProfile.setRecordClosedTabsWhenSupplied(values.recordClosedTabs());
         newProfile.setRecordBrowsingHistoryWhenSupplied(values.recordBrowsingHistory());
         newProfile.setDismissedTips(values.dismissedTips());
@@ -171,6 +172,7 @@ public class ProfileSynchronizationService {
         existingProfile.setName(values.name());
         existingProfile.setEnableDragAndDrop(values.enableDragAndDrop());
         existingProfile.setHideTips(values.hideTips());
+        existingProfile.setEnableFavorites(values.enableFavorites());
         existingProfile.setRecordClosedTabsWhenSupplied(values.recordClosedTabs());
         existingProfile.setRecordBrowsingHistoryWhenSupplied(values.recordBrowsingHistory());
         existingProfile.setDismissedTips(values.dismissedTips());

@@ -53,6 +53,7 @@ public class ProfileSyncOperationApplier implements SyncOperationApplier {
                 PushedOperationValues.requireSuppliedText(operation.name()),
                 PushedOperationValues.flagOrFalse(operation.enableDragAndDrop()),
                 PushedOperationValues.flagOrFalse(operation.hideTips()),
+                PushedOperationValues.flagOrFalse(operation.enableFavorites()),
                 // Passed on as sent, not through flagOrFalse: absent has to keep recording on,
                 // or every extension released before the setting would switch it off.
                 operation.recordClosedTabs(),

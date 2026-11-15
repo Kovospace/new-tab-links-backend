@@ -135,6 +135,7 @@ public class LinkService {
                 saveRequest.url(),
                 FaviconUrlResolver.resolveFaviconUrl(saveRequest.faviconUrl(), saveRequest.url()),
                 calculatePositionAmongSiblings(parentGroup.getId(), parentSubgroup));
+        newLink.setFavorite(Boolean.TRUE.equals(saveRequest.favorite()));
 
         userDataChangePublisher.publishChangeFor(ownerId);
         return linkMapper.toDto(linkRepository.save(newLink));
@@ -167,6 +168,7 @@ public class LinkService {
         existingLink.setUrl(saveRequest.url());
         existingLink.setFaviconUrl(
                 FaviconUrlResolver.resolveFaviconUrl(saveRequest.faviconUrl(), saveRequest.url()));
+        existingLink.setFavorite(Boolean.TRUE.equals(saveRequest.favorite()));
         existingLink.setParentSubgroup(
                 resolveOptionalSubgroup(saveRequest.parentSubgroupId(), ownerId));
 
