@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.kovospace.newtablinks.common.MigratedPostgresDatabase;
+import com.kovospace.newtablinks.common.config.PlanLimitProperties;
 import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.models.PlanLimit;
+import com.kovospace.newtablinks.fairuse.services.GlobalFairUseLimitsService;
 import com.kovospace.newtablinks.sync.dtos.SyncEntityKind;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationDto;
 import com.kovospace.newtablinks.sync.dtos.SyncOperationKind;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +48,12 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
 
 
     private static MigratedPostgresDatabase database;
+
+    @Autowired
+    private GlobalFairUseLimitsService globalFairUseLimitsService;
+
+    @Autowired
+    private PlanLimitProperties planLimitProperties;
 
     @Autowired
     private SyncPushService syncPushService;
@@ -88,6 +97,19 @@ class SyncPushFairUseAgainstMigratedSchemaTest {
         registry.add("newtablinks.plan-limits.free.profiles", () -> PROFILE_CAP);
         registry.add("newtablinks.plan-limits.free.workspaces-per-profile", () -> WORKSPACE_CAP);
         registry.add("newtablinks.plan-limits.free.closed-tabs", () -> CLOSED_TAB_CAP);
+    }
+
+    /**
+     * Puts the Fair Use limits this test configures in force.
+     *
+     * <p>Since V20 the global Fair Use limits are the {@code fair_use_limits} row the migration
+     * seeds with the production defaults; the configured {@code premium.*} values are only the
+     * fallback for a missing row. Writing them into the row is what makes the small caps above
+     * hold.</p>
+     */
+    @BeforeEach
+    void putTheConfiguredFairUseLimitsInForce() {
+        globalFairUseLimitsService.replaceFairUseLimits(planLimitProperties.premium());
     }
 
     @Test

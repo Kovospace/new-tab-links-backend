@@ -37,6 +37,8 @@ import java.util.UUID;
  * @param premiumUntil        when pro ends while {@code premium} is true - the end of a paid
  *                            period or of a one-year operator grant; {@code null} for lifetime
  *                            pro and whenever {@code premium} is false. Since 0.0.15.
+ * @param fairUseOverride     whether the operator raised any Fair Use limit of the account.
+ *                            Since 0.0.20.
  * @since 0.0.6
  */
 @Schema(description = "A user account, as the operator sees it")
@@ -59,5 +61,8 @@ public record AdminUserDto(
         @Schema(description = "When pro ends while premium is true - the end of a paid period "
                 + "or of a one-year operator grant; null for lifetime pro and when not pro",
                 example = "2027-10-04T12:00:00Z", nullable = true)
-        Instant premiumUntil) {
+        Instant premiumUntil,
+        @Schema(description = "Whether the operator raised any Fair Use limit of the account",
+                example = "false")
+        boolean fairUseOverride) {
 }

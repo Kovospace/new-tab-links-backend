@@ -34,7 +34,7 @@ final class PermissiveSyncPushLimitGuard {
     static SyncPushLimitGuard create() {
         final SyncPushLimitGuard guard = mock(SyncPushLimitGuard.class);
         when(guard.captureBaselineBeforeBatch(any())).thenReturn(new PushLimitBaseline(
-                new EffectivePlanLimits(true, GENEROUS_LIMITS), Map.of(), Map.of(), Map.of(), 0, 0));
+                new EffectivePlanLimits(true, GENEROUS_LIMITS, GENEROUS_LIMITS), Map.of(), Map.of(), Map.of(), 0, 0));
         return guard;
     }
 }

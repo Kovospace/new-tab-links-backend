@@ -5,6 +5,7 @@ import com.kovospace.newtablinks.user.dtos.AdminUserDto;
 import com.kovospace.newtablinks.user.models.UserEntity;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -27,15 +28,17 @@ public interface AdminUserMapper {
     /**
      * Converts a single account.
      *
-     * @param userEntity  entity to convert
-     * @param proStanding whether the account is pro right now, through what, and until when
+     * @param userEntity      entity to convert
+     * @param proStanding     whether the account is pro right now, through what, and until when
+     * @param fairUseOverride whether the operator raised any Fair Use limit of the account
      * @return the converted account
      */
     @Mapping(target = "hasPassword", expression = "java(userEntity.hasPassword())")
     @Mapping(target = "premium", source = "proStanding.premium")
     @Mapping(target = "premiumSource", source = "proStanding.premiumSource")
     @Mapping(target = "premiumUntil", source = "proStanding.premiumUntil")
-    AdminUserDto toDto(UserEntity userEntity, ProStanding proStanding);
+    @Mapping(target = "fairUseOverride", source = "fairUseOverride")
+    AdminUserDto toDto(UserEntity userEntity, ProStanding proStanding, boolean fairUseOverride);
 
     /**
      * Converts a list of accounts, preserving order.
@@ -43,16 +46,20 @@ public interface AdminUserMapper {
      * @param userEntities       entities to convert
      * @param proStandingByOwner the pro standing of each account, by its identifier; an account
      *                           missing from it is rendered as not pro
+     * @param usersWithFairUseOverride identifiers of the accounts with a raised Fair Use limit
      * @return the converted accounts, empty when the input is empty
      * @since 0.0.10
      */
     default List<AdminUserDto> toDtoList(
             final List<UserEntity> userEntities,
-            final Map<UUID, ProStanding> proStandingByOwner) {
+            final Map<UUID, ProStanding> proStandingByOwner,
+            final Set<UUID> usersWithFairUseOverride) {
 
         return userEntities.stream()
-                .map(userEntity -> toDto(userEntity, proStandingByOwner.getOrDefault(
-                        userEntity.getId(), ProStanding.NOT_PRO)))
+                .map(userEntity -> toDto(
+                        userEntity,
+                        proStandingByOwner.getOrDefault(userEntity.getId(), ProStanding.NOT_PRO),
+                        usersWithFairUseOverride.contains(userEntity.getId())))
                 .toList();
     }
 }

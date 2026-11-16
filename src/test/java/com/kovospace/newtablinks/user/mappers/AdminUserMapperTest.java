@@ -10,6 +10,7 @@ import com.kovospace.newtablinks.user.models.UserEntity;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,8 @@ class AdminUserMapperTest {
     private final AdminUserMapper adminUserMapper = new AdminUserMapperImpl();
 
     @Test
-    @DisplayName("each account on a page carries premium, its source and end, or false and null")
+    @DisplayName("each account on a page carries premium, its source and end, or false and null, "
+            + "and whether it has a Fair Use override")
     void shouldCarryEachAccountsProStanding() {
         final List<UserEntity> accounts = List.of(
                 account(PAID_ACCOUNT_ID, "paid"),
@@ -44,7 +46,8 @@ class AdminUserMapperTest {
                 GRANTED_ACCOUNT_ID, new ProStanding(true, EntitlementSource.GRANT, GRANTED_UNTIL),
                 PLAIN_ACCOUNT_ID, ProStanding.NOT_PRO);
 
-        final List<AdminUserDto> rendered = adminUserMapper.toDtoList(accounts, standing);
+        final List<AdminUserDto> rendered =
+                adminUserMapper.toDtoList(accounts, standing, Set.of(GRANTED_ACCOUNT_ID));
 
         assertThat(rendered).extracting(AdminUserDto::username)
                 .containsExactly("paid", "granted", "plain");
@@ -53,13 +56,15 @@ class AdminUserMapperTest {
                 .containsExactly(EntitlementSource.LIFETIME, EntitlementSource.GRANT, null);
         assertThat(rendered).extracting(AdminUserDto::premiumUntil)
                 .containsExactly(null, GRANTED_UNTIL, null);
+        assertThat(rendered).extracting(AdminUserDto::fairUseOverride)
+                .containsExactly(false, true, false);
     }
 
     @Test
     @DisplayName("an account missing from the standing map is rendered as not pro")
     void shouldRenderAnAccountWithoutStandingAsNotPro() {
         final AdminUserDto rendered = adminUserMapper
-                .toDtoList(List.of(account(PLAIN_ACCOUNT_ID, "plain")), Map.of())
+                .toDtoList(List.of(account(PLAIN_ACCOUNT_ID, "plain")), Map.of(), Set.of())
                 .getFirst();
 
         assertThat(rendered.premium()).isFalse();

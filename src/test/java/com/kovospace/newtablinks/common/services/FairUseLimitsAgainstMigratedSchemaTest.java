@@ -8,12 +8,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.kovospace.newtablinks.auth.services.AccessTokenIssuer;
 import com.kovospace.newtablinks.common.MigratedPostgresDatabase;
+import com.kovospace.newtablinks.common.config.PlanLimitProperties;
 import com.kovospace.newtablinks.common.exceptions.PlanLimitReachedException;
 import com.kovospace.newtablinks.common.models.PlanLimit;
 import com.kovospace.newtablinks.common.models.PlanLimitRefusalCode;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentDto;
 import com.kovospace.newtablinks.environment.dtos.EnvironmentSaveRequestDto;
 import com.kovospace.newtablinks.environment.services.EnvironmentService;
+import com.kovospace.newtablinks.fairuse.services.GlobalFairUseLimitsService;
 import com.kovospace.newtablinks.group.dtos.GroupDto;
 import com.kovospace.newtablinks.group.dtos.GroupSaveRequestDto;
 import com.kovospace.newtablinks.group.services.GroupService;
@@ -37,6 +39,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,6 +74,12 @@ class FairUseLimitsAgainstMigratedSchemaTest {
     private static final int SUBGROUPS_PER_GROUP_CAP = 2;
 
     private static MigratedPostgresDatabase database;
+
+    @Autowired
+    private GlobalFairUseLimitsService globalFairUseLimitsService;
+
+    @Autowired
+    private PlanLimitProperties planLimitProperties;
 
     @Autowired
     private MockMvc mockMvc;
@@ -143,6 +152,19 @@ class FairUseLimitsAgainstMigratedSchemaTest {
         registry.add("newtablinks.plan-limits.free.profiles", () -> PROFILE_CAP);
         registry.add("newtablinks.plan-limits.free.workspaces-per-profile", () -> WORKSPACE_CAP);
         registry.add("newtablinks.web.base-url", () -> "https://tabilinks.example");
+    }
+
+    /**
+     * Puts the Fair Use limits this test configures in force.
+     *
+     * <p>Since V20 the global Fair Use limits are the {@code fair_use_limits} row the migration
+     * seeds with the production defaults; the configured {@code premium.*} values are only the
+     * fallback for a missing row. Writing them into the row is what makes the small caps above
+     * hold.</p>
+     */
+    @BeforeEach
+    void putTheConfiguredFairUseLimitsInForce() {
+        globalFairUseLimitsService.replaceFairUseLimits(planLimitProperties.premium());
     }
 
     @Test

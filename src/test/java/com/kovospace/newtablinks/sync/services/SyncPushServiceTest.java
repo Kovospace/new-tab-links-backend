@@ -155,7 +155,8 @@ class SyncPushServiceTest {
     void judgesThePlanOnTheBatchAsAWhole() {
 
         final PushLimitBaseline baseline = new PushLimitBaseline(
-                new EffectivePlanLimits(false, new PlanLimitValues(1, 2, 25, 25, 500, 25, 50, 5)),
+                new EffectivePlanLimits(false, new PlanLimitValues(1, 2, 25, 25, 500, 25, 50, 5),
+                        new PlanLimitValues(50, 50, 25, 25, 500, 500, 1000, 100)),
                 Map.of(), Map.of(), Map.of(), 40, 70);
         when(syncPushLimitGuard.captureBaselineBeforeBatch(OWNER_ID)).thenReturn(baseline);
         when(linkApplier.applyUpsert(any(), any())).thenReturn(UUID.randomUUID());

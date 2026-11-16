@@ -131,6 +131,32 @@ public final class ApiEndpointPaths {
     public static final String PAYMENT_OFFERS_PATH = "/api/v1/payments/offers";
 
     /**
+     * Absolute path of the published plan limits: the free plan's and the global Fair Use ones.
+     *
+     * <p>A constant because the security configuration opens exactly this path and method to
+     * anonymous callers and stops reading bearer tokens on it, as it does for
+     * {@link #PAYMENT_OFFERS_PATH}.</p>
+     *
+     * @since 0.0.20
+     */
+    public static final String PUBLISHED_PLAN_LIMITS_PATH = "/api/v1/plan-limits";
+
+    /**
+     * Path, under {@link #ADMINISTRATION_BASE_PATH}, of the global Fair Use limits.
+     *
+     * @since 0.0.20
+     */
+    public static final String ADMINISTRATION_FAIR_USE_LIMITS_SUBPATH = "/fair-use-limits";
+
+    /**
+     * Path, under {@link #ADMINISTRATION_BASE_PATH}, of one account's raised Fair Use limits.
+     *
+     * @since 0.0.20
+     */
+    public static final String ADMINISTRATION_USER_FAIR_USE_LIMITS_SUBPATH =
+            "/users/{userId}/fair-use-limits";
+
+    /**
      * Absolute path the extension reports its new-tab counts to.
      *
      * <p>A constant because the security configuration opens exactly this path to anonymous
