@@ -8,6 +8,7 @@ import com.kovospace.newtablinks.entitlement.models.PremiumGrantTerm;
 import com.kovospace.newtablinks.entitlement.models.ProStanding;
 import com.kovospace.newtablinks.entitlement.services.EntitlementGrantService;
 import com.kovospace.newtablinks.entitlement.services.EntitlementStandingService;
+import com.kovospace.newtablinks.fairuse.services.AccountFairUseLimitsService;
 import com.kovospace.newtablinks.user.dtos.AdminUserCreateRequestDto;
 import com.kovospace.newtablinks.user.dtos.AdminUserDto;
 import com.kovospace.newtablinks.user.dtos.AdminUserPageDto;
@@ -17,6 +18,7 @@ import com.kovospace.newtablinks.user.models.UserEntity;
 import com.kovospace.newtablinks.user.repositories.UserRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +72,7 @@ public class UserAdministrationService {
     private final PasswordEncoder passwordEncoder;
     private final EntitlementStandingService entitlementStandingService;
     private final EntitlementGrantService entitlementGrantService;
+    private final AccountFairUseLimitsService accountFairUseLimitsService;
 
     /**
      * Creates the service.
@@ -79,25 +82,29 @@ public class UserAdministrationService {
      * @param passwordEncoder hashes a password the operator sets
      * @param entitlementStandingService tells whether an account is pro, and through what
      * @param entitlementGrantService    gives and takes back pro the operator grants
+     * @param accountFairUseLimitsService tells which accounts have raised Fair Use limits
      */
     public UserAdministrationService(
             final UserRepository userRepository,
             final AdminUserMapper adminUserMapper,
             final PasswordEncoder passwordEncoder,
             final EntitlementStandingService entitlementStandingService,
-            final EntitlementGrantService entitlementGrantService) {
+            final EntitlementGrantService entitlementGrantService,
+            final AccountFairUseLimitsService accountFairUseLimitsService) {
 
         this.userRepository = userRepository;
         this.adminUserMapper = adminUserMapper;
         this.passwordEncoder = passwordEncoder;
         this.entitlementStandingService = entitlementStandingService;
         this.entitlementGrantService = entitlementGrantService;
+        this.accountFairUseLimitsService = accountFairUseLimitsService;
     }
 
     /**
      * Lists accounts, newest first, optionally narrowed by a search.
      *
-     * <p>The pro standing of the whole page is read in one query, not one per account.</p>
+     * <p>The pro standing and the Fair Use overrides of the whole page are read in one query
+     * each, not one per account.</p>
      *
      * @param searchText text to match against username, email and display name; blank matches all
      * @param page       zero-based page index
@@ -111,12 +118,15 @@ public class UserAdministrationService {
                 PageRequest.of(page, size, NEWEST_FIRST));
 
         final List<UserEntity> accountsOnPage = matchingAccounts.getContent();
+        final List<UUID> accountIdsOnPage = accountsOnPage.stream().map(UserEntity::getId).toList();
         final Map<UUID, ProStanding> proStandingByOwner =
-                entitlementStandingService.describeProStandingNowOfEach(
-                        accountsOnPage.stream().map(UserEntity::getId).toList());
+                entitlementStandingService.describeProStandingNowOfEach(accountIdsOnPage);
+        final Set<UUID> accountsWithFairUseOverride =
+                accountFairUseLimitsService.findUserIdsHavingOverrideAmong(accountIdsOnPage);
 
         return new AdminUserPageDto(
-                adminUserMapper.toDtoList(accountsOnPage, proStandingByOwner),
+                adminUserMapper.toDtoList(
+                        accountsOnPage, proStandingByOwner, accountsWithFairUseOverride),
                 matchingAccounts.getNumber(),
                 matchingAccounts.getSize(),
                 matchingAccounts.getTotalElements(),
@@ -312,14 +322,17 @@ public class UserAdministrationService {
     }
 
     /**
-     * Renders an account in the operator's shape, with its current pro standing.
+     * Renders an account in the operator's shape, with its current pro standing and whether it
+     * has raised Fair Use limits.
      *
      * @param account the account
      * @return the account as the operator sees it
      */
     private AdminUserDto toAdminUserDto(final UserEntity account) {
         return adminUserMapper.toDto(
-                account, entitlementStandingService.describeProStandingNow(account.getId()));
+                account,
+                entitlementStandingService.describeProStandingNow(account.getId()),
+                !accountFairUseLimitsService.findOverridesOf(account.getId()).isEmpty());
     }
 
     /**

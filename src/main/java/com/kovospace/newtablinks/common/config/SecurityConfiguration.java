@@ -251,6 +251,10 @@ public class SecurityConfiguration {
                         // subscription endpoints, which must stay authenticated.
                         .requestMatchers(HttpMethod.GET, ApiEndpointPaths.PAYMENT_OFFERS_PATH)
                         .permitAll()
+                        // The published plan limits, for the same pages: free and Fair Use, no
+                        // account involved. Only GET, only this exact path.
+                        .requestMatchers(HttpMethod.GET, ApiEndpointPaths.PUBLISHED_PLAN_LIMITS_PATH)
+                        .permitAll()
                         .anyRequest().authenticated())
                 // Bearer flow: every API call from the website and the extension.
                 .oauth2ResourceServer(server -> server
@@ -307,7 +311,8 @@ public class SecurityConfiguration {
      * Builds the resolver that finds the bearer token on a request, except where none may count.
      *
      * <p>On {@link #ANONYMOUS_STATISTICS_ENDPOINTS} and on {@code GET}
-     * {@link ApiEndpointPaths#PAYMENT_OFFERS_PATH} it finds nothing, even when an
+     * {@link ApiEndpointPaths#PAYMENT_OFFERS_PATH} and
+     * {@link ApiEndpointPaths#PUBLISHED_PLAN_LIMITS_PATH} it finds nothing, even when an
      * {@code Authorization} header is there. The resource server rejects an expired or invalid
      * token with 401 even on a {@code permitAll} path, so a stale token would otherwise lose a
      * report - or a price list - that needs no token at all; and ignoring it outright is also the
@@ -324,6 +329,8 @@ public class SecurityConfiguration {
                         .toList());
         tokenlessEndpoints.add(PathPatternRequestMatcher.withDefaults()
                 .matcher(HttpMethod.GET, ApiEndpointPaths.PAYMENT_OFFERS_PATH));
+        tokenlessEndpoints.add(PathPatternRequestMatcher.withDefaults()
+                .matcher(HttpMethod.GET, ApiEndpointPaths.PUBLISHED_PLAN_LIMITS_PATH));
         final RequestMatcher tokenlessEndpointMatcher = new OrRequestMatcher(tokenlessEndpoints);
         return request -> tokenlessEndpointMatcher.matches(request)
                 ? null

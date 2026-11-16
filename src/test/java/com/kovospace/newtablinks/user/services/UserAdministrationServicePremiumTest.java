@@ -25,6 +25,9 @@ import com.kovospace.newtablinks.entitlement.models.ProviderPurchaseReferences;
 import com.kovospace.newtablinks.entitlement.repositories.EntitlementRepository;
 import com.kovospace.newtablinks.entitlement.services.EntitlementGrantService;
 import com.kovospace.newtablinks.entitlement.services.EntitlementStandingService;
+import com.kovospace.newtablinks.fairuse.repositories.UserFairUseOverrideRepository;
+import com.kovospace.newtablinks.fairuse.services.AccountFairUseLimitsService;
+import com.kovospace.newtablinks.fairuse.services.GlobalFairUseLimitsService;
 import com.kovospace.newtablinks.user.dtos.AdminUserCreateRequestDto;
 import com.kovospace.newtablinks.user.dtos.AdminUserDto;
 import com.kovospace.newtablinks.user.dtos.AdminUserPageDto;
@@ -65,12 +68,17 @@ class UserAdministrationServicePremiumTest {
     private final EntitlementRepository entitlementRepository = mock(EntitlementRepository.class);
     private final EntitlementGrantService entitlementGrantService =
             mock(EntitlementGrantService.class);
+    private final AccountFairUseLimitsService accountFairUseLimitsService =
+            new AccountFairUseLimitsService(
+                    mock(GlobalFairUseLimitsService.class),
+                    mock(UserFairUseOverrideRepository.class));
     private final UserAdministrationService administrationService = new UserAdministrationService(
             userRepository,
             new AdminUserMapperImpl(),
             mock(PasswordEncoder.class),
             new EntitlementStandingService(entitlementRepository),
-            entitlementGrantService);
+            entitlementGrantService,
+            accountFairUseLimitsService);
 
     @Test
     @DisplayName("the list reads the whole page's entitlements in one query")

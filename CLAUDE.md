@@ -108,6 +108,8 @@ com.kovospace.newtablinks
 ├── profile/       named sets of environments, the top of the hierarchy and the extension's own
 ├── sync/          whole-account snapshot, the pushed change batch, and the change event that
 │                  drives websocket pushes
+├── fairuse/       the Fair Use limits the operator edits - the global row and per-account
+│                  raises - and the public plan limits; resolved for PlanLimitPolicy
 ├── entitlement/   what makes an account pro, and until when - provider-neutral; applies an
 │                  EntitlementSignal and knows nothing about webhooks
 ├── statistics/    anonymous daily usage counts (new tabs, website visitors) and the admin
@@ -194,6 +196,20 @@ Which file holds which concern, and which endpoint lives in which controller:
   the end state (baseline before the first operation, `PushFootprint` of what each applier
   wrote into, check after the last), whole push or nothing. Both lock the `app_user` row.
   Known gap: a record *moved out of* a slot-less container is recorded only under its new one.
+- **Fair Use limits are data, not configuration, since V20** (`fairuse/`). The global set is
+  the one `fair_use_limits` row (seeded with the old `premium.*` defaults; `premium.*` is read
+  only while the row is missing), edited at `PUT /api/v1/admin/fair-use-limits` - lowering
+  allowed, nothing broadcast, each replica re-reads within `fair-use-cache-lifetime` (30 s).
+  The operator can **raise** single limits for one account (`user_fair_use_override`, one row
+  per account, nullable per limit, note ≤ 500): a value below the global one at save time is a
+  400, a global value that later rises past it wins (`max`), all-null deletes the row, and a
+  change calls `publishChangeFor(userId)` so its devices pull new `planLimits`. An account's
+  Fair Use set is the global one raised by its override (`AccountFairUseLimitsService`); a free
+  account gets `free.*` laid over that set, and `refusalOf` compares against that same set
+  (`EffectivePlanLimits.fairUse`). The free plan's numbers stay configuration only.
+  `GET /api/v1/plan-limits` publishes `{free, fairUse}` to anybody. **A migrated-schema test that
+  sets `premium.*` must write it into the row** (`globalFairUseLimitsService.replaceFairUseLimits`
+  in a `@BeforeEach`), or the seeded production values hold.
 - **Closed tabs never refuse:** after every push the oldest beyond the plan's limit are deleted,
   but never more than the push added (`max(limit, size before push)`), so a downgrade does not
   cut 500 to 25 at once. **Visits (browsing history) follow the identical rule** - limit

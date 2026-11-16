@@ -326,6 +326,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Renders a Fair Use override below the global limit as HTTP 400, in the same shape as a
+     * rejected request field.
+     *
+     * @param exception the exception that was thrown
+     * @return a 400 response naming every offending limit
+     * @since 0.0.20
+     */
+    @ExceptionHandler(FairUseOverrideBelowGlobalLimitException.class)
+    public ResponseEntity<ApiErrorResponseDto> handleFairUseOverrideBelowGlobalLimit(
+            final FairUseOverrideBelowGlobalLimitException exception) {
+
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                "Request validation failed",
+                exception.getValidationErrors().stream().sorted().toList());
+    }
+
+    /**
      * Renders a failed call to the payment provider as HTTP 502.
      *
      * @param exception the exception that was thrown
